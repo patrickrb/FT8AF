@@ -197,6 +197,64 @@ public final class CatReconnectPolicy {
         return delay;
     }
 
+    // ---- USB device-reset escalation ---------------------------------------
+
+    /**
+     * Reopen attempts absorbed before escalating to a USB device reset
+     * ({@code USBDEVFS_RESET} — a software unplug/replug that forces the kernel
+     * to re-enumerate the device).
+     *
+     * <p>Why reopening alone isn't enough: the 2026-09-20 field session showed
+     * the CP210x wedged in a state where every {@code connect()} succeeded and
+     * the read loop then died within ~0.5–1 s with {@code "Queueing USB request
+     * failed"} (URB submission rejected) — <strong>17 consecutive times over
+     * four minutes</strong>, until the whole hub dropped off the bus. Only a
+     * physical replug recovered it. Open/close rebuilds our file descriptor but
+     * not the kernel/device endpoint state; re-enumeration rebuilds both.
+     *
+     * <p>Three plain reopens still run first: they are cheap, absorb the common
+     * single-glitch case, and a reset is a bigger hammer (the device drops off
+     * the bus for a moment, and on a dual-UART chip it takes both ports down).
+     */
+    public static final int RESET_AFTER_ATTEMPTS = 3;
+
+    /**
+     * Attempts between repeat resets when the first didn't clear the wedge.
+     * Resetting on every attempt would thrash re-enumeration (each one is a
+     * bus drop); one reset per this many backed-off attempts keeps the hammer
+     * available without turning the burst into a reset storm.
+     */
+    public static final int RESET_RETRY_EVERY = 5;
+
+    /**
+     * Settle time between a successful reset and the reopen attempt, giving the
+     * kernel time to re-enumerate the device. Chosen to match
+     * {@link #BASE_BACKOFF_MS} — enumeration is typically far faster, and a
+     * device that needs longer simply fails the reopen and gets the next
+     * backed-off attempt.
+     */
+    public static final long RESET_SETTLE_MS = 500;
+
+    /**
+     * Whether the auto-reconnect loop should force a USB device reset before
+     * this (1-based) reopen attempt: first after {@link #RESET_AFTER_ATTEMPTS}
+     * plain reopens have failed, then every {@link #RESET_RETRY_EVERY} attempts
+     * while the burst persists (attempts 4, 9, 14, … with the defaults).
+     */
+    public static boolean shouldResetDevice(int attempt) {
+        if (attempt <= RESET_AFTER_ATTEMPTS) return false;
+        return (attempt - RESET_AFTER_ATTEMPTS - 1) % RESET_RETRY_EVERY == 0;
+    }
+
+    /**
+     * One-line debug.log record of a device-reset escalation and its outcome.
+     * Pure so it is unit-testable.
+     */
+    public static String describeReset(int attempt, boolean ok) {
+        return "CAT auto-reconnect: USB device reset before attempt " + attempt
+                + (ok ? " (ioctl OK, re-enumerating)" : " FAILED, falling back to plain reopen");
+    }
+
     // ---- PTT fail-safe ------------------------------------------------------
 
     /**

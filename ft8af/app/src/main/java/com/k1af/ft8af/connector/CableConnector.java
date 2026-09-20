@@ -156,6 +156,30 @@ public class CableConnector extends BaseRigConnector {
                     if (!cableSerialPort.isDevicePresent()) {
                         break; // gone mid-backoff — surfaced after the loop
                     }
+                    // Escalation: when plain reopens keep dying (port opens, URBs
+                    // fail — the RF-wedged-chip state that only re-enumeration
+                    // clears), force a USB device reset before this attempt.
+                    if (CatReconnectPolicy.shouldResetDevice(attempt)) {
+                        boolean resetOk = cableSerialPort.resetDevice();
+                        fileLog(CatReconnectPolicy.describeReset(attempt, resetOk));
+                        if (resetOk) {
+                            try {
+                                Thread.sleep(CatReconnectPolicy.RESET_SETTLE_MS);
+                            } catch (InterruptedException ie) {
+                                Thread.currentThread().interrupt();
+                                return;
+                            }
+                            if (userDisconnected) {
+                                return;
+                            }
+                            // A reset can bounce the device off the bus; if it
+                            // hasn't come back yet, end the burst — the ATTACH
+                            // broadcast restarts auto-connect when it returns.
+                            if (!cableSerialPort.isDevicePresent()) {
+                                break;
+                            }
+                        }
+                    }
                     // The port already tore itself down (SerialInputOutputManager
                     // calls disconnect() after onRunError); re-open it fresh.
                     if (cableSerialPort.connect() && cableSerialPort.isConnected()) {
