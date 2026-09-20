@@ -92,6 +92,28 @@ public final class UsbAudioNative {
     }
 
     /**
+     * Force a USB port-level reset ({@code USBDEVFS_RESET}) on the device
+     * behind {@code fd} — the software equivalent of unplugging and replugging
+     * the cable. The kernel re-enumerates the device and rebuilds its endpoint
+     * state, which is the only remedy for a serial chip RF has wedged into a
+     * state where the port re-opens fine but every URB submit fails
+     * ("Queueing USB request failed"). Used by the CAT auto-reconnect
+     * escalation; see {@code CatReconnectPolicy#shouldResetDevice}.
+     *
+     * @param fd file descriptor from
+     *           {@link android.hardware.usb.UsbDeviceConnection#getFileDescriptor()}
+     * @return true if the ioctl succeeded (false also when the native lib
+     *         isn't loaded — callers just continue with a plain reopen)
+     */
+    public static boolean resetUsbDevice(int fd) {
+        if (!LIBRARY_LOADED) return false;
+        return nativeResetDevice(fd) == 0;
+    }
+
+    /** {@code ioctl(fd, USBDEVFS_RESET)}; 0 on success, negated errno on failure. */
+    private static native int nativeResetDevice(int fd);
+
+    /**
      * Callback for audio samples coming off the iso transfer pipeline.
      * Methods are invoked on the libusb event-loop worker thread; callers
      * must not block.
