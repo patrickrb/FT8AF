@@ -275,4 +275,45 @@ public class CatReconnectPolicyTest {
         assertThat(CatReconnectPolicy.describeAttempt(4, 4000))
                 .isEqualTo("CAT auto-reconnect: attempt 4 after 4000ms backoff");
     }
+
+    // --- shouldResetDevice (USB device-reset escalation) --------------------
+
+    @Test
+    public void resetDevice_notDuringTheInitialPlainReopens() {
+        // The common single-glitch case must stay a cheap reopen, never a reset.
+        for (int attempt = 0; attempt <= CatReconnectPolicy.RESET_AFTER_ATTEMPTS; attempt++) {
+            assertThat(CatReconnectPolicy.shouldResetDevice(attempt)).isFalse();
+        }
+    }
+
+    @Test
+    public void resetDevice_firesOnceThePlainReopensAreExhausted() {
+        assertThat(CatReconnectPolicy.shouldResetDevice(
+                CatReconnectPolicy.RESET_AFTER_ATTEMPTS + 1)).isTrue();
+    }
+
+    @Test
+    public void resetDevice_repeatsPeriodicallyNotEveryAttempt() {
+        // With the defaults (3 plain reopens, retry every 5): attempts 4, 9, 14…
+        // reset; everything between them is a plain reopen — resetting every
+        // attempt would thrash re-enumeration.
+        assertThat(CatReconnectPolicy.shouldResetDevice(4)).isTrue();
+        assertThat(CatReconnectPolicy.shouldResetDevice(5)).isFalse();
+        assertThat(CatReconnectPolicy.shouldResetDevice(6)).isFalse();
+        assertThat(CatReconnectPolicy.shouldResetDevice(7)).isFalse();
+        assertThat(CatReconnectPolicy.shouldResetDevice(8)).isFalse();
+        assertThat(CatReconnectPolicy.shouldResetDevice(9)).isTrue();
+        assertThat(CatReconnectPolicy.shouldResetDevice(10)).isFalse();
+        assertThat(CatReconnectPolicy.shouldResetDevice(14)).isTrue();
+    }
+
+    @Test
+    public void describeReset_reportsSuccessAndFailure() {
+        assertThat(CatReconnectPolicy.describeReset(4, true))
+                .isEqualTo("CAT auto-reconnect: USB device reset before attempt 4"
+                        + " (ioctl OK, re-enumerating)");
+        assertThat(CatReconnectPolicy.describeReset(9, false))
+                .isEqualTo("CAT auto-reconnect: USB device reset before attempt 9"
+                        + " FAILED, falling back to plain reopen");
+    }
 }

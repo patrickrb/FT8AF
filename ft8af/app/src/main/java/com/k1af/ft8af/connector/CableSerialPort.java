@@ -263,6 +263,32 @@ public class CableSerialPort {
         return findPickedDevice(manager) != null;
     }
 
+    /**
+     * Force a USB device reset ({@code USBDEVFS_RESET}) on this port's device —
+     * a software unplug/replug that makes the kernel re-enumerate it. The CAT
+     * auto-reconnect loop escalates to this when plain reopens keep dying
+     * within a second (a chip wedged by RF re-opens fine but rejects every URB;
+     * see {@link CatReconnectPolicy#RESET_AFTER_ATTEMPTS}). Call only while the
+     * port is closed: the reset invalidates any open connection's endpoint
+     * state. A device that re-enumerates with a new deviceId comes back through
+     * the USB ATTACH broadcast like a real replug — nothing is lost either way.
+     *
+     * @return true if the reset ioctl succeeded
+     */
+    boolean resetDevice() {
+        UsbManager manager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
+        if (manager == null) return false;
+        UsbDevice device = findPickedDevice(manager);
+        if (device == null || !manager.hasPermission(device)) return false;
+        UsbDeviceConnection conn = manager.openDevice(device);
+        if (conn == null) return false;
+        try {
+            return com.k1af.ft8af.wave.UsbAudioNative.resetUsbDevice(conn.getFileDescriptor());
+        } finally {
+            conn.close();
+        }
+    }
+
     private boolean prepare() {
         registerRigSerialPort(context);
         UsbDevice device = null;

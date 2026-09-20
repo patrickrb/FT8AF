@@ -17,7 +17,7 @@ import java.util.TimeZone
  * rows from SQLite and emits one document per park, so the test drives a real
  * (Robolectric) in-memory database.
  *
- * The filename embeds a timestamp formatted in the default timezone, so the
+ * The filename embeds the start date formatted in the default timezone, so the
  * suite pins the JVM default to UTC to keep the expected name deterministic.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -26,7 +26,7 @@ class BuildActivationAdifTest {
     private lateinit var db: SQLiteDatabase
     private var savedTz: TimeZone? = null
 
-    // 2024-06-01 12:34:00 UTC — drives the "pota-<park>-20240601-1234.adi" name.
+    // 2024-06-01 12:34:00 UTC — drives the "<call>@<park>-20240601.adi" name.
     private val startedAtMs = 1_717_245_240_000L
 
     @Before
@@ -67,6 +67,7 @@ class BuildActivationAdifTest {
         timeOn: String,
         mySigInfo: String,
         mode: String = "FT8",
+        station: String = "K1ABC",
     ) {
         db.insert("QSLTable", null, ContentValues().apply {
             put("call", call)
@@ -79,7 +80,7 @@ class BuildActivationAdifTest {
             put("qso_date", qsoDate)
             put("time_on", timeOn)
             put("time_off", timeOn)
-            put("station_callsign", "K1ABC")
+            put("station_callsign", station)
             put("my_gridsquare", "FN31")
             put("my_sig", "POTA")
             put("sig", "")
@@ -110,7 +111,7 @@ class BuildActivationAdifTest {
         assertThat(docs).hasSize(1)
         val doc = docs.single()
         assertThat(doc.parkRef).isEqualTo("K-1234")
-        assertThat(doc.filename).isEqualTo("pota-K-1234-20240601-1234.adi")
+        assertThat(doc.filename).isEqualTo("K1ABC@K-1234-20240601.adi")
         assertThat(doc.content).startsWith("FT8AF POTA Activation K-1234\n")
         assertThat(doc.content).contains("<ADIF_VER:5>3.1.4 ")
         assertThat(doc.content).contains("<PROGRAMID:5>FT8AF ")
@@ -119,6 +120,16 @@ class BuildActivationAdifTest {
         assertThat(doc.content.split("<EOR>").size - 1).isEqualTo(2)
         assertThat(doc.content).contains("<CALL:4>W1AW ")
         assertThat(doc.content).contains("<CALL:5>K9XYZ ")
+    }
+
+    @Test
+    fun blankStationCallsign_filenameFallsBackToActivationOperator() {
+        insertQso("W1AW", "20240601", "123500", mySigInfo = "K-1234", station = "")
+
+        val doc = PotaAdifExporter.buildActivationAdif(db, activation("K-1234")).single()
+
+        // No STATION_CALLSIGN in the rows -> the activation's operator names the file.
+        assertThat(doc.filename).isEqualTo("K1ABC@K-1234-20240601.adi")
     }
 
     @Test
@@ -166,8 +177,8 @@ class BuildActivationAdifTest {
         assertThat(second.content).contains("<MY_SIG_INFO:6>K-5678 ")
         assertThat(second.content).doesNotContain("<MY_SIG_INFO:6>K-1234 ")
         // Filenames are per-park.
-        assertThat(first.filename).isEqualTo("pota-K-1234-20240601-1234.adi")
-        assertThat(second.filename).isEqualTo("pota-K-5678-20240601-1234.adi")
+        assertThat(first.filename).isEqualTo("K1ABC@K-1234-20240601.adi")
+        assertThat(second.filename).isEqualTo("K1ABC@K-5678-20240601.adi")
     }
 
     @Test
