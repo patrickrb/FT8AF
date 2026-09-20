@@ -111,7 +111,11 @@ object PotaAdifExporter {
         // "nothing to upload/share".
         if (rows.isEmpty()) return emptyList()
 
-        val ts = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date(activation.startedAtMs))
+        val date = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(activation.startedAtMs))
+        // Filename callsign: the log's own STATION_CALLSIGN, falling back to the
+        // activation's operator for imported rows that lack one.
+        val callsign = rows.firstNotNullOfOrNull { it.station?.takeIf(String::isNotBlank) }
+            ?: activation.operator
         return activation.parkRefs.map { parkRef ->
             val sb = StringBuilder()
             sb.append("FT8AF POTA Activation $parkRef\n")
@@ -138,7 +142,7 @@ object PotaAdifExporter {
                 adifField(sb, "SIG_INFO", r.sigInfo)
                 sb.append("<EOR>\n")
             }
-            NamedAdif(parkRef = parkRef, filename = "pota-$parkRef-$ts.adi", content = sb.toString())
+            NamedAdif(parkRef = parkRef, filename = uploadFilename(callsign, parkRef, date), content = sb.toString())
         }
     }
 
@@ -234,6 +238,28 @@ object PotaAdifExporter {
                 deliverOnMain(false, onResult)
             }
         }
+    }
+
+    /**
+     * Build the upload/share filename per POTA's documented convention,
+     * `station_callsign@park_id-yyyymmdd.adi` (e.g. `K8MH@US-1234-20220101.adi`,
+     * from pota.app's upload page). The in-app upload's previous
+     * `pota-<park>-<date>-<time>.adi` name got HTTP 502 from POTA's `/adif`
+     * Lambda on every attempt while the website accepted the same log — the
+     * upload page says ADIF fields "take precedence over the filename",
+     * implying the backend parses the name, so match the convention exactly.
+     *
+     * The callsign is uppercased and any character outside A–Z/0–9 becomes `-`
+     * (a portable suffix like `K1AF/P` must not put a path separator into a
+     * filename handed to [File]). A blank callsign falls back to the legacy
+     * `pota-` name rather than inventing one.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun uploadFilename(stationCallsign: String?, parkRef: String, dateYyyymmdd: String): String {
+        val call = stationCallsign.orEmpty().trim().uppercase(Locale.US)
+            .replace(Regex("[^A-Z0-9]"), "-").trim('-')
+        return if (call.isEmpty()) "pota-$parkRef-$dateYyyymmdd.adi"
+        else "$call@$parkRef-$dateYyyymmdd.adi"
     }
 
     /**
