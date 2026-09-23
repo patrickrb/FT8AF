@@ -174,6 +174,17 @@ public class ImportSharedLogs {
     }
 
     public void doImport(InputStream logFileStream, OnShareLogEvents onShareLogEvents) {
+        doImport(logFileStream, onShareLogEvents, null);
+    }
+
+    /**
+     * Import with an optional per-record insert observer. {@code afterInsertQSLData} is passed
+     * straight through to {@link com.k1af.ft8af.database.DatabaseOpr#doInsertQSLData}, whose
+     * callback distinguishes added / updated / invalid records — the in-app import UI uses it
+     * to tally a summary. Callbacks fire on the import thread.
+     */
+    public void doImport(InputStream logFileStream, OnShareLogEvents onShareLogEvents,
+                         com.k1af.ft8af.database.AfterInsertQSLData afterInsertQSLData) {
         this.logFileStream = logFileStream;
 
         new Thread(new Runnable() {
@@ -206,7 +217,7 @@ public class ImportSharedLogs {
                     // originated elsewhere and re-appending would double-count them if the
                     // same rows are later re-exported. (Real-time mirroring is for on-air /
                     // web-logged QSOs only.)
-                    mainViewModel.databaseOpr.doInsertQSLData(qslRecord, null, false);
+                    mainViewModel.databaseOpr.doInsertQSLData(qslRecord, afterInsertQSLData, false);
 
                     if (onShareLogEvents != null) {
                         if (!onShareLogEvents.onShareProgress(count, position
