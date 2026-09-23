@@ -35,8 +35,12 @@ object PotaAdifExporter {
     private const val AUTHORITY = "radio.ks3ckc.ft8af.fileprovider"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** One park's ADIF document plus the filename it should be uploaded/shared under. */
-    data class NamedAdif(val parkRef: String, val filename: String, val content: String)
+    /**
+     * One park's ADIF document plus the filename it should be uploaded/shared under
+     * and the activator [callsign] the log belongs to (the same one embedded in the
+     * filename) — POTA's upload endpoint wants it as a separate form field too.
+     */
+    data class NamedAdif(val parkRef: String, val filename: String, val content: String, val callsign: String)
 
     /**
      * Build one ADIF document per park reference for [activation]. Each document
@@ -142,7 +146,12 @@ object PotaAdifExporter {
                 adifField(sb, "SIG_INFO", r.sigInfo)
                 sb.append("<EOR>\n")
             }
-            NamedAdif(parkRef = parkRef, filename = uploadFilename(callsign, parkRef, date), content = sb.toString())
+            NamedAdif(
+                parkRef = parkRef,
+                filename = uploadFilename(callsign, parkRef, date),
+                content = sb.toString(),
+                callsign = callsign.orEmpty(),
+            )
         }
     }
 

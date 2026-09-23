@@ -112,6 +112,8 @@ class BuildActivationAdifTest {
         val doc = docs.single()
         assertThat(doc.parkRef).isEqualTo("K-1234")
         assertThat(doc.filename).isEqualTo("K1ABC@K-1234-20240601.adi")
+        // The activator callsign is exposed for POTA's `callsign` upload field.
+        assertThat(doc.callsign).isEqualTo("K1ABC")
         assertThat(doc.content).startsWith("FT8AF POTA Activation K-1234\n")
         assertThat(doc.content).contains("<ADIF_VER:5>3.1.4 ")
         assertThat(doc.content).contains("<PROGRAMID:5>FT8AF ")
