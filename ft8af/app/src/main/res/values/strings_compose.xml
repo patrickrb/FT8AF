@@ -376,6 +376,16 @@
     <string name="log_sync_wrl_accepted">World Radio League: %1$d accepted</string>
     <string name="log_sync_nothing_to_upload">No QSOs in the logbook to upload yet.</string>
     <string name="log_sync_working">Working…</string>
+    <string name="log_cd_import_qsos">Import ADIF log</string>
+    <string name="log_import_title_importing">IMPORTING ADIF LOG…</string>
+    <string name="log_import_title_complete">IMPORT COMPLETE</string>
+    <string name="log_import_title_failed">IMPORT FAILED</string>
+    <string name="log_import_progress_count">%1$d of %2$d records</string>
+    <string name="log_import_added">Added: %1$d new QSOs</string>
+    <string name="log_import_updated">Updated: %1$d existing QSOs</string>
+    <string name="log_import_invalid">Skipped: %1$d invalid records</string>
+    <string name="log_import_none_found">No ADIF records found in the selected file. Choose a .adi log file exported from WSJT-X or another logging app.</string>
+    <string name="log_import_open_failed">Could not open the selected file.</string>
 
     <!-- ===== POTA ===== -->
     <string name="pota_tab_activate">Activate</string>
