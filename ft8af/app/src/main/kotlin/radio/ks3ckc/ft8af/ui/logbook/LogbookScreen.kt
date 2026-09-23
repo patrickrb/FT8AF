@@ -1,5 +1,7 @@
 package radio.ks3ckc.ft8af.ui.logbook
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -50,6 +52,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.LinearProgressIndicator
@@ -82,6 +85,8 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.R
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.count.CountDbOpr
+import com.k1af.ft8af.log.ImportSharedLogs
+import com.k1af.ft8af.log.OnShareLogEvents
 import com.k1af.ft8af.log.QSLCallsignRecord
 import com.k1af.ft8af.log.ThirdPartyService
 import com.k1af.ft8af.maidenhead.MaidenheadGrid
@@ -186,10 +191,61 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
     // Catch-up sync UI state
     var syncDialogState by remember { mutableStateOf<SyncDialogState?>(null) }
 
+    // In-app ADIF import UI state (progress, then added/updated/invalid summary)
+    var importDialogState by remember { mutableStateOf<AdifImportUiState?>(null) }
+
     val scope = rememberCoroutineScope()
     // Captured for off-thread grid->state resolution (WAS). UsStateLookup caches
     // the asset table, so calling it from the IO loader below is cheap.
     val appContext = LocalContext.current.applicationContext
+
+    val importOpenFailedMsg = stringResource(R.string.log_import_open_failed)
+    // SAF picker for a .adi file. ADIF has no registered MIME type — providers
+    // report octet-stream, text, or nothing — so accept everything and let the
+    // ADIF parser decide (a non-ADIF file simply yields zero records).
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val stream = try {
+            appContext.contentResolver.openInputStream(uri)
+        } catch (e: Exception) {
+            null
+        }
+        if (stream == null) {
+            importDialogState = failedImportState(importOpenFailedMsg)
+            return@rememberLauncherForActivityResult
+        }
+        val tally = AdifImportTally()
+        importDialogState = startedImportState()
+        try {
+            // ImportSharedLogs runs on its own thread and reports back through
+            // these callbacks (also on that thread); Compose snapshot state is
+            // safe to write from there, same as the sync-progress callback above.
+            ImportSharedLogs(mainViewModel).doImport(stream, object : OnShareLogEvents {
+                override fun onPreparing(info: String?) {}
+
+                override fun onShareStart(count: Int, info: String?) {
+                    importDialogState = importDialogState?.copy(total = count)
+                }
+
+                override fun onShareProgress(count: Int, position: Int, info: String?): Boolean {
+                    importDialogState = importDialogState?.copy(total = count, position = position)
+                    return true
+                }
+
+                override fun afterGet(count: Int, info: String?) {
+                    importDialogState = finishedImportState(count, tally)
+                }
+
+                override fun onShareFailed(info: String?) {
+                    importDialogState = failedImportState(info)
+                }
+            }, tally)
+        } catch (e: java.io.IOException) {
+            importDialogState = failedImportState(e.message)
+        }
+    }
 
     // Load records and stats from the database. Re-runs when refreshKey changes
     // (e.g. after the user edits or deletes a QSO).
@@ -385,6 +441,18 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                             tint = TextMuted,
                         )
                     }
+                    IconButton(
+                        onClick = {
+                            if (importDialogState?.inProgress == true) return@IconButton
+                            importLauncher.launch(arrayOf("*/*"))
+                        },
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.FileDownload,
+                            contentDescription = stringResource(R.string.log_cd_import_qsos),
+                            tint = TextMuted,
+                        )
+                    }
                     IconButton(onClick = { exportSheetVisible = true }) {
                         Icon(
                             imageVector = Icons.Filled.Share,
@@ -477,6 +545,20 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                 state = state,
                 onDismiss = {
                     if (!state.inProgress) syncDialogState = null
+                },
+            )
+        }
+
+        // ADIF import progress / summary dialog
+        importDialogState?.let { state ->
+            AdifImportDialog(
+                state = state,
+                onDismiss = {
+                    if (!state.inProgress) {
+                        importDialogState = null
+                        // Reload records/stats so the imported QSOs show up.
+                        if (importChangedLog(state)) refreshKey++
+                    }
                 },
             )
         }
@@ -2377,6 +2459,115 @@ private fun CatchUpSyncDialog(
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         text = stringResource(R.string.log_sync_nothing_to_upload),
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (state.inProgress) BgSurface3 else Accent)
+                    .let { m ->
+                        if (state.inProgress) m else m.clickable(onClick = onDismiss)
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (state.inProgress) stringResource(R.string.log_sync_working) else stringResource(R.string.action_done),
+                    color = if (state.inProgress) TextMuted else BgApp,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdifImportDialog(
+    state: AdifImportUiState,
+    onDismiss: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = !state.inProgress,
+            dismissOnClickOutside = !state.inProgress,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(BgSurface2)
+                .padding(horizontal = 20.dp, vertical = 20.dp),
+        ) {
+            Text(
+                text = when {
+                    state.inProgress -> stringResource(R.string.log_import_title_importing)
+                    state.failedMessage != null -> stringResource(R.string.log_import_title_failed)
+                    else -> stringResource(R.string.log_import_title_complete)
+                },
+                color = TextPrimary,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
+                letterSpacing = 0.06.sp,
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            when {
+                state.failedMessage != null -> {
+                    Text(
+                        text = state.failedMessage,
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                    )
+                }
+                state.inProgress -> {
+                    val progress = if (state.total > 0) state.position.toFloat() / state.total else 0f
+                    LinearProgressIndicator(
+                        progress = { progress.coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = stringResource(R.string.log_import_progress_count, state.position, state.total),
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                    )
+                }
+                state.total == 0 -> {
+                    Text(
+                        text = stringResource(R.string.log_import_none_found),
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                    )
+                }
+                else -> {
+                    Text(
+                        text = stringResource(R.string.log_import_added, state.added),
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.log_import_updated, state.updated),
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.log_import_invalid, state.invalid),
                         color = TextMuted,
                         fontSize = 12.sp,
                     )

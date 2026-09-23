@@ -79,6 +79,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import radio.ks3ckc.ft8af.pota.PotaAuth
 import radio.ks3ckc.ft8af.pota.PotaClient
+import radio.ks3ckc.ft8af.pota.PotaParkRepository
 import radio.ks3ckc.ft8af.pota.PotaUploadException
 import radio.ks3ckc.ft8af.pota.PotaSessionManager
 import radio.ks3ckc.ft8af.pota.PotaSpotsRepository
@@ -758,20 +759,57 @@ private suspend fun uploadActivation(
     val docs = withContext(Dispatchers.IO) { PotaAdifExporter.buildActivationAdif(db, activation) }
     if (docs.isEmpty()) return Result.failure(IllegalStateException("no QSOs to upload"))
     var ok = 0
-    var firstError: Throwable? = null
+    // A real HTTP/network failure from uploadAdif (classifiable into BUSY/SERVER/
+    // NETWORK) is worth surfacing over a pre-flight resolution problem, so track
+    // the two separately and let summarizeUpload prefer the server one.
+    var serverError: Throwable? = null
+    var preflightError: Throwable? = null
     for (doc in docs) {
-        PotaClient.uploadAdif(token, doc.filename, doc.content)
+        // POTA's endpoint needs the park's location code AND a non-blank callsign
+        // as form fields, or it accepts the POST (200) but never processes the log.
+        // Resolve/validate both before uploading; a park we can't locate or a log
+        // with no callsign can't be credited, so fail loudly instead of firing a
+        // silent no-op upload that would be reported as success.
+        val location = PotaParkRepository.parkLocationCode(doc.parkRef)
+        if (location == null) {
+            if (preflightError == null) {
+                preflightError = IllegalStateException("could not resolve POTA location for ${doc.parkRef}")
+            }
+            continue
+        }
+        if (doc.callsign.isBlank()) {
+            if (preflightError == null) {
+                preflightError = IllegalStateException("no station callsign for ${doc.parkRef} — set your callsign")
+            }
+            continue
+        }
+        PotaClient.uploadAdif(token, doc.filename, doc.content, doc.parkRef, location, doc.callsign)
             .onSuccess { ok++ }
-            .onFailure { if (firstError == null) firstError = it }
+            .onFailure { if (serverError == null) serverError = it }
     }
-    return if (ok == docs.size) {
+    return summarizeUpload(ok, docs.size, serverError, preflightError)
+}
+
+/**
+ * Reduce a multi-park (N-fer) upload to a single [Result]: success only when every
+ * park uploaded. On any shortfall, surface [serverError] (a real HTTP/network
+ * failure from [PotaClient.uploadAdif], which [classifyUploadFailure] can map to
+ * BUSY/SERVER/NETWORK) in preference to [preflightError] (a park whose location or
+ * callsign we couldn't resolve) — otherwise an early unresolved park would mask a
+ * later retryable 502 and mis-classify it as a generic OTHER. Pure so the
+ * preference and success-gate logic is unit-testable without the network.
+ */
+internal fun summarizeUpload(
+    ok: Int,
+    total: Int,
+    serverError: Throwable?,
+    preflightError: Throwable?,
+): Result<Int> =
+    if (ok == total) {
         Result.success(ok)
     } else {
-        // Preserve the original throwable (e.g. PotaUploadException) so the caller
-        // can classify it for a useful message rather than a raw HTTP dump.
-        Result.failure(firstError ?: IllegalStateException("uploaded $ok of ${docs.size}"))
+        Result.failure(serverError ?: preflightError ?: IllegalStateException("uploaded $ok of $total"))
     }
-}
 
 /** How an upload failed, mapped to a user-facing message in [startUpload]. */
 internal enum class UploadFailureKind { BUSY, SERVER, NETWORK, OTHER }

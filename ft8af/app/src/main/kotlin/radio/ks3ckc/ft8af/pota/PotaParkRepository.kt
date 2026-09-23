@@ -93,6 +93,20 @@ object PotaParkRepository {
         return park
     }
 
+    /**
+     * A single POTA location code (e.g. `US-KS`) a park sits in, or null if the
+     * park can't be looked up. The authenticated ADIF upload sends this as its
+     * `location` form field — POTA validates it against the park and silently
+     * drops the upload (200 OK, but no processing job) when it's absent or wrong,
+     * which is the whole reason in-app uploads never appeared. A multi-region
+     * park (national scenic trails, border parks) reports `locationDesc` as a
+     * comma-separated list (e.g. `US-CO,US-UT`), which POTA rejects as a single
+     * `location` value — so [firstLocationCode] reduces it to one valid code.
+     * Uses the same lookup cache the park picker populates.
+     */
+    suspend fun parkLocationCode(reference: String): String? =
+        firstLocationCode(lookupParkCached(reference.trim().uppercase())?.locationDesc)
+
     private suspend fun getLocations(): List<PotaLocation>? {
         val now = System.currentTimeMillis()
         if (cachedLocations != null && now - locationsTimestamp < CACHE_TTL_MS) {
@@ -174,6 +188,20 @@ internal fun sortParksByDistance(
         .sortedBy { it.distanceKm }
         .take(limit)
 }
+
+/**
+ * Reduce a park's `locationDesc` to a single POTA location code for the upload's
+ * `location` form field. Most parks report one code (`US-KS`); multi-region parks
+ * report a comma-separated list (`US-CO,US-UT`, or the Appalachian Trail's 14
+ * states) that POTA rejects when sent whole — verified in the field, a comma
+ * value is silently dropped exactly like a wrong one. Returns the first non-blank
+ * code (always one of the park's own valid regions), or null for a blank/absent
+ * value. Which sub-region the operator was actually in isn't known here, but any
+ * of the park's codes credits the same park activation, so the first is a safe,
+ * always-valid pick.
+ */
+internal fun firstLocationCode(locationDesc: String?): String? =
+    locationDesc?.split(',')?.firstNotNullOfOrNull { it.trim().takeIf(String::isNotBlank) }
 
 /**
  * Split comma-separated park reference strings and deduplicate, preserving
