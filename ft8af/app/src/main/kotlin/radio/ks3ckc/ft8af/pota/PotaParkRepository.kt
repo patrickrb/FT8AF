@@ -93,6 +93,17 @@ object PotaParkRepository {
         return park
     }
 
+    /**
+     * The POTA location code (e.g. `US-KS`) a park sits in, or null if the park
+     * can't be looked up. The authenticated ADIF upload must send this as its
+     * `location` form field — POTA validates it against the park and silently
+     * drops the upload (200 OK, but no processing job) when it's absent or wrong,
+     * which is the whole reason in-app uploads never appeared. Uses the same
+     * lookup cache the park picker populates.
+     */
+    suspend fun parkLocationCode(reference: String): String? =
+        lookupParkCached(reference.trim().uppercase())?.locationDesc?.takeIf { it.isNotBlank() }
+
     private suspend fun getLocations(): List<PotaLocation>? {
         val now = System.currentTimeMillis()
         if (cachedLocations != null && now - locationsTimestamp < CACHE_TTL_MS) {

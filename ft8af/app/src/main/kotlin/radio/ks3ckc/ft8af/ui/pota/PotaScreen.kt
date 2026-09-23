@@ -79,6 +79,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import radio.ks3ckc.ft8af.pota.PotaAuth
 import radio.ks3ckc.ft8af.pota.PotaClient
+import radio.ks3ckc.ft8af.pota.PotaParkRepository
 import radio.ks3ckc.ft8af.pota.PotaUploadException
 import radio.ks3ckc.ft8af.pota.PotaSessionManager
 import radio.ks3ckc.ft8af.pota.PotaSpotsRepository
@@ -760,7 +761,18 @@ private suspend fun uploadActivation(
     var ok = 0
     var firstError: Throwable? = null
     for (doc in docs) {
-        PotaClient.uploadAdif(token, doc.filename, doc.content)
+        // POTA's endpoint needs the park's location code as a form field or it
+        // accepts the POST (200) but never processes the log. Resolve it before
+        // uploading; a park we can't locate can't be credited, so fail loudly
+        // instead of firing a silent no-op upload.
+        val location = PotaParkRepository.parkLocationCode(doc.parkRef)
+        if (location == null) {
+            if (firstError == null) {
+                firstError = IllegalStateException("could not resolve POTA location for ${doc.parkRef}")
+            }
+            continue
+        }
+        PotaClient.uploadAdif(token, doc.filename, doc.content, doc.parkRef, location, doc.callsign)
             .onSuccess { ok++ }
             .onFailure { if (firstError == null) firstError = it }
     }
