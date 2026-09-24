@@ -22,6 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -63,6 +67,9 @@ import radio.ks3ckc.ft8af.ui.components.SlotTimerBar
 import radio.ks3ckc.ft8af.ui.components.TabBar
 import radio.ks3ckc.ft8af.ui.components.TransmitGlow
 import radio.ks3ckc.ft8af.ui.components.TxStrip
+import radio.ks3ckc.ft8af.ui.components.OperateControlsDrawer
+import radio.ks3ckc.ft8af.ui.components.OperateStatusRow
+import radio.ks3ckc.ft8af.ui.components.OperateDrawerPeekHeight
 import radio.ks3ckc.ft8af.ui.components.VoiceCommandButton
 import radio.ks3ckc.ft8af.ui.components.selectBandIndex
 import radio.ks3ckc.ft8af.ui.decode.DecodeScreen
@@ -134,6 +141,22 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     LaunchedEffect(showVolumeSliderLive) {
         showVolumeSlider = showVolumeSliderLive ?: GeneralVariables.showTxVolumeSlider
     }
+
+    // Operate-controls drawer (design 3a/3b) — observed so the Settings toggle takes effect
+    // immediately. When on, the always-open strip becomes a collapsing bottom-sheet drawer;
+    // controlsExpanded drives the open sheet and starts collapsed each session.
+    val controlsDrawerLive by GeneralVariables.mutableControlsDrawerEnabled.observeAsState(
+        GeneralVariables.controlsDrawerEnabled,
+    )
+    var controlsDrawerEnabled by remember { mutableStateOf(GeneralVariables.controlsDrawerEnabled) }
+    LaunchedEffect(controlsDrawerLive) {
+        controlsDrawerEnabled = controlsDrawerLive ?: GeneralVariables.controlsDrawerEnabled
+    }
+    var controlsExpanded by rememberSaveable { mutableStateOf(false) }
+    // Window-space Y of the reserved peek slot's bottom (== tab bar top). The drawer overlay
+    // anchors its bottom edge here so the collapsed sheet lines up exactly with the reserved
+    // inline space and grows upward from there.
+    var drawerAnchorBottomPx by remember { mutableFloatStateOf(0f) }
 
     // Consume the one-shot celebration signal so LiveData doesn't replay it
     // on recomposition / resubscription.
@@ -339,6 +362,119 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
         }
     }
 
+    // ---- Operating-controls: derived labels + shared action lambdas ----
+    // Hoisted to function scope so the always-open TxStrip, the collapsing drawer peek (in the
+    // Column), and the expanded controls sheet (a sibling overlay in the outer Box) all drive
+    // identical rig behavior from one set of callbacks.
+    val slotMillis = ModeProfile.fromId(operatingMode).slotMillis.toLong()
+    val bandModeLabel = "$frequencyLabel · $modeName"
+    val huntOptionLabel = if (huntEnabled) {
+        stringResource(
+            when (huntPriority) {
+                HuntPriority.LATEST -> R.string.hunt_priority_latest
+                HuntPriority.STRONGEST -> R.string.hunt_priority_strongest
+                HuntPriority.WEAKEST -> R.string.hunt_priority_weakest
+                HuntPriority.FARTHEST -> R.string.hunt_priority_farthest
+                HuntPriority.POTA_FIRST -> R.string.hunt_priority_pota
+                HuntPriority.NEW_DXCC_FIRST -> R.string.hunt_priority_new_dxcc
+                HuntPriority.NEW_GRID_FIRST -> R.string.hunt_priority_new_grid
+            },
+        )
+    } else {
+        stringResource(R.string.tx_hunt_off)
+    }
+
+    val onToggleTuneAction: () -> Unit = {
+        // Toggle (WSJT-X style latching Tune): tap to key the carrier,
+        // tap again to stop. startTune() toasts the reason when blocked.
+        // Per the tune-method setting the tap may instead fire the rig's
+        // internal ATU (issue #425) — a one-shot command, nothing to latch.
+        if (isTuning) {
+            mainViewModel.ft8TransmitSignal.stopTune()
+        } else if (!mainViewModel.tryStartTuneViaAtu()) {
+            mainViewModel.ft8TransmitSignal.startTune()
+        }
+    }
+    val onVolumeChangeAction: (Int) -> Unit = { newVolume ->
+        txVolume = newVolume
+        GeneralVariables.volumePercent = newVolume / 100f
+        GeneralVariables.mutableVolumePercent.postValue(newVolume / 100f)
+    }
+    val onVolumeChangeFinishedAction: () -> Unit = {
+        mainViewModel.databaseOpr.writeConfig("volumeValue", txVolume.toString(), null)
+        mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
+        saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, txVolume)
+    }
+    val onCallCQAction: () -> Unit = {
+        if (GeneralVariables.myCallsign.isNullOrEmpty()) {
+            Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
+        } else if (isFreeTextMode && freeTextMessage.isNotBlank()) {
+            // Free text is a one-shot (WSJT-X Tx5 style): send it once,
+            // immediately, then the engine auto-stops — it is an alternative
+            // to a 73, not a repeating CQ. Consume the armed free text so the
+            // next tap calls a normal CQ instead of re-sending it.
+            mainViewModel.ft8TransmitSignal.sendFreeTextOnce(freeTextMessage)
+            isFreeTextMode = false
+            freeTextMessage = ""
+        } else {
+            mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
+            mainViewModel.ft8TransmitSignal.userResetToCQ()
+            mainViewModel.ft8TransmitSignal.setActivated(true)
+            GeneralVariables.resetLaunchSupervision()
+        }
+    }
+    val onStopAction: () -> Unit = {
+        // In Hound mode the STOP button leaves Hound entirely;
+        // otherwise it just deactivates the normal sequencer.
+        if (GeneralVariables.houndMode) {
+            mainViewModel.stopHoundMode()
+            dxEnabled = false
+        } else {
+            mainViewModel.ft8TransmitSignal.setActivated(false)
+            // If Hunt armed this run, STOP ends Hunt too, so the buttons can't be
+            // left showing Hunt "on" while the sequencer is stopped (and idle).
+            if (huntEnabled) {
+                huntEnabled = false
+                GeneralVariables.autoFollowCQ = false
+                mainViewModel.databaseOpr.writeConfig("autoFollowCQ", "0", null)
+            }
+        }
+        // Clear free text and Field Day mode on stop
+        isFreeTextMode = false
+        freeTextMessage = ""
+        mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
+        if (fieldDayEnabled) {
+            fieldDayEnabled = false
+            GeneralVariables.fieldDayMode = false
+            mainViewModel.databaseOpr.writeConfig("fieldDayMode", "0", null)
+            cqModifier = ""
+            GeneralVariables.toModifier = ""
+            mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
+        }
+    }
+    val onOpenCqOptionsAction: () -> Unit = { showCqOptions = true }
+    val onToggleDxAction: () -> Unit = {
+        if (dxEnabled || GeneralVariables.houndMode) {
+            mainViewModel.stopHoundMode()
+            dxEnabled = false
+        } else {
+            showHoundSetup = true
+        }
+    }
+    val onSelectTxPeriodAction: (Int) -> Unit = { newSlot ->
+        mainViewModel.ft8TransmitSignal.sequential = newSlot
+        mainViewModel.ft8TransmitSignal.mutableSequential.postValue(newSlot)
+        // Switching slots mid-QSO abandons the current contact.
+        val target = mainViewModel.ft8TransmitSignal.mutableToCallsign.value
+        if (FT8TransmitSignal.shouldResetTargetOnSlotToggle(target?.callsign)) {
+            mainViewModel.ft8TransmitSignal.userResetToCQ()
+        }
+    }
+    val onToggleHuntAction: () -> Unit = { setHuntEnabled(!huntEnabled) }
+    val onOpenHuntOptionsAction: () -> Unit = { showHuntOptions = true }
+    val onReconnectCatAction: () -> Unit = { mainViewModel.reconnectRig() }
+    val onOpenBandModeAction: () -> Unit = { showBandModeSheet = true }
+
     Box(modifier = Modifier.fillMaxSize().background(BgApp)) {
         // Keep the content clear of the display cutout (and the status bar, should it
         // ever be visible) — the Box behind still paints BgApp into the padded band so a
@@ -449,135 +585,66 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 offsetSec = avgDtSec,
             )
 
-            // TX status strip — always visible above tab bar (redesigned, option 3a). The
-            // slot bar + clock-sync pill remain in the SlotTimerBar above; the strip's
-            // status row shows the plain-language "next transmit window" countdown.
-            val slotMillis = ModeProfile.fromId(operatingMode).slotMillis.toLong()
-            val bandModeLabel = "$frequencyLabel · $modeName"
-            val huntOptionLabel = if (huntEnabled) {
-                stringResource(
-                    when (huntPriority) {
-                        HuntPriority.LATEST -> R.string.hunt_priority_latest
-                        HuntPriority.STRONGEST -> R.string.hunt_priority_strongest
-                        HuntPriority.WEAKEST -> R.string.hunt_priority_weakest
-                        HuntPriority.FARTHEST -> R.string.hunt_priority_farthest
-                        HuntPriority.POTA_FIRST -> R.string.hunt_priority_pota
-                        HuntPriority.NEW_DXCC_FIRST -> R.string.hunt_priority_new_dxcc
-                        HuntPriority.NEW_GRID_FIRST -> R.string.hunt_priority_new_grid
-                    },
+            // TX operating controls above the tab bar. When the drawer setting is on (default)
+            // they collapse into a bottom-sheet drawer (design 3a/3b): the peek shows status +
+            // the primary action + TX period, and the full control set opens in the
+            // OperateControlsSheet overlay below. When off, the original always-open strip shows.
+            // The slot bar + clock-sync pill remain in the SlotTimerBar above.
+            if (controlsDrawerEnabled) {
+                // Docked status line (design 3a), then a reserved slot the drawer sheet sits in
+                // when collapsed. The actual sheet is the OperateControlsDrawer overlay in the
+                // outer Box; it anchors its bottom to this slot and grows upward on expand.
+                OperateStatusRow(
+                    isTransmitting = isTransmitting,
+                    isTuning = isTuning,
+                    slotMillis = slotMillis,
+                    txSlot = txSlot,
+                    showCatChip = showCatChip,
+                    catState = catState,
+                    onReconnectCat = onReconnectCatAction,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                )
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(OperateDrawerPeekHeight)
+                        .onGloballyPositioned { coords ->
+                            drawerAnchorBottomPx = coords.positionInWindow().y + coords.size.height
+                        },
                 )
             } else {
-                stringResource(R.string.tx_hunt_off)
+                TxStrip(
+                    isTransmitting = isTransmitting,
+                    isActivated = isActivated,
+                    bandModeLabel = bandModeLabel,
+                    slotMillis = slotMillis,
+                    txSlot = txSlot,
+                    huntEnabled = huntEnabled,
+                    huntOptionLabel = huntOptionLabel,
+                    dxEnabled = dxEnabled,
+                    catState = catState,
+                    showCatChip = showCatChip,
+                    txVolume = txVolume,
+                    showVolumeSlider = showVolumeSlider,
+                    cqModifier = cqModifier,
+                    isFreeTextMode = isFreeTextMode,
+                    fieldDayEnabled = fieldDayEnabled,
+                    isTuning = isTuning,
+                    tuneRemainingSec = tuneRemainingSec,
+                    onToggleTune = onToggleTuneAction,
+                    onVolumeChange = onVolumeChangeAction,
+                    onVolumeChangeFinished = onVolumeChangeFinishedAction,
+                    onCallCQ = onCallCQAction,
+                    onStop = onStopAction,
+                    onOpenCqOptions = onOpenCqOptionsAction,
+                    onToggleDx = onToggleDxAction,
+                    onSelectTxPeriod = onSelectTxPeriodAction,
+                    onToggleHunt = onToggleHuntAction,
+                    onOpenHuntOptions = onOpenHuntOptionsAction,
+                    onReconnectCat = onReconnectCatAction,
+                    onOpenBandMode = onOpenBandModeAction,
+                )
             }
-            TxStrip(
-                isTransmitting = isTransmitting,
-                isActivated = isActivated,
-                bandModeLabel = bandModeLabel,
-                slotMillis = slotMillis,
-                txSlot = txSlot,
-                huntEnabled = huntEnabled,
-                huntOptionLabel = huntOptionLabel,
-                dxEnabled = dxEnabled,
-                catState = catState,
-                showCatChip = showCatChip,
-                txVolume = txVolume,
-                showVolumeSlider = showVolumeSlider,
-                cqModifier = cqModifier,
-                isFreeTextMode = isFreeTextMode,
-                fieldDayEnabled = fieldDayEnabled,
-                isTuning = isTuning,
-                tuneRemainingSec = tuneRemainingSec,
-                onToggleTune = {
-                    // Toggle (WSJT-X style latching Tune): tap to key the carrier,
-                    // tap again to stop. startTune() toasts the reason when blocked.
-                    // Per the tune-method setting the tap may instead fire the rig's
-                    // internal ATU (issue #425) — a one-shot command, nothing to latch.
-                    if (isTuning) {
-                        mainViewModel.ft8TransmitSignal.stopTune()
-                    } else if (!mainViewModel.tryStartTuneViaAtu()) {
-                        mainViewModel.ft8TransmitSignal.startTune()
-                    }
-                },
-                onVolumeChange = { newVolume ->
-                    txVolume = newVolume
-                    GeneralVariables.volumePercent = newVolume / 100f
-                    GeneralVariables.mutableVolumePercent.postValue(newVolume / 100f)
-                },
-                onVolumeChangeFinished = {
-                    mainViewModel.databaseOpr.writeConfig("volumeValue", txVolume.toString(), null)
-                    mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
-                    saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, txVolume)
-                },
-                onCallCQ = {
-                    if (GeneralVariables.myCallsign.isNullOrEmpty()) {
-                        Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
-                    } else if (isFreeTextMode && freeTextMessage.isNotBlank()) {
-                        // Free text is a one-shot (WSJT-X Tx5 style): send it once,
-                        // immediately, then the engine auto-stops — it is an alternative
-                        // to a 73, not a repeating CQ. Consume the armed free text so the
-                        // next tap calls a normal CQ instead of re-sending it.
-                        mainViewModel.ft8TransmitSignal.sendFreeTextOnce(freeTextMessage)
-                        isFreeTextMode = false
-                        freeTextMessage = ""
-                    } else {
-                        mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
-                        mainViewModel.ft8TransmitSignal.userResetToCQ()
-                        mainViewModel.ft8TransmitSignal.setActivated(true)
-                        GeneralVariables.resetLaunchSupervision()
-                    }
-                },
-                onStop = {
-                    // In Hound mode the STOP button leaves Hound entirely;
-                    // otherwise it just deactivates the normal sequencer.
-                    if (GeneralVariables.houndMode) {
-                        mainViewModel.stopHoundMode()
-                        dxEnabled = false
-                    } else {
-                        mainViewModel.ft8TransmitSignal.setActivated(false)
-                        // If Hunt armed this run, STOP ends Hunt too, so the buttons can't be
-                        // left showing Hunt "on" while the sequencer is stopped (and idle).
-                        if (huntEnabled) {
-                            huntEnabled = false
-                            GeneralVariables.autoFollowCQ = false
-                            mainViewModel.databaseOpr.writeConfig("autoFollowCQ", "0", null)
-                        }
-                    }
-                    // Clear free text and Field Day mode on stop
-                    isFreeTextMode = false
-                    freeTextMessage = ""
-                    mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
-                    if (fieldDayEnabled) {
-                        fieldDayEnabled = false
-                        GeneralVariables.fieldDayMode = false
-                        mainViewModel.databaseOpr.writeConfig("fieldDayMode", "0", null)
-                        cqModifier = ""
-                        GeneralVariables.toModifier = ""
-                        mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
-                    }
-                },
-                onOpenCqOptions = { showCqOptions = true },
-                onToggleDx = {
-                    if (dxEnabled || GeneralVariables.houndMode) {
-                        mainViewModel.stopHoundMode()
-                        dxEnabled = false
-                    } else {
-                        showHoundSetup = true
-                    }
-                },
-                onSelectTxPeriod = { newSlot ->
-                    mainViewModel.ft8TransmitSignal.sequential = newSlot
-                    mainViewModel.ft8TransmitSignal.mutableSequential.postValue(newSlot)
-                    // Switching slots mid-QSO abandons the current contact.
-                    val target = mainViewModel.ft8TransmitSignal.mutableToCallsign.value
-                    if (FT8TransmitSignal.shouldResetTargetOnSlotToggle(target?.callsign)) {
-                        mainViewModel.ft8TransmitSignal.userResetToCQ()
-                    }
-                },
-                onToggleHunt = { setHuntEnabled(!huntEnabled) },
-                onOpenHuntOptions = { showHuntOptions = true },
-                onReconnectCat = { mainViewModel.reconnectRig() },
-                onOpenBandMode = { showBandModeSheet = true },
-            )
 
             // Bottom tab bar
             TabBar(
@@ -594,6 +661,42 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
 
         // One-shot particle burst when a QSO completes.
         QsoCelebration(triggerAt = qsoCompletedAt)
+
+        // Operate-controls drawer (design 3a/3b) — one bottom sheet that grows in place from the
+        // reserved peek slot. Sibling overlay so its scrim + sheet sit above the tab bar and
+        // content. Rendered only when the drawer setting is on.
+        if (controlsDrawerEnabled) {
+            OperateControlsDrawer(
+                expanded = controlsExpanded,
+                onExpandedChange = { controlsExpanded = it },
+                anchorBottomPx = drawerAnchorBottomPx,
+                isTransmitting = isTransmitting,
+                isActivated = isActivated,
+                isTuning = isTuning,
+                bandModeLabel = bandModeLabel,
+                txSlot = txSlot,
+                huntEnabled = huntEnabled,
+                huntOptionLabel = huntOptionLabel,
+                dxEnabled = dxEnabled,
+                txVolume = txVolume,
+                showVolumeSlider = showVolumeSlider,
+                cqModifier = cqModifier,
+                isFreeTextMode = isFreeTextMode,
+                fieldDayEnabled = fieldDayEnabled,
+                tuneRemainingSec = tuneRemainingSec,
+                onCallCQ = onCallCQAction,
+                onStop = onStopAction,
+                onSelectTxPeriod = onSelectTxPeriodAction,
+                onToggleHunt = onToggleHuntAction,
+                onOpenHuntOptions = onOpenHuntOptionsAction,
+                onOpenBandMode = onOpenBandModeAction,
+                onToggleTune = onToggleTuneAction,
+                onToggleDx = onToggleDxAction,
+                onOpenCqOptions = onOpenCqOptionsAction,
+                onVolumeChange = onVolumeChangeAction,
+                onVolumeChangeFinished = onVolumeChangeFinishedAction,
+            )
+        }
 
         // Frequency picker — sibling overlay so the scrim and sheet sit above the
         // tab bar and TxStrip.

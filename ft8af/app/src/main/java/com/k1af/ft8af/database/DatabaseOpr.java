@@ -2971,6 +2971,10 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.showTxVolumeSlider = !result.equals("0");
                     GeneralVariables.mutableShowTxVolumeSlider.postValue(GeneralVariables.showTxVolumeSlider);
                 }
+                if (name.equalsIgnoreCase("controlsDrawerEnabled")) {//Collapsing bottom-sheet controls drawer, defaults on
+                    GeneralVariables.controlsDrawerEnabled = !result.equals("0");
+                    GeneralVariables.mutableControlsDrawerEnabled.postValue(GeneralVariables.controlsDrawerEnabled);
+                }
                 if (name.equalsIgnoreCase("perBandOutputLevel")) {//Save TX output level per band, defaults off
                     GeneralVariables.savePerBandOutputLevel = result.equals("1");
                 }
