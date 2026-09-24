@@ -140,7 +140,7 @@ public class AudioChannelSelectTest {
     @Test
     public void needsStereoPlayback_onlyForASingleSide() {
         // BOTH must stay a mono open: that path is the historical TX pipeline and
-        // is not worth disturbing (see the CLAUDE.md TX audio hazards).
+        // is not worth disturbing (see the AGENTS.md TX audio hazards).
         assertThat(AudioChannelSelect.needsStereoPlayback(AudioChannelSelect.BOTH)).isFalse();
         assertThat(AudioChannelSelect.needsStereoPlayback(AudioChannelSelect.LEFT)).isTrue();
         assertThat(AudioChannelSelect.needsStereoPlayback(AudioChannelSelect.RIGHT)).isTrue();

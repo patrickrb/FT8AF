@@ -1,6 +1,6 @@
 // Pure, framework-free logbook helpers. The React `LogScreen` is a thin wrapper
 // around these so the decision/normalization logic stays unit-testable (see
-// CLAUDE.md: Composable/JSX code can't be tested directly — extract the logic).
+// AGENTS.md: Composable/JSX code can't be tested directly — extract the logic).
 
 import type { QsoRecord } from "./ipc";
 

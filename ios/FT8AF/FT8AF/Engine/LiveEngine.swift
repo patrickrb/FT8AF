@@ -938,7 +938,7 @@ final class LiveEngine {
     /// boundary. The slack is the *physical* `TxTiming.defaultSlackMs`
     /// constant (15000 − 12640 = 2360 ms) — never the user setting: a smaller
     /// slack clips the leading Costas sync of ON-TIME transmissions and makes
-    /// them audible but undecodable (see CLAUDE.md, TX pipeline gotcha #2).
+    /// them audible but undecodable (see AGENTS.md, TX pipeline gotcha #2).
     /// The late-start-tolerance setting is a SKIP threshold instead: when more
     /// than that much leading audio would be clipped, the slot is skipped.
     private func beginTxPlayback(message: String, samples: [Float], profile: ModeProfile) {

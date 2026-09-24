@@ -161,6 +161,9 @@ public class GeneralVariables {
     public static boolean showTxVolumeSlider = true;//Show inline TX volume slider on main screen
     public static MutableLiveData<Boolean> mutableShowTxVolumeSlider = new MutableLiveData<>(true);
 
+    public static boolean controlsDrawerEnabled = true;//Operate controls as a collapsing bottom-sheet drawer (design 3a/3b)
+    public static MutableLiveData<Boolean> mutableControlsDrawerEnabled = new MutableLiveData<>(true);
+
     //Save TX output level per band (issue #355), defaults off (global level only).
     // volatile: written from DatabaseOpr's background config-load thread and the
     // Settings toggle, read from UI + MeterProtectionController threads (same

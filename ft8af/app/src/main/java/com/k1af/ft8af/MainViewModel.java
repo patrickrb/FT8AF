@@ -1149,7 +1149,7 @@ public class MainViewModel extends ViewModel {
 
         // Voice assistant: TTS must never leak into a transmission (it would be
         // mixed into the rig audio and go out over the air — see the TX audio
-        // hazards in CLAUDE.md). Two layers: the announcer refuses to start an
+        // hazards in AGENTS.md). Two layers: the announcer refuses to start an
         // utterance while isTransmitting(), and this observer hard-stops any
         // in-flight speech the instant TX begins. observeForever is safe here:
         // the ViewModel constructor runs on the main thread (setValue above),

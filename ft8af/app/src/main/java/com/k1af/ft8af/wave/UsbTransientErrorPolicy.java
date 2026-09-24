@@ -33,7 +33,7 @@ public final class UsbTransientErrorPolicy {
 
     /**
      * Most a single isochronous packet may be re-sent before the TX path gives
-     * up on it. FT8 has ~2.36&nbsp;s of cycle slack (see {@code CLAUDE.md} → "FT8
+     * up on it. FT8 has ~2.36&nbsp;s of cycle slack (see {@code AGENTS.md} → "FT8
      * TX audio pipeline"), so a handful of ~1&nbsp;ms packet retries is well
      * within budget and never pushes audio off the WSJT-X grid.
      */

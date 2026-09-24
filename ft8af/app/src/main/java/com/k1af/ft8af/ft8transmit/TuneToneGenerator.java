@@ -14,7 +14,7 @@ package com.k1af.ft8af.ft8transmit;
  *
  * <p>Pure arithmetic with injected frequency/sample-rate/amplitude — no
  * Android, no native code — so it is deterministic and unit-testable
- * (CLAUDE.md testing rule).
+ * (AGENTS.md testing rule).
  */
 public final class TuneToneGenerator {
 
