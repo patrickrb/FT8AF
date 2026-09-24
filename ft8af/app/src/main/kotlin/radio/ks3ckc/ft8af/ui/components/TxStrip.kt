@@ -718,27 +718,33 @@ internal fun TxPeriodControl(
     txSlot: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    // Compact drops the "TX PERIOD" caption and uses short "1st"/"2nd" segment labels so the
+    // control reads cleanly in the narrow slot beside Call CQ in the drawer's primary row.
+    compact: Boolean = false,
 ) {
     Row(
         modifier = modifier
-            .height(52.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .height(if (compact) 72.dp else 52.dp)
+            .clip(RoundedCornerShape(if (compact) 14.dp else 12.dp))
             .background(BgSurface3)
-            .border(1.dp, Border, RoundedCornerShape(12.dp))
-            .padding(start = 12.dp, end = 6.dp),
+            .border(1.dp, Border, RoundedCornerShape(if (compact) 14.dp else 12.dp))
+            .padding(horizontal = if (compact) 6.dp else 0.dp)
+            .padding(start = if (compact) 0.dp else 12.dp, end = if (compact) 0.dp else 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = stringResource(R.string.tx_period_label),
-            color = TextFaint,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = InterFamily,
-            letterSpacing = 0.6.sp,
-            maxLines = 1,
-            softWrap = false,
-        )
+        if (!compact) {
+            Text(
+                text = stringResource(R.string.tx_period_label),
+                color = TextFaint,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = InterFamily,
+                letterSpacing = 0.6.sp,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
         Row(
             modifier = Modifier
                 .weight(1f)
@@ -748,13 +754,13 @@ internal fun TxPeriodControl(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             PeriodSegment(
-                label = stringResource(R.string.tx_period_first),
+                label = stringResource(if (compact) R.string.tx_period_first_short else R.string.tx_period_first),
                 selected = txSlot == 0,
                 modifier = Modifier.weight(1f),
                 onClick = { if (txSlot != 0) onSelect(0) },
             )
             PeriodSegment(
-                label = stringResource(R.string.tx_period_second),
+                label = stringResource(if (compact) R.string.tx_period_second_short else R.string.tx_period_second),
                 selected = txSlot == 1,
                 modifier = Modifier.weight(1f),
                 onClick = { if (txSlot != 1) onSelect(1) },

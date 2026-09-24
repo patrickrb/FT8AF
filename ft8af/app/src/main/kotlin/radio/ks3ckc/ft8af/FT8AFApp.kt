@@ -22,6 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -63,8 +67,9 @@ import radio.ks3ckc.ft8af.ui.components.SlotTimerBar
 import radio.ks3ckc.ft8af.ui.components.TabBar
 import radio.ks3ckc.ft8af.ui.components.TransmitGlow
 import radio.ks3ckc.ft8af.ui.components.TxStrip
-import radio.ks3ckc.ft8af.ui.components.OperateControlsPeek
-import radio.ks3ckc.ft8af.ui.components.OperateControlsSheet
+import radio.ks3ckc.ft8af.ui.components.OperateControlsDrawer
+import radio.ks3ckc.ft8af.ui.components.OperateStatusRow
+import radio.ks3ckc.ft8af.ui.components.OperateDrawerPeekHeight
 import radio.ks3ckc.ft8af.ui.components.VoiceCommandButton
 import radio.ks3ckc.ft8af.ui.components.selectBandIndex
 import radio.ks3ckc.ft8af.ui.decode.DecodeScreen
@@ -148,6 +153,10 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
         controlsDrawerEnabled = controlsDrawerLive ?: GeneralVariables.controlsDrawerEnabled
     }
     var controlsExpanded by rememberSaveable { mutableStateOf(false) }
+    // Window-space Y of the reserved peek slot's bottom (== tab bar top). The drawer overlay
+    // anchors its bottom edge here so the collapsed sheet lines up exactly with the reserved
+    // inline space and grows upward from there.
+    var drawerAnchorBottomPx by remember { mutableFloatStateOf(0f) }
 
     // Consume the one-shot celebration signal so LiveData doesn't replay it
     // on recomposition / resubscription.
@@ -582,24 +591,26 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             // OperateControlsSheet overlay below. When off, the original always-open strip shows.
             // The slot bar + clock-sync pill remain in the SlotTimerBar above.
             if (controlsDrawerEnabled) {
-                OperateControlsPeek(
+                // Docked status line (design 3a), then a reserved slot the drawer sheet sits in
+                // when collapsed. The actual sheet is the OperateControlsDrawer overlay in the
+                // outer Box; it anchors its bottom to this slot and grows upward on expand.
+                OperateStatusRow(
                     isTransmitting = isTransmitting,
-                    isActivated = isActivated,
                     isTuning = isTuning,
                     slotMillis = slotMillis,
                     txSlot = txSlot,
-                    huntEnabled = huntEnabled,
-                    cqModifier = cqModifier,
-                    isFreeTextMode = isFreeTextMode,
-                    fieldDayEnabled = fieldDayEnabled,
                     showCatChip = showCatChip,
                     catState = catState,
-                    onExpand = { controlsExpanded = true },
-                    onCallCQ = onCallCQAction,
-                    onStop = onStopAction,
-                    onOpenCqOptions = onOpenCqOptionsAction,
-                    onSelectTxPeriod = onSelectTxPeriodAction,
                     onReconnectCat = onReconnectCatAction,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                )
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(OperateDrawerPeekHeight)
+                        .onGloballyPositioned { coords ->
+                            drawerAnchorBottomPx = coords.positionInWindow().y + coords.size.height
+                        },
                 )
             } else {
                 TxStrip(
@@ -651,38 +662,41 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
         // One-shot particle burst when a QSO completes.
         QsoCelebration(triggerAt = qsoCompletedAt)
 
-        // Expanded operate-controls sheet (design 3b) — sibling overlay so its scrim + sheet
-        // sit above the tab bar and the collapsed peek. Only meaningful when the drawer setting
-        // is on; guarded so turning the setting off can't leave a stale sheet open.
-        OperateControlsSheet(
-            visible = controlsDrawerEnabled && controlsExpanded,
-            isTransmitting = isTransmitting,
-            isActivated = isActivated,
-            bandModeLabel = bandModeLabel,
-            txSlot = txSlot,
-            huntEnabled = huntEnabled,
-            huntOptionLabel = huntOptionLabel,
-            isTuning = isTuning,
-            dxEnabled = dxEnabled,
-            txVolume = txVolume,
-            showVolumeSlider = showVolumeSlider,
-            cqModifier = cqModifier,
-            isFreeTextMode = isFreeTextMode,
-            fieldDayEnabled = fieldDayEnabled,
-            tuneRemainingSec = tuneRemainingSec,
-            onDismiss = { controlsExpanded = false },
-            onCallCQ = onCallCQAction,
-            onStop = onStopAction,
-            onSelectTxPeriod = onSelectTxPeriodAction,
-            onToggleHunt = onToggleHuntAction,
-            onOpenHuntOptions = onOpenHuntOptionsAction,
-            onOpenBandMode = onOpenBandModeAction,
-            onToggleTune = onToggleTuneAction,
-            onToggleDx = onToggleDxAction,
-            onOpenCqOptions = onOpenCqOptionsAction,
-            onVolumeChange = onVolumeChangeAction,
-            onVolumeChangeFinished = onVolumeChangeFinishedAction,
-        )
+        // Operate-controls drawer (design 3a/3b) — one bottom sheet that grows in place from the
+        // reserved peek slot. Sibling overlay so its scrim + sheet sit above the tab bar and
+        // content. Rendered only when the drawer setting is on.
+        if (controlsDrawerEnabled) {
+            OperateControlsDrawer(
+                expanded = controlsExpanded,
+                onExpandedChange = { controlsExpanded = it },
+                anchorBottomPx = drawerAnchorBottomPx,
+                isTransmitting = isTransmitting,
+                isActivated = isActivated,
+                isTuning = isTuning,
+                bandModeLabel = bandModeLabel,
+                txSlot = txSlot,
+                huntEnabled = huntEnabled,
+                huntOptionLabel = huntOptionLabel,
+                dxEnabled = dxEnabled,
+                txVolume = txVolume,
+                showVolumeSlider = showVolumeSlider,
+                cqModifier = cqModifier,
+                isFreeTextMode = isFreeTextMode,
+                fieldDayEnabled = fieldDayEnabled,
+                tuneRemainingSec = tuneRemainingSec,
+                onCallCQ = onCallCQAction,
+                onStop = onStopAction,
+                onSelectTxPeriod = onSelectTxPeriodAction,
+                onToggleHunt = onToggleHuntAction,
+                onOpenHuntOptions = onOpenHuntOptionsAction,
+                onOpenBandMode = onOpenBandModeAction,
+                onToggleTune = onToggleTuneAction,
+                onToggleDx = onToggleDxAction,
+                onOpenCqOptions = onOpenCqOptionsAction,
+                onVolumeChange = onVolumeChangeAction,
+                onVolumeChangeFinished = onVolumeChangeFinishedAction,
+            )
+        }
 
         // Frequency picker — sibling overlay so the scrim and sheet sit above the
         // tab bar and TxStrip.

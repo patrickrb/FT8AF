@@ -1,5 +1,7 @@
 package radio.ks3ckc.ft8af.ui.components
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -8,33 +10,39 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.k1af.ft8af.R
-import com.k1af.ft8af.rigs.CatConnectionState
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import radio.ks3ckc.ft8af.theme.*
 
 /**
@@ -54,131 +62,38 @@ internal fun drawerTargetExpanded(
     else -> currentlyExpanded
 }
 
-/** The vertical drag distance on the peek handle that commits to expanding the drawer. */
+/** The vertical drag distance on the handle that commits to toggling the drawer. */
 internal val DrawerDragThreshold = 48.dp
 
 /**
- * The collapsed (peek) state of the operate-controls drawer — design option 3a. Renders inline
- * above the tab bar: the rig/CAT status line docked on top, then a rounded-top drawer surface
- * with a drag handle and only the primary action (Call CQ / Stop) alongside the TX-period toggle.
- * Tapping the handle or swiping it up opens the full [OperateControlsSheet]; the rest of the
- * controls live there.
+ * The collapsed height of the drawer — just tall enough for the handle (28) + the primary row
+ * (72), stopping before the next row so no secondary control peeks through when collapsed.
+ */
+internal val OperateDrawerPeekHeight = 110.dp
+
+/**
+ * The operate-controls drawer (design 3a/3b) as a *single* bottom sheet that grows in place.
+ *
+ * The sheet is anchored so its bottom sits on [anchorBottomPx] (the window-space Y that the
+ * reserved peek slot in the main column occupies, i.e. just above the tab bar). Its content is a
+ * single top-aligned column — drag handle, the primary Call CQ / Stop + TX-period row, then the
+ * secondary controls (Band & Mode, Hunt, Tune / DX, power). Collapsed, the sheet is
+ * [OperateDrawerPeekHeight] tall and only the handle + primary row show (3a); dragging the handle
+ * up or tapping it grows the *same* surface upward to reveal the rest over a scrim (3b). Nothing
+ * slides over the primary controls — it is one sheet expanding, not a second sheet on top.
  */
 @Composable
-fun OperateControlsPeek(
+fun OperateControlsDrawer(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    anchorBottomPx: Float,
     isTransmitting: Boolean,
     isActivated: Boolean,
     isTuning: Boolean,
-    slotMillis: Long,
-    txSlot: Int,
-    huntEnabled: Boolean,
-    cqModifier: String,
-    isFreeTextMode: Boolean,
-    fieldDayEnabled: Boolean,
-    showCatChip: Boolean,
-    catState: CatConnectionState,
-    onExpand: () -> Unit,
-    onCallCQ: () -> Unit,
-    onStop: () -> Unit,
-    onOpenCqOptions: () -> Unit,
-    onSelectTxPeriod: (Int) -> Unit,
-    onReconnectCat: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val bgColor = if (isTransmitting) {
-        Brush.horizontalGradient(
-            listOf(
-                Color(0x1FFFAF5E), // rgba(255,175,94,0.12)
-                Color(0x0AFFAF5E), // rgba(255,175,94,0.04)
-            )
-        )
-    } else {
-        Brush.horizontalGradient(listOf(BgSurface, BgSurface))
-    }
-    val actions = txStripActionState(isActivated, huntEnabled)
-    val cqIsStop = actions.cqIsStop
-    val variantSubtitle = cqStripSubtitle(cqIsStop, isFreeTextMode, fieldDayEnabled, cqModifier)
-    val cqSubtitle = variantSubtitle
-        ?: if (!cqIsStop) stringResource(R.string.tx_call_cq_subtitle) else null
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(bgColor)
-            .drawBehind {
-                drawLine(
-                    color = Border,
-                    start = Offset(0f, 0f),
-                    end = Offset(size.width, 0f),
-                    strokeWidth = 1f,
-                )
-            }
-            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        // Rig/CAT status line docked above the drawer surface (mockup 3a).
-        OperateStatusRow(
-            isTransmitting = isTransmitting,
-            isTuning = isTuning,
-            slotMillis = slotMillis,
-            txSlot = txSlot,
-            showCatChip = showCatChip,
-            catState = catState,
-            onReconnectCat = onReconnectCat,
-        )
-
-        // The peeking drawer surface: rounded-top card with a drag handle + primary controls.
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
-                .background(BgSurface3),
-        ) {
-            DrawerHandle(currentlyExpanded = false, onSettle = { expand -> if (expand) onExpand() })
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CallCqButton(
-                    modifier = Modifier.weight(1.6f),
-                    cqIsStop = cqIsStop,
-                    cqDisabled = actions.cqDisabled,
-                    subtitle = cqSubtitle,
-                    onClick = { if (cqIsStop) onStop() else onCallCQ() },
-                    onOpenOptions = onOpenCqOptions,
-                    optionsContentDescription = stringResource(R.string.tx_cq_options),
-                    moreLabel = stringResource(R.string.tx_more),
-                )
-                TxPeriodControl(
-                    modifier = Modifier.weight(1f),
-                    txSlot = txSlot,
-                    onSelect = onSelectTxPeriod,
-                )
-            }
-        }
-    }
-}
-
-/**
- * The expanded (open) state of the operate-controls drawer — design option 3b. Reuses
- * [FT8AFBottomSheet] (scrim + drag handle + swipe-down / scrim-tap / Back dismissal) and lays out
- * the full control set in the mockup order: Band & Mode, Call CQ (+ MORE) / Hunt, TX period /
- * Tune / DX, and the power slider. Every control is the same widget the collapsed peek and the
- * legacy [TxStrip] use, so behavior is identical wherever the operator taps it.
- */
-@Composable
-fun OperateControlsSheet(
-    visible: Boolean,
-    isTransmitting: Boolean,
-    isActivated: Boolean,
     bandModeLabel: String,
     txSlot: Int,
     huntEnabled: Boolean,
     huntOptionLabel: String,
-    isTuning: Boolean,
     dxEnabled: Boolean,
     txVolume: Int,
     showVolumeSlider: Boolean,
@@ -186,7 +101,6 @@ fun OperateControlsSheet(
     isFreeTextMode: Boolean,
     fieldDayEnabled: Boolean,
     tuneRemainingSec: Int,
-    onDismiss: () -> Unit,
     onCallCQ: () -> Unit,
     onStop: () -> Unit,
     onSelectTxPeriod: (Int) -> Unit,
@@ -199,65 +113,180 @@ fun OperateControlsSheet(
     onVolumeChange: (Int) -> Unit,
     onVolumeChangeFinished: () -> Unit,
 ) {
+    // Not laid out yet — the reserved peek slot hasn't reported its position. Skip a frame.
+    if (anchorBottomPx <= 0f) return
+
+    val density = LocalDensity.current
+    val peekPx = with(density) { OperateDrawerPeekHeight.toPx() }
+    val thresholdPx = with(density) { DrawerDragThreshold.toPx() }
+    val scope = rememberCoroutineScope()
+
+    // Full natural height of the content, measured independently of the (clipped) sheet height.
+    var fullContentPx by remember { mutableFloatStateOf(peekPx) }
+    val rangePx = (fullContentPx - peekPx).coerceAtLeast(1f)
+
+    // fraction 0 = collapsed peek, 1 = fully expanded. Animated on tap; follows the finger on drag.
+    val fraction = remember { Animatable(if (expanded) 1f else 0f) }
+    LaunchedEffect(expanded) { fraction.animateTo(if (expanded) 1f else 0f, tween(220)) }
+
+    val sheetHeightPx = peekPx + rangePx * fraction.value
+    val scrimAlpha = 0.55f * fraction.value
+
     val actions = txStripActionState(isActivated, huntEnabled)
-    FT8AFBottomSheet(visible = visible, onDismiss = onDismiss) {
-        Column(
+    val cqIsStop = actions.cqIsStop
+    val variantSubtitle = cqStripSubtitle(cqIsStop, isFreeTextMode, fieldDayEnabled, cqModifier)
+    val cqSubtitle = variantSubtitle
+        ?: if (!cqIsStop) stringResource(R.string.tx_call_cq_subtitle) else null
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Scrim over the content above the sheet only (stops at the tab bar so the tabs stay
+        // usable). Tappable to collapse once the sheet is mostly open.
+        if (scrimAlpha > 0.01f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(with(density) { anchorBottomPx.toDp() })
+                    .background(Color.Black.copy(alpha = scrimAlpha))
+                    .then(
+                        if (fraction.value > 0.5f) {
+                            Modifier.clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { onExpandedChange(false) }
+                        } else {
+                            Modifier
+                        }
+                    )
+            )
+        }
+
+        // The sheet — positioned so its bottom edge lands on anchorBottomPx and it grows upward.
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .offset { IntOffset(0, (anchorBottomPx - sheetHeightPx).roundToInt()) }
+                .height(with(density) { sheetHeightPx.toDp() })
+                .clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp))
+                .background(BgSurface3)
+                .clipToBounds(),
         ) {
-            BandModeRow(bandModeLabel = bandModeLabel, onOpenBandMode = onOpenBandMode)
-            CqHuntRow(
-                actions = actions,
-                huntOptionLabel = huntOptionLabel,
-                cqModifier = cqModifier,
-                isFreeTextMode = isFreeTextMode,
-                fieldDayEnabled = fieldDayEnabled,
-                onCallCQ = onCallCQ,
-                onStop = onStop,
-                onOpenCqOptions = onOpenCqOptions,
-                onToggleHunt = onToggleHunt,
-                onOpenHuntOptions = onOpenHuntOptions,
-            )
-            PeriodTuneDxRow(
-                txSlot = txSlot,
-                isActivated = isActivated,
-                isTransmitting = isTransmitting,
-                isTuning = isTuning,
-                tuneRemainingSec = tuneRemainingSec,
-                dxEnabled = dxEnabled,
-                onSelectTxPeriod = onSelectTxPeriod,
-                onToggleTune = onToggleTune,
-                onToggleDx = onToggleDx,
-            )
-            if (showVolumeSlider) {
-                TxVolumeRow(
-                    txVolume = txVolume,
-                    onVolumeChange = onVolumeChange,
-                    onVolumeChangeFinished = onVolumeChangeFinished,
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // Measure the natural (unbounded) content height so the expanded target is
+                    // exact; the parent Box clips it to the animated height.
+                    .wrapContentHeight(align = Alignment.Top, unbounded = true)
+                    .onSizeChanged { fullContentPx = it.height.toFloat() },
+            ) {
+                DrawerHandle(
+                    expanded = expanded,
+                    onToggle = { onExpandedChange(!expanded) },
+                    onDrag = { dy ->
+                        val next = (fraction.value - dy / rangePx).coerceIn(0f, 1f)
+                        scope.launch { fraction.snapTo(next) }
+                    },
+                    onDragEnd = { totalDy ->
+                        val target = drawerTargetExpanded(expanded, totalDy, thresholdPx)
+                        scope.launch { fraction.animateTo(if (target) 1f else 0f, tween(220)) }
+                        onExpandedChange(target)
+                    },
                 )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    // ---- Primary row (visible in the peek): Call CQ / Stop + TX period ----
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CallCqButton(
+                            modifier = Modifier.weight(1.6f),
+                            cqIsStop = cqIsStop,
+                            cqDisabled = actions.cqDisabled,
+                            subtitle = cqSubtitle,
+                            onClick = { if (cqIsStop) onStop() else onCallCQ() },
+                            onOpenOptions = onOpenCqOptions,
+                            optionsContentDescription = stringResource(R.string.tx_cq_options),
+                            moreLabel = stringResource(R.string.tx_more),
+                        )
+                        TxPeriodControl(
+                            modifier = Modifier.weight(1f),
+                            txSlot = txSlot,
+                            onSelect = onSelectTxPeriod,
+                            compact = true,
+                        )
+                    }
+
+                    // ---- Secondary controls, revealed as the sheet grows (design 3b) ----
+                    BandModeRow(bandModeLabel = bandModeLabel, onOpenBandMode = onOpenBandMode)
+
+                    HuntTile(
+                        modifier = Modifier.fillMaxWidth(),
+                        huntEnabled = actions.huntActive,
+                        huntDisabled = actions.huntDisabled,
+                        optionLabel = huntOptionLabel,
+                        onToggle = onToggleHunt,
+                        onOpenOptions = onOpenHuntOptions,
+                        optionsContentDescription = stringResource(R.string.tx_hunt_options),
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val tuneEnabled = isTuning || (!isActivated && !isTransmitting)
+                        SecondaryButton(
+                            modifier = Modifier.weight(1f),
+                            label = tuneChipLabel(stringResource(R.string.tune_button), isTuning, tuneRemainingSec),
+                            active = isTuning,
+                            enabled = tuneEnabled,
+                            onClick = onToggleTune,
+                        )
+                        SecondaryButton(
+                            modifier = Modifier.weight(1f),
+                            label = stringResource(R.string.tx_dx),
+                            active = dxEnabled,
+                            enabled = true,
+                            onClick = onToggleDx,
+                        )
+                    }
+
+                    if (showVolumeSlider) {
+                        TxVolumeRow(
+                            txVolume = txVolume,
+                            onVolumeChange = onVolumeChange,
+                            onVolumeChangeFinished = onVolumeChangeFinished,
+                        )
+                    }
+                }
             }
         }
     }
 }
 
 /**
- * The drawer's grab handle: a centered 36×4 dp bar in a full-width, full-height touch target
- * that both a tap and a vertical drag act on. On drag-end it settles via [drawerTargetExpanded];
- * a tap toggles. [onSettle] receives the desired expanded state.
+ * The drawer's grab handle: a centered 36×4 dp bar in a full-width touch target. A tap toggles the
+ * drawer; a vertical drag is fed live to [onDrag] (dy, negative = up) and settled in [onDragEnd]
+ * with the total drag distance.
  */
 @Composable
 private fun DrawerHandle(
-    currentlyExpanded: Boolean,
-    onSettle: (Boolean) -> Unit,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val thresholdPx = with(LocalDensity.current) { DrawerDragThreshold.toPx() }
-    var dragAccum by remember { mutableFloatStateOf(0f) }
+    var totalDy by remember { mutableFloatStateOf(0f) }
     val expandLabel = stringResource(R.string.controls_drawer_expand)
     val collapseLabel = stringResource(R.string.controls_drawer_collapse)
-    val label = if (currentlyExpanded) collapseLabel else expandLabel
+    val label = if (expanded) collapseLabel else expandLabel
 
     Box(
         modifier = modifier
@@ -266,17 +295,17 @@ private fun DrawerHandle(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-            ) { onSettle(!currentlyExpanded) }
+            ) { onToggle() }
             .semantics { role = Role.Button; contentDescription = label }
-            .pointerInput(currentlyExpanded) {
+            .pointerInput(Unit) {
                 detectVerticalDragGestures(
-                    onDragStart = { dragAccum = 0f },
-                    onDragEnd = {
-                        onSettle(drawerTargetExpanded(currentlyExpanded, dragAccum, thresholdPx))
-                        dragAccum = 0f
+                    onDragStart = { totalDy = 0f },
+                    onDragEnd = { onDragEnd(totalDy); totalDy = 0f },
+                    onDragCancel = { totalDy = 0f },
+                    onVerticalDrag = { _, dy ->
+                        totalDy += dy
+                        onDrag(dy)
                     },
-                    onDragCancel = { dragAccum = 0f },
-                    onVerticalDrag = { _, dy -> dragAccum += dy },
                 )
             },
         contentAlignment = Alignment.Center,
