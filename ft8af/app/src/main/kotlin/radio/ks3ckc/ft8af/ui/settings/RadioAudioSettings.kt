@@ -827,6 +827,23 @@ fun RadioAudioSettings(
                     }
                     SectionDivider()
                     run {
+                        var drawer by remember { mutableStateOf(GeneralVariables.controlsDrawerEnabled) }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_controls_drawer),
+                            description = stringResource(R.string.settings_controls_drawer_desc),
+                            toggle = drawer,
+                            onToggleChange = { enabled ->
+                                drawer = enabled
+                                GeneralVariables.controlsDrawerEnabled = enabled
+                                GeneralVariables.mutableControlsDrawerEnabled.postValue(enabled)
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "controlsDrawerEnabled", if (enabled) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
+                    SectionDivider()
+                    run {
                         var perBand by remember {
                             mutableStateOf(GeneralVariables.savePerBandOutputLevel)
                         }

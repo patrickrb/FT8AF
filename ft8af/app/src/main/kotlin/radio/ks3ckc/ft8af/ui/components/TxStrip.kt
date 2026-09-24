@@ -189,207 +189,316 @@ fun TxStrip(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         // ---- Row 1: status + CAT chip ----
-        val status = txStatusVisuals(isTransmitting, isTuning)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Row(
-                modifier = Modifier.weight(1f, fill = false),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                PulseDot(color = if (status.listening) Signal else Accent)
-                Column {
-                    Text(
-                        text = stringResource(status.labelRes),
-                        color = TextPrimary,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = InterFamily,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    if (status.listening) {
-                        NextTxWindowLabel(slotMillis = slotMillis, txSlot = txSlot)
-                    }
-                }
-            }
-            if (showCatChip) {
-                CatStatusChip(state = catState, onReconnect = onReconnectCat)
-            }
-        }
+        OperateStatusRow(
+            isTransmitting = isTransmitting,
+            isTuning = isTuning,
+            slotMillis = slotMillis,
+            txSlot = txSlot,
+            showCatChip = showCatChip,
+            catState = catState,
+            onReconnectCat = onReconnectCat,
+        )
 
         // ---- Row 2: band & mode row (opens the Band & Mode sheet) ----
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(BgSurface3)
-                .border(1.dp, Border, RoundedCornerShape(12.dp))
-                .clickable { onOpenBandMode() }
-                .padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = stringResource(R.string.tx_band_mode_label),
-                color = TextFaint,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFamily = InterFamily,
-                letterSpacing = 0.8.sp,
+        BandModeRow(bandModeLabel = bandModeLabel, onOpenBandMode = onOpenBandMode)
+
+        // ---- Row 3: Call CQ (+ MORE) · Hunt tile ----
+        CqHuntRow(
+            actions = actions,
+            huntOptionLabel = huntOptionLabel,
+            cqModifier = cqModifier,
+            isFreeTextMode = isFreeTextMode,
+            fieldDayEnabled = fieldDayEnabled,
+            onCallCQ = onCallCQ,
+            onStop = onStop,
+            onOpenCqOptions = onOpenCqOptions,
+            onToggleHunt = onToggleHunt,
+            onOpenHuntOptions = onOpenHuntOptions,
+        )
+
+        // ---- Row 4: TX period segmented control · Tune · DX ----
+        PeriodTuneDxRow(
+            txSlot = txSlot,
+            isActivated = isActivated,
+            isTransmitting = isTransmitting,
+            isTuning = isTuning,
+            tuneRemainingSec = tuneRemainingSec,
+            dxEnabled = dxEnabled,
+            onSelectTxPeriod = onSelectTxPeriod,
+            onToggleTune = onToggleTune,
+            onToggleDx = onToggleDx,
+        )
+
+        // ---- Inline TX volume slider (togglable from Settings) ----
+        if (showVolumeSlider) {
+            TxVolumeRow(
+                txVolume = txVolume,
+                onVolumeChange = onVolumeChange,
+                onVolumeChangeFinished = onVolumeChangeFinished,
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
+        }
+    }
+}
+
+/**
+ * Row 1 — the status line (pulse dot + plain-language state, plus the "next transmit window"
+ * countdown while Listening) with the optional CAT chip on the right. Extracted so both the
+ * legacy [TxStrip] and the collapsing [OperateControlsDrawer] render an identical status line.
+ */
+@Composable
+internal fun OperateStatusRow(
+    isTransmitting: Boolean,
+    isTuning: Boolean,
+    slotMillis: Long,
+    txSlot: Int,
+    showCatChip: Boolean,
+    catState: CatConnectionState,
+    onReconnectCat: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val status = txStatusVisuals(isTransmitting, isTuning)
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Row(
+            modifier = Modifier.weight(1f, fill = false),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PulseDot(color = if (status.listening) Signal else Accent)
+            Column {
                 Text(
-                    text = bandModeLabel,
+                    text = stringResource(status.labelRes),
                     color = TextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
+                    fontFamily = InterFamily,
                     maxLines = 1,
-                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                FT8AFIcons.ChevronDown(size = 14.dp, color = TextMuted, strokeWidth = 2f)
+                if (status.listening) {
+                    NextTxWindowLabel(slotMillis = slotMillis, txSlot = txSlot)
+                }
             }
         }
+        if (showCatChip) {
+            CatStatusChip(state = catState, onReconnect = onReconnectCat)
+        }
+    }
+}
 
-        // ---- Row 3: Call CQ (+ MORE) · Hunt tile ----
+/** Row 2 — the tappable Band & Mode card that opens the Band & Mode sheet. */
+@Composable
+internal fun BandModeRow(
+    bandModeLabel: String,
+    onOpenBandMode: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(BgSurface3)
+            .border(1.dp, Border, RoundedCornerShape(12.dp))
+            .clickable { onOpenBandMode() }
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = stringResource(R.string.tx_band_mode_label),
+            color = TextFaint,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = InterFamily,
+            letterSpacing = 0.8.sp,
+        )
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val cqIsStop = actions.cqIsStop
-            val variantSubtitle = cqStripSubtitle(cqIsStop, isFreeTextMode, fieldDayEnabled, cqModifier)
-            val cqSubtitle = variantSubtitle
-                ?: if (!cqIsStop) stringResource(R.string.tx_call_cq_subtitle) else null
-            CallCqButton(
-                modifier = Modifier.weight(1.6f),
-                cqIsStop = cqIsStop,
-                cqDisabled = actions.cqDisabled,
-                subtitle = cqSubtitle,
-                onClick = { if (cqIsStop) onStop() else onCallCQ() },
-                onOpenOptions = onOpenCqOptions,
-                optionsContentDescription = stringResource(R.string.tx_cq_options),
-                moreLabel = stringResource(R.string.tx_more),
-            )
-
-            HuntTile(
-                modifier = Modifier.weight(1f),
-                huntEnabled = actions.huntActive,
-                huntDisabled = actions.huntDisabled,
-                optionLabel = huntOptionLabel,
-                onToggle = onToggleHunt,
-                onOpenOptions = onOpenHuntOptions,
-                optionsContentDescription = stringResource(R.string.tx_hunt_options),
-            )
-        }
-
-        // ---- Row 4: TX period segmented control · Tune · DX ----
-        Row(
-            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            TxPeriodControl(
-                modifier = Modifier.weight(1.7f),
-                txSlot = txSlot,
-                onSelect = onSelectTxPeriod,
+            Text(
+                text = bandModeLabel,
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = GeistMonoFamily,
+                maxLines = 1,
+                softWrap = false,
             )
-            val tuneEnabled = isTuning || (!isActivated && !isTransmitting)
-            SecondaryButton(
-                modifier = Modifier.weight(0.45f),
-                label = tuneChipLabel(stringResource(R.string.tune_button), isTuning, tuneRemainingSec),
-                active = isTuning,
-                enabled = tuneEnabled,
-                onClick = onToggleTune,
-            )
-            SecondaryButton(
-                modifier = Modifier.weight(0.45f),
-                label = stringResource(R.string.tx_dx),
-                active = dxEnabled,
-                enabled = true,
-                onClick = onToggleDx,
+            FT8AFIcons.ChevronDown(size = 14.dp, color = TextMuted, strokeWidth = 2f)
+        }
+    }
+}
+
+/** Row 3 — the primary Call CQ button (+ MORE) alongside the Hunt tile. */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun CqHuntRow(
+    actions: TxStripActionState,
+    huntOptionLabel: String,
+    cqModifier: String,
+    isFreeTextMode: Boolean,
+    fieldDayEnabled: Boolean,
+    onCallCQ: () -> Unit,
+    onStop: () -> Unit,
+    onOpenCqOptions: () -> Unit,
+    onToggleHunt: () -> Unit,
+    onOpenHuntOptions: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val cqIsStop = actions.cqIsStop
+        val variantSubtitle = cqStripSubtitle(cqIsStop, isFreeTextMode, fieldDayEnabled, cqModifier)
+        val cqSubtitle = variantSubtitle
+            ?: if (!cqIsStop) stringResource(R.string.tx_call_cq_subtitle) else null
+        CallCqButton(
+            modifier = Modifier.weight(1.6f),
+            cqIsStop = cqIsStop,
+            cqDisabled = actions.cqDisabled,
+            subtitle = cqSubtitle,
+            onClick = { if (cqIsStop) onStop() else onCallCQ() },
+            onOpenOptions = onOpenCqOptions,
+            optionsContentDescription = stringResource(R.string.tx_cq_options),
+            moreLabel = stringResource(R.string.tx_more),
+        )
+
+        HuntTile(
+            modifier = Modifier.weight(1f),
+            huntEnabled = actions.huntActive,
+            huntDisabled = actions.huntDisabled,
+            optionLabel = huntOptionLabel,
+            onToggle = onToggleHunt,
+            onOpenOptions = onOpenHuntOptions,
+            optionsContentDescription = stringResource(R.string.tx_hunt_options),
+        )
+    }
+}
+
+/** Row 4 — the TX-period segmented control alongside the Tune and DX secondary buttons. */
+@Composable
+internal fun PeriodTuneDxRow(
+    txSlot: Int,
+    isActivated: Boolean,
+    isTransmitting: Boolean,
+    isTuning: Boolean,
+    tuneRemainingSec: Int,
+    dxEnabled: Boolean,
+    onSelectTxPeriod: (Int) -> Unit,
+    onToggleTune: () -> Unit,
+    onToggleDx: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TxPeriodControl(
+            modifier = Modifier.weight(1.7f),
+            txSlot = txSlot,
+            onSelect = onSelectTxPeriod,
+        )
+        val tuneEnabled = isTuning || (!isActivated && !isTransmitting)
+        SecondaryButton(
+            modifier = Modifier.weight(0.45f),
+            label = tuneChipLabel(stringResource(R.string.tune_button), isTuning, tuneRemainingSec),
+            active = isTuning,
+            enabled = tuneEnabled,
+            onClick = onToggleTune,
+        )
+        SecondaryButton(
+            modifier = Modifier.weight(0.45f),
+            label = stringResource(R.string.tx_dx),
+            active = dxEnabled,
+            enabled = true,
+            onClick = onToggleDx,
+        )
+    }
+}
+
+/** The inline TX-volume slider (− / slider / +): togglable from Settings. */
+@Composable
+internal fun TxVolumeRow(
+    txVolume: Int,
+    onVolumeChange: (Int) -> Unit,
+    onVolumeChangeFinished: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val volumeDecrease = stringResource(R.string.tx_volume_decrease)
+    val volumeIncrease = stringResource(R.string.tx_volume_increase)
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(BgSurface3)
+                .semantics { role = Role.Button; contentDescription = volumeDecrease }
+                .clickable {
+                    onVolumeChange(clampVolume(txVolume, -5))
+                    onVolumeChangeFinished()
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "−",
+                color = TextMuted,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = GeistMonoFamily,
             )
         }
 
-        // ---- Inline TX volume slider (togglable from Settings) ----
-        val volumeDecrease = stringResource(R.string.tx_volume_decrease)
-        val volumeIncrease = stringResource(R.string.tx_volume_increase)
-        if (showVolumeSlider) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(BgSurface3)
-                        .semantics { role = Role.Button; contentDescription = volumeDecrease }
-                        .clickable {
-                            onVolumeChange(clampVolume(txVolume, -5))
-                            onVolumeChangeFinished()
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "−",
-                        color = TextMuted,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = GeistMonoFamily,
-                    )
-                }
+        IntSlider(
+            value = txVolume,
+            onValueChange = { v -> onVolumeChange(v.coerceIn(0, 100)) },
+            onValueChangeFinished = onVolumeChangeFinished,
+            valueRange = 0f..100f,
+            modifier = Modifier.weight(1f),
+            thumbColor = Accent,
+            activeTrackColor = Accent,
+        )
 
-                IntSlider(
-                    value = txVolume,
-                    onValueChange = { v -> onVolumeChange(v.coerceIn(0, 100)) },
-                    onValueChangeFinished = onVolumeChangeFinished,
-                    valueRange = 0f..100f,
-                    modifier = Modifier.weight(1f),
-                    thumbColor = Accent,
-                    activeTrackColor = Accent,
-                )
-
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(BgSurface3)
-                        .semantics { role = Role.Button; contentDescription = volumeIncrease }
-                        .clickable {
-                            onVolumeChange(clampVolume(txVolume, 5))
-                            onVolumeChangeFinished()
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "+",
-                        color = TextMuted,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = GeistMonoFamily,
-                    )
-                }
-
-                Text(
-                    text = "${txVolume}%",
-                    color = TextPrimary,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.02.sp,
-                )
-            }
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(BgSurface3)
+                .semantics { role = Role.Button; contentDescription = volumeIncrease }
+                .clickable {
+                    onVolumeChange(clampVolume(txVolume, 5))
+                    onVolumeChangeFinished()
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "+",
+                color = TextMuted,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = GeistMonoFamily,
+            )
         }
+
+        Text(
+            text = "${txVolume}%",
+            color = TextPrimary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = GeistMonoFamily,
+            letterSpacing = 0.02.sp,
+        )
     }
 }
 
@@ -400,7 +509,7 @@ fun TxStrip(
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun CallCqButton(
+internal fun CallCqButton(
     cqIsStop: Boolean,
     cqDisabled: Boolean,
     subtitle: String?,
@@ -508,7 +617,7 @@ private fun CallCqButton(
  * running (Hunt and calling CQ are mutually exclusive).
  */
 @Composable
-private fun HuntTile(
+internal fun HuntTile(
     huntEnabled: Boolean,
     huntDisabled: Boolean,
     optionLabel: String,
@@ -605,7 +714,7 @@ private fun HuntChip(
  * 2nd (odd) transmit slot. [txSlot] 0 selects "1st (even)", 1 selects "2nd (odd)".
  */
 @Composable
-private fun TxPeriodControl(
+internal fun TxPeriodControl(
     txSlot: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
@@ -684,7 +793,7 @@ private fun PeriodSegment(
 
 /** A small 52dp secondary button (Tune / DX): amber-tinted when active, muted otherwise. */
 @Composable
-private fun SecondaryButton(
+internal fun SecondaryButton(
     label: String,
     active: Boolean,
     enabled: Boolean,
@@ -726,7 +835,7 @@ private fun SecondaryButton(
 }
 
 @Composable
-private fun PulseDot(color: Color) {
+internal fun PulseDot(color: Color) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
         initialValue = 0.4f,
