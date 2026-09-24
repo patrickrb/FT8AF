@@ -50,6 +50,9 @@ targets:
       base:
         SWIFT_VERSION: "5.9"
         PRODUCT_BUNDLE_IDENTIFIER: radio.ks3ckc.ft8af
+        # Exposes ExceptionCatcher.h so Swift can catch the Obj-C NSException
+        # that AVAudioPlayerNode.play() raises during a mid-call config change.
+        SWIFT_OBJC_BRIDGING_HEADER: FT8AF/FT8AF-Bridging-Header.h
     dependencies:
       - package: FT8AFKit
         product: FT8DSP

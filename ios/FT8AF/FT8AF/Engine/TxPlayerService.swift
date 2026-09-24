@@ -14,7 +14,7 @@ import FT8DSP
 /// which is exactly what happened at TX time after a DigiRig was plugged in.
 /// Tracking attach and connect separately lets `play()` re-establish the
 /// connection lazily after a config change instead of trusting a stale flag.
-struct TxConnectionState: Equatable {
+struct TxConnectionState {
     private(set) var isAttached = false
     private(set) var isConnected = false
 
@@ -22,8 +22,6 @@ struct TxConnectionState: Equatable {
     var needsAttach: Bool { !isAttached }
     /// The node must be (re)connected + the converter rebuilt before playback.
     var needsConnect: Bool { !isConnected }
-    /// Playback preconditions are satisfied — node attached and connected.
-    var isReady: Bool { isAttached && isConnected }
 
     mutating func markAttached() { isAttached = true }
     mutating func markConnected() { isConnected = true }
@@ -71,6 +69,13 @@ final class TxPlayerService: @unchecked Sendable {
     /// the player node yet — that happens lazily in `ensureConnected()`.
     func configure(engine: AVAudioEngine) {
         self.engine = engine
+        // `configure` is called on every LiveEngine start (stop→start reuses the
+        // same long-lived engine), so drop any prior registration first — a bare
+        // addObserver would stack a new observer each cycle and fire the handler
+        // N times per config change.
+        NotificationCenter.default.removeObserver(
+            self, name: .AVAudioEngineConfigurationChange, object: nil
+        )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleConfigChange),
@@ -96,13 +101,16 @@ final class TxPlayerService: @unchecked Sendable {
 
     /// Attach (once) and connect the player node, creating the format
     /// converter. Reconnects and rebuilds the converter when a prior config
-    /// change invalidated the connection. Returns `false` if the hardware
-    /// output format is invalid (e.g. 0 Hz on Simulator at startup) — the
-    /// caller should skip playback.
-    private func ensureConnected() -> Bool {
+    /// change invalidated the connection. Returns the converter, or `nil` if the
+    /// hardware output format is invalid (e.g. 0 Hz on Simulator at startup) —
+    /// the caller should skip playback. Returning the converter directly (rather
+    /// than letting `play()` re-read `outputConverter`) keeps the read under the
+    /// lock, so a concurrent `handleConfigChange` can't nil it between the check
+    /// and the use.
+    private func ensureConnected() -> AVAudioConverter? {
         lock.lock(); defer { lock.unlock() }
-        if !conn.needsConnect { return outputConverter != nil }
-        guard let engine else { return false }
+        if !conn.needsConnect { return outputConverter }
+        guard let engine else { return nil }
 
         // Use the mixer's output format — on real devices this is the
         // hardware rate (e.g. 48 kHz stereo); on Simulator it becomes valid
@@ -110,7 +118,7 @@ final class TxPlayerService: @unchecked Sendable {
         // different rate (e.g. the DigiRig's), so it must be re-read here.
         let mixerFormat = engine.mainMixerNode.outputFormat(forBus: 0)
         guard mixerFormat.sampleRate > 0, mixerFormat.channelCount > 0 else {
-            return false
+            return nil
         }
 
         if conn.needsAttach {
@@ -119,9 +127,9 @@ final class TxPlayerService: @unchecked Sendable {
         }
         engine.connect(playerNode, to: engine.mainMixerNode, format: mixerFormat)
         outputConverter = AVAudioConverter(from: ft8Format, to: mixerFormat)
-        guard outputConverter != nil else { return false }
+        guard outputConverter != nil else { return nil }
         conn.markConnected()
-        return true
+        return outputConverter
     }
 
     /// Schedule and play `samples` (mono Float32 at 12 kHz). Interrupts any
@@ -151,7 +159,7 @@ final class TxPlayerService: @unchecked Sendable {
         // Re-establish the node connection if a config change invalidated it.
         // Skipping this is what aborts the app: play() on a disconnected node
         // raises an uncaught NSException in AVFAudio.
-        guard ensureConnected(), let converter = outputConverter else {
+        guard let converter = ensureConnected() else {
             completion?()
             return false
         }
@@ -196,14 +204,31 @@ final class TxPlayerService: @unchecked Sendable {
         _isPlaying = true
         lock.unlock()
 
-        playerNode.stop()
-        playerNode.scheduleBuffer(outputBuffer, at: nil, options: .interrupts) { [weak self] in
-            self?.lock.lock()
-            self?._isPlaying = false
-            self?.lock.unlock()
-            completion?()
+        // A config change can tear down the node's connection on another thread
+        // in the window between `ensureConnected()` and here; `play()` on a
+        // disconnected node then raises an uncaught Obj-C NSException that aborts
+        // the app. Swift's `try` can't catch it, so run the keying through an
+        // Obj-C @try shim and, on failure, invalidate the connection so the next
+        // TX rebuilds it. The audio is lost for this slot but the app survives.
+        let raised = ft8af_catchException { [self] in
+            playerNode.stop()
+            playerNode.scheduleBuffer(outputBuffer, at: nil, options: .interrupts) { [weak self] in
+                self?.lock.lock()
+                self?._isPlaying = false
+                self?.lock.unlock()
+                completion?()
+            }
+            playerNode.play()
         }
-        playerNode.play()
+        if raised != nil {
+            lock.lock()
+            _isPlaying = false
+            conn.invalidateConnection()
+            outputConverter = nil
+            lock.unlock()
+            completion?()
+            return false
+        }
         return true
     }
 

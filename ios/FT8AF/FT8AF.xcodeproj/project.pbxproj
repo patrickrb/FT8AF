@@ -45,6 +45,7 @@
 		7FC3449767DCA16F70133366 /* DecodeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C79C0E0096ADDC018120C361 /* DecodeScreen.swift */; };
 		7FF97BE16C182502CA0E4F40 /* RigModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB78DA6983B10ABE10319476 /* RigModelTests.swift */; };
 		80F7FFDDEE3AEE3E706C4A2B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 076A186C88F9B5A2FFAAB073 /* Assets.xcassets */; };
+		882AA28CDD50C648EB0AB7C5 /* ExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = 05A1E61AD575F93424F65731 /* ExceptionCatcher.m */; };
 		8DA0D562E25925F56B638B00 /* GridDistance.swift in Sources */ = {isa = PBXBuildFile; fileRef = E429D8A3556534F05374F12A /* GridDistance.swift */; };
 		8EA75A450404FB948C0A6CDC /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504C9AD4C6667267DFCABEF9 /* SettingsScreen.swift */; };
 		8EF984B5816F012A2DF93FDF /* OnlineLogService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D131B05E27A96EC4BEB28782 /* OnlineLogService.swift */; };
@@ -98,6 +99,7 @@
 /* Begin PBXFileReference section */
 		0244EBDFC2ADDAE77418FF53 /* ActiveQsoPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActiveQsoPanel.swift; sourceTree = "<group>"; };
 		0290AFE608DC2FC9E1A83E16 /* QsoSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QsoSheet.swift; sourceTree = "<group>"; };
+		05A1E61AD575F93424F65731 /* ExceptionCatcher.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = ExceptionCatcher.m; sourceTree = "<group>"; };
 		076A186C88F9B5A2FFAAB073 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0FD3B4836E62F9DC32FAB0DE /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
 		11DF7123A737FE9F5236677F /* DecodeRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodeRow.swift; sourceTree = "<group>"; };
@@ -106,6 +108,7 @@
 		1E706B1D26B550FE4D798B68 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		29B5962B70F4510D76A5BC0A /* TxPlayerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TxPlayerService.swift; sourceTree = "<group>"; };
 		2A9EBD1E2440476261F01908 /* ClockSyncIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClockSyncIndicator.swift; sourceTree = "<group>"; };
+		2B7D37874EDD64500E81BBD8 /* ExceptionCatcher.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ExceptionCatcher.h; sourceTree = "<group>"; };
 		2CFCB3285583184390D9E9BF /* AboutScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutScreen.swift; sourceTree = "<group>"; };
 		33CCA018AEEE169EDCA338FD /* LogbookAwards.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LogbookAwards.swift; sourceTree = "<group>"; };
 		37860F113FBD71CA51712822 /* FT8AFTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = FT8AFTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -169,6 +172,7 @@
 		E0CA452882C4980BED953078 /* Typography.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Typography.swift; sourceTree = "<group>"; };
 		E429D8A3556534F05374F12A /* GridDistance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GridDistance.swift; sourceTree = "<group>"; };
 		F287F167508A8E4114F44116 /* FFTProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFTProcessor.swift; sourceTree = "<group>"; };
+		F2D8A723CB45300FEDE7301B /* FT8AF-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "FT8AF-Bridging-Header.h"; sourceTree = "<group>"; };
 		F2EBE7CC0F661A6451447578 /* PttModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PttModeTests.swift; sourceTree = "<group>"; };
 		F3C698656C5709343F4AEEF0 /* FrequencyPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrequencyPickerSheet.swift; sourceTree = "<group>"; };
 		FA66E8CE63C02CC35A2BC010 /* PotaActivationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PotaActivationStore.swift; sourceTree = "<group>"; };
@@ -328,6 +332,7 @@
 			children = (
 				BF21F5D95598018B8A46ED8D /* AppState.swift */,
 				076A186C88F9B5A2FFAAB073 /* Assets.xcassets */,
+				F2D8A723CB45300FEDE7301B /* FT8AF-Bridging-Header.h */,
 				6F1E760AEB31EF3855951728 /* FT8AFApp.swift */,
 				BE0DCBA7E647113F08F32531 /* Info.plist */,
 				7DCF29540DF6FBE5F4ECD5FC /* Components */,
@@ -381,6 +386,8 @@
 			children = (
 				C42FB097015693FF14B27553 /* AudioCaptureService.swift */,
 				3B94D7FBAC132C5854796F79 /* AudioRouteController.swift */,
+				2B7D37874EDD64500E81BBD8 /* ExceptionCatcher.h */,
+				05A1E61AD575F93424F65731 /* ExceptionCatcher.m */,
 				F287F167508A8E4114F44116 /* FFTProcessor.swift */,
 				47F0A25416CDB1102C9AD749 /* KeychainStore.swift */,
 				4E09812700CD93E6187CC4BC /* LiveEngine.swift */,
@@ -530,6 +537,7 @@
 				3BA2BC0EFAF62534D39C3A4A /* DecodeFilterSettings.swift in Sources */,
 				F3CB49EBF218C3BB9FAE02D6 /* DecodeRow.swift in Sources */,
 				7FC3449767DCA16F70133366 /* DecodeScreen.swift in Sources */,
+				882AA28CDD50C648EB0AB7C5 /* ExceptionCatcher.m in Sources */,
 				EEA0D2F1B9A7E0345F68E909 /* ExportLogSheet.swift in Sources */,
 				771EC057824C1F3698C6DC9B /* FFTProcessor.swift in Sources */,
 				EC59A75E444DC6AB44913CB7 /* FT8AFApp.swift in Sources */,
@@ -630,6 +638,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = radio.ks3ckc.ft8af;
 				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "FT8AF/FT8AF-Bridging-Header.h";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -720,6 +729,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = radio.ks3ckc.ft8af;
 				SDKROOT = iphoneos;
+				SWIFT_OBJC_BRIDGING_HEADER = "FT8AF/FT8AF-Bridging-Header.h";
 				SWIFT_VERSION = 5.9;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
