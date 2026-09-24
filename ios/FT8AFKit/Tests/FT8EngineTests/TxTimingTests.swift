@@ -8,7 +8,7 @@ final class TxTimingTests: XCTestCase {
         XCTAssertEqual(TxTiming.defaultSlackMs, 2360)
     }
 
-    // The load-bearing rule (CLAUDE.md TX pipeline gotcha #2): a normal
+    // The load-bearing rule (AGENTS.md TX pipeline gotcha #2): a normal
     // on-time TX firing a few hundred ms into the cycle must clip NOTHING —
     // that is where the leading Costas sync lives.
     func testOnTimeStartClipsNothing() {

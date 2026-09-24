@@ -1,4 +1,8 @@
-# FT8AF Project Instructions
+# FT8AF Agent & Contributor Instructions
+
+> **One source of rules.** This file is for every contributor, human or coding
+> agent (Claude Code, Codex, Cursor, Copilot, Optio, …). `CLAUDE.md` only
+> imports it. Put project rules here, not in a tool-specific file.
 
 > **Placeholders.** This file is written for any contributor's machine.
 > Substitute your own values wherever you see `<…>`. The recurring ones:
@@ -7,7 +11,8 @@
 > `<phone-serial>` — your phone's serial from `adb devices`;
 > `<android-sdk>` — your Android SDK root.
 > Machine-specific notes (your paths, device serials, rig quirks) belong in an
-> untracked `CLAUDE.local.md`, not here.
+> untracked `AGENTS.local.md`, not here. (`CLAUDE.local.md` is also git-ignored
+> and still works for Claude Code users, since Claude Code loads it automatically.)
 
 ## Development environments
 
@@ -74,6 +79,11 @@ extract the decision/geometry logic into a plain top-level `internal` function
 or class (e.g. `buildQsoLog`, `QsoPathProjection`) and test that. Keep the
 Composable a thin wrapper that just calls the extracted logic.
 
+The same rule applies to the iOS and desktop apps: SwiftUI views and
+`App.tsx` stay thin wrappers over plain, testable functions.
+
+### Android
+
 Tests live in `ft8af/app/src/test/` (Kotlin under `.../kotlin`, Java under
 `.../java`), use JUnit4 + Truth (`assertThat`), and add
 `@RunWith(RobolectricTestRunner::class)` when the code under test touches
@@ -98,6 +108,53 @@ export JAVA_HOME=<jdk17-home>
 # or a single class:
 ./gradlew testDebugUnitTest --tests <fully.qualified.ClassName>
 ```
+
+### iOS (`ios/`, macOS only)
+
+Pure logic goes in the `FT8AFKit` Swift package (`ios/FT8AFKit/Sources/…`),
+with XCTest suites under `ios/FT8AFKit/Tests/`. These run on the host Mac with
+no simulator, but need full Xcode for XCTest:
+
+```
+cd ios/FT8AFKit && swift test
+```
+
+With only the Command Line Tools installed, `swift test` fails with
+`unable to resolve module dependency: 'XCTest'`. `swift build` still works
+there, and compiles everything except the tests.
+
+App-level tests (`ios/FT8AF/FT8AFTests`) need full Xcode (not just the
+Command Line Tools) and XcodeGen (`brew install xcodegen`). Regenerate the
+project after adding files or targets:
+
+```
+cd ios/FT8AF && xcodegen generate
+xcodebuild test -project FT8AF.xcodeproj -scheme FT8AF \
+  -destination 'platform=iOS Simulator,name=<an installed iPhone simulator>' \
+  CODE_SIGNING_ALLOWED=NO
+```
+
+(Unverified: this `xcodebuild test` command follows CI's `xcodebuild build`
+invocation but hasn't yet been run on a Mac with full Xcode.)
+
+CI (`.github/workflows/ios.yml`) runs `swift test` but only *builds* the app;
+it does not run `FT8AFTests` yet, so run them locally.
+
+### Desktop (`desktop/`, Tauri)
+
+Frontend logic lives in plain modules like `desktop/src/rig.ts` with vitest
+tests next to them (`*.test.ts`). Rust unit tests are `#[cfg(test)]` modules in
+`desktop/src-tauri/src/`, and integration tests are in `desktop/src-tauri/tests/`.
+
+```
+cd desktop && npm ci && npm test          # vitest
+cd desktop && npm run build               # build.rs needs the frontend dist
+cd desktop/src-tauri && cargo test
+```
+
+On Linux, `cargo test` needs the system packages listed in
+`.github/workflows/desktop.yml`. CI runs `cargo test` only in the non-gating
+coverage job and doesn't run vitest yet, so run both locally.
 
 ## Build & Deploy
 
