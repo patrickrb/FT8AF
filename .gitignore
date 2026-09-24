@@ -4,7 +4,8 @@ ft8af/.gitignore 2
 .FT8CN软件设计初衷及使用说明0.88版.pdf.icloud
 ft8af/app/src/main/assets/.nightUSGS4Layer.sqlite.icloud
 
-# Per-contributor Claude Code notes (machine paths, device serials) - see CLAUDE.md
+# Per-contributor agent notes (machine paths, device serials) - see AGENTS.md
+AGENTS.local.md
 CLAUDE.local.md
 
 # Accidental scratch/build-artifact trees (see PR #524)

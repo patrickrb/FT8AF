@@ -850,7 +850,7 @@ impl Engine {
         self.set_ptt(true);
         std::thread::sleep(Duration::from_millis(PTT_DELAY_MS));
 
-        // Clip leading audio only if we'd overrun the cycle (CLAUDE.md gotcha:
+        // Clip leading audio only if we'd overrun the cycle (AGENTS.md gotcha:
         // ms_late = max(0, into_cycle - 2360), NOT into_cycle % 15000). Computed
         // here, right before audio starts, so it reflects the real lateness after
         // the PTT settle — `maybe_transmit`'s window check keeps this at 0 in

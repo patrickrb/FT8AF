@@ -1,0 +1,27 @@
+name: Agent instructions check
+
+# AGENTS.md is the single source of agent/contributor rules; CLAUDE.md only
+# imports it. Fail if that layout breaks or a file still points at CLAUDE.md.
+# Cheap and always-run, so it can be made a required check.
+
+on:
+  pull_request:
+  push:
+    branches: [main, staging, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  agents-md:
+    name: agents-md
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Self-test the check
+        run: bash .github/scripts/check-agents-md.sh --self-test
+
+      - name: Check AGENTS.md layout and references
+        run: bash .github/scripts/check-agents-md.sh

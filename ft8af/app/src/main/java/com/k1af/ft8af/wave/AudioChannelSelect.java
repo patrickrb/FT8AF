@@ -87,7 +87,7 @@ public final class AudioChannelSelect {
      * channels by the framework and by every UAC device, which is what
      * {@link #BOTH} means, so the default TX path keeps its historical mono
      * {@code AudioTrack} untouched. Changing that path is not free — see the FT8
-     * TX audio pipeline notes in CLAUDE.md — so it only happens when the
+     * TX audio pipeline notes in AGENTS.md — so it only happens when the
      * operator actually asks for one side.
      */
     public static boolean needsStereoPlayback(int selection) {

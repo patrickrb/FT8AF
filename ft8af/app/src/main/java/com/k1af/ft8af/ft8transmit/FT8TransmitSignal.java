@@ -1072,7 +1072,7 @@ public class FT8TransmitSignal {
         // and, on a mono or unknown device, the only possibility — keeps the
         // historical MONO open: the framework duplicates it to every channel, so
         // that path is byte-for-byte what it always was. This matters more than
-        // it looks; see the FT8 TX audio pipeline notes in CLAUDE.md for how
+        // it looks; see the FT8 TX audio pipeline notes in AGENTS.md for how
         // little it takes to turn an audible transmission into an undecodable one.
         final TxChannelLayout layout = resolveTxLayout(preferredOutputDevice);
 

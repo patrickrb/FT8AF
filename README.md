@@ -49,6 +49,12 @@ cd ft8af
 
 ---
 
+## Contributing
+
+Workflow, testing and build rules for humans and coding agents alike are in [AGENTS.md](AGENTS.md).
+
+---
+
 ## Native code
 
 The FT8 DSP core is a vendored copy of [kgoba's ft8_lib](https://github.com/kgoba/ft8_lib), pinned to a specific upstream commit — see [`ft8af/app/src/main/cpp/ft8_lib/FT8_LIB_PIN.txt`](ft8af/app/src/main/cpp/ft8_lib/FT8_LIB_PIN.txt) for the exact hash. App-specific JNI glue lives alongside it in `ft8af/app/src/main/cpp/ft8af_glue/`. All of it is built from source by the NDK/CMake toolchain into a single `libft8af.so`, so a fresh clone or worktree builds with no manual copying.

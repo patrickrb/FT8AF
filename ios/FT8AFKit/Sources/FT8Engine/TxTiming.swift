@@ -7,7 +7,7 @@ import Foundation
 /// transmission still ends on the cycle boundary — but ONLY the portion past
 /// the slack. Clipping anything on an on-time start (e.g. a naive
 /// `msIntoCycle % 15000`) chops the leading Costas sync array and produces an
-/// audible-but-undecodable signal (see project CLAUDE.md, "FT8 TX audio
+/// audible-but-undecodable signal (see project AGENTS.md, "FT8 TX audio
 /// pipeline" gotcha #2, fixed on Android in PR #93).
 public enum TxTiming {
     /// Slack between the 12.64 s FT8 waveform and the 15 s cycle.
