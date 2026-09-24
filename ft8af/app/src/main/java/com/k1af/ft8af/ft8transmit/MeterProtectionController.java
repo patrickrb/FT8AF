@@ -58,10 +58,16 @@ public class MeterProtectionController {
 
     /**
      * Whether SWR is high enough to halt TX: protection enabled, a valid reading, and over
-     * the threshold. Pure so the rule is unit-tested independent of the rig meter plumbing.
+     * the threshold — but never while a user tune carrier is up. A tune is the operator
+     * deliberately keying to bring SWR *down* (setting an antenna tuner, checking a match),
+     * so high SWR is the expected starting condition, not a fault; halting there would lock
+     * the operator out of the very retune they pressed the button for. The tune worker has
+     * its own bounded max-on timeout for PA safety. Pure so the rule is unit-tested
+     * independent of the rig meter plumbing.
      */
-    public static boolean shouldHaltForSwr(int normalizedSwr, boolean enabled, int threshold) {
-        return normalizedSwr >= 0 && enabled && normalizedSwr > threshold;
+    public static boolean shouldHaltForSwr(int normalizedSwr, boolean enabled, int threshold,
+                                           boolean tuning) {
+        return !tuning && normalizedSwr >= 0 && enabled && normalizedSwr > threshold;
     }
 
     /**
@@ -72,6 +78,11 @@ public class MeterProtectionController {
         // Publish for optional UI display
         if (normalizedAlc >= 0) lastAlc.postValue(normalizedAlc);
         if (normalizedSwr >= 0) lastSwr.postValue(normalizedSwr);
+
+        // A user tune carrier is in progress: the meter callback is live whenever PTT is
+        // keyed (FT8 over OR tune), so suppress the SWR halt while tuning. See
+        // shouldHaltForSwr — halting here would set the lockout and block the retune.
+        boolean tuning = transmitSignal != null && transmitSignal.isTuning();
 
         // Diagnostics: when SWR protection is on, record each SWR reading we actually
         // receive so the debug.log shows whether meter data even reaches here during TX, the
@@ -86,17 +97,18 @@ public class MeterProtectionController {
             if (changed || now - lastSwrLogMs >= SWR_LOG_THROTTLE_MS) {
                 lastSwrLogMs = now;
                 lastLoggedSwr = normalizedSwr;
+                String decision = tuning ? "tune (halt suppressed)"
+                        : (shouldHaltForSwr(normalizedSwr, GeneralVariables.swrHaltEnabled,
+                                GeneralVariables.swrHaltThreshold, false) ? "HALT" : "ok");
                 GeneralVariables.fileLog(String.format(
                         "MeterProtection: SWR reading swr=%d threshold=%d -> %s",
-                        normalizedSwr, GeneralVariables.swrHaltThreshold,
-                        shouldHaltForSwr(normalizedSwr, GeneralVariables.swrHaltEnabled,
-                                GeneralVariables.swrHaltThreshold) ? "HALT" : "ok"));
+                        normalizedSwr, GeneralVariables.swrHaltThreshold, decision));
             }
         }
 
-        // --- SWR halt check ---
+        // --- SWR halt check (never during a user tune) ---
         if (shouldHaltForSwr(normalizedSwr, GeneralVariables.swrHaltEnabled,
-                GeneralVariables.swrHaltThreshold)) {
+                GeneralVariables.swrHaltThreshold, tuning)) {
             haltForSwr(normalizedSwr);
             return; // no point adjusting volume if we just killed TX
         }
