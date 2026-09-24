@@ -1,6 +1,10 @@
 package radio.ks3ckc.ft8af.ui.components
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -38,8 +44,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.R
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
@@ -66,18 +74,18 @@ internal fun drawerTargetExpanded(
 internal val DrawerDragThreshold = 48.dp
 
 /**
- * The collapsed height of the drawer — just tall enough for the handle (28) + the primary row
- * (72), stopping before the next row so no secondary control peeks through when collapsed.
+ * The collapsed height of the drawer — the handle (with its "More controls" hint) plus the primary
+ * Call CQ + Hunt row, stopping before the next row so nothing peeks through when collapsed.
  */
-internal val OperateDrawerPeekHeight = 110.dp
+internal val OperateDrawerPeekHeight = 120.dp
 
 /**
  * The operate-controls drawer (design 3a/3b) as a *single* bottom sheet that grows in place.
  *
  * The sheet is anchored so its bottom sits on [anchorBottomPx] (the window-space Y that the
  * reserved peek slot in the main column occupies, i.e. just above the tab bar). Its content is a
- * single top-aligned column — drag handle, the primary Call CQ / Stop + TX-period row, then the
- * secondary controls (Band & Mode, Hunt, Tune / DX, power). Collapsed, the sheet is
+ * single top-aligned column — a grab handle, the primary Call CQ / Stop + Hunt row, then the
+ * secondary controls (Band & Mode, TX period / Tune / DX, power). Collapsed, the sheet is
  * [OperateDrawerPeekHeight] tall and only the handle + primary row show (3a); dragging the handle
  * up or tapping it grows the *same* surface upward to reveal the rest over a scrim (3b). Nothing
  * slides over the primary controls — it is one sheet expanding, not a second sheet on top.
@@ -133,10 +141,6 @@ fun OperateControlsDrawer(
     val scrimAlpha = 0.55f * fraction.value
 
     val actions = txStripActionState(isActivated, huntEnabled)
-    val cqIsStop = actions.cqIsStop
-    val variantSubtitle = cqStripSubtitle(cqIsStop, isFreeTextMode, fieldDayEnabled, cqModifier)
-    val cqSubtitle = variantSubtitle
-        ?: if (!cqIsStop) stringResource(R.string.tx_call_cq_subtitle) else null
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Scrim over the content above the sheet only (stops at the tab bar so the tabs stay
@@ -198,64 +202,34 @@ fun OperateControlsDrawer(
                         .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    // ---- Primary row (visible in the peek): Call CQ / Stop + TX period ----
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        CallCqButton(
-                            modifier = Modifier.weight(1.6f),
-                            cqIsStop = cqIsStop,
-                            cqDisabled = actions.cqDisabled,
-                            subtitle = cqSubtitle,
-                            onClick = { if (cqIsStop) onStop() else onCallCQ() },
-                            onOpenOptions = onOpenCqOptions,
-                            optionsContentDescription = stringResource(R.string.tx_cq_options),
-                            moreLabel = stringResource(R.string.tx_more),
-                        )
-                        TxPeriodControl(
-                            modifier = Modifier.weight(1f),
-                            txSlot = txSlot,
-                            onSelect = onSelectTxPeriod,
-                            compact = true,
-                        )
-                    }
+                    // ---- Primary row (visible in the peek): Call CQ / Stop + Hunt ----
+                    CqHuntRow(
+                        actions = actions,
+                        huntOptionLabel = huntOptionLabel,
+                        cqModifier = cqModifier,
+                        isFreeTextMode = isFreeTextMode,
+                        fieldDayEnabled = fieldDayEnabled,
+                        onCallCQ = onCallCQ,
+                        onStop = onStop,
+                        onOpenCqOptions = onOpenCqOptions,
+                        onToggleHunt = onToggleHunt,
+                        onOpenHuntOptions = onOpenHuntOptions,
+                    )
 
                     // ---- Secondary controls, revealed as the sheet grows (design 3b) ----
                     BandModeRow(bandModeLabel = bandModeLabel, onOpenBandMode = onOpenBandMode)
 
-                    HuntTile(
-                        modifier = Modifier.fillMaxWidth(),
-                        huntEnabled = actions.huntActive,
-                        huntDisabled = actions.huntDisabled,
-                        optionLabel = huntOptionLabel,
-                        onToggle = onToggleHunt,
-                        onOpenOptions = onOpenHuntOptions,
-                        optionsContentDescription = stringResource(R.string.tx_hunt_options),
+                    PeriodTuneDxRow(
+                        txSlot = txSlot,
+                        isActivated = isActivated,
+                        isTransmitting = isTransmitting,
+                        isTuning = isTuning,
+                        tuneRemainingSec = tuneRemainingSec,
+                        dxEnabled = dxEnabled,
+                        onSelectTxPeriod = onSelectTxPeriod,
+                        onToggleTune = onToggleTune,
+                        onToggleDx = onToggleDx,
                     )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val tuneEnabled = isTuning || (!isActivated && !isTransmitting)
-                        SecondaryButton(
-                            modifier = Modifier.weight(1f),
-                            label = tuneChipLabel(stringResource(R.string.tune_button), isTuning, tuneRemainingSec),
-                            active = isTuning,
-                            enabled = tuneEnabled,
-                            onClick = onToggleTune,
-                        )
-                        SecondaryButton(
-                            modifier = Modifier.weight(1f),
-                            label = stringResource(R.string.tx_dx),
-                            active = dxEnabled,
-                            enabled = true,
-                            onClick = onToggleDx,
-                        )
-                    }
 
                     if (showVolumeSlider) {
                         TxVolumeRow(
@@ -271,7 +245,8 @@ fun OperateControlsDrawer(
 }
 
 /**
- * The drawer's grab handle: a centered 36×4 dp bar in a full-width touch target. A tap toggles the
+ * The drawer's grab handle: a centered grabber bar plus — while collapsed — an up-chevron and
+ * "More controls" caption that gently bob to advertise that the sheet pulls up. A tap toggles the
  * drawer; a vertical drag is fed live to [onDrag] (dy, negative = up) and settled in [onDragEnd]
  * with the total drag distance.
  */
@@ -288,10 +263,19 @@ private fun DrawerHandle(
     val collapseLabel = stringResource(R.string.controls_drawer_collapse)
     val label = if (expanded) collapseLabel else expandLabel
 
-    Box(
+    // Gentle up-and-down bob on the hint, only while collapsed, to draw the eye to the affordance.
+    val bobTransition = rememberInfiniteTransition(label = "drawer-hint-bob")
+    val bob by bobTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "drawer-hint-bob-offset",
+    )
+
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(28.dp)
+            .height(42.dp)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -308,7 +292,8 @@ private fun DrawerHandle(
                     },
                 )
             },
-        contentAlignment = Alignment.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
     ) {
         Box(
             modifier = Modifier
@@ -317,5 +302,28 @@ private fun DrawerHandle(
                 .clip(RoundedCornerShape(99.dp))
                 .background(Color(0x6694A3B8)), // rgba(148,163,184,0.40)
         )
+        if (expanded) {
+            // Down-chevron when open — a plain "pull down to collapse" hint.
+            FT8AFIcons.ChevronDown(size = 14.dp, color = TextFaint, strokeWidth = 2.2f)
+        } else {
+            Row(
+                modifier = Modifier.offset(y = (bob * -3f).dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                // Up-chevron (the down-chevron glyph rotated) to say "pulls up".
+                Box(modifier = Modifier.rotate(180f)) {
+                    FT8AFIcons.ChevronDown(size = 13.dp, color = Accent, strokeWidth = 2.4f)
+                }
+                Text(
+                    text = stringResource(R.string.controls_drawer_more),
+                    color = Accent,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontFamily = InterFamily,
+                    letterSpacing = 0.2.sp,
+                )
+            }
+        }
     }
 }

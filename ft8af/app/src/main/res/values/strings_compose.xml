@@ -131,8 +131,6 @@
     <string name="tx_period_label">TX PERIOD</string>
     <string name="tx_period_first">1st (even)</string>
     <string name="tx_period_second">2nd (odd)</string>
-    <string name="tx_period_first_short">1st</string>
-    <string name="tx_period_second_short">2nd</string>
     <string name="tx_dx">DX</string>
     <string name="tx_hunt_off">Off</string>
 
@@ -700,6 +698,7 @@
     <string name="settings_controls_drawer_desc">Collapse the operate controls into a bottom sheet you pull up. Off shows the full control strip at all times.</string>
     <string name="controls_drawer_expand">Expand controls</string>
     <string name="controls_drawer_collapse">Collapse controls</string>
+    <string name="controls_drawer_more">More controls</string>
     <string name="settings_per_band_volume">Save Output Level per Band</string>
     <string name="settings_per_band_volume_desc">Remember the TX volume separately for each band and restore it on band change</string>
     <string name="per_band_volume_restored">TX volume %1$d%% restored for %2$s</string>
