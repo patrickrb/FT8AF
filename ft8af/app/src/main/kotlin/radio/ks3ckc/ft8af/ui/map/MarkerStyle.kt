@@ -41,12 +41,13 @@ internal const val LABEL_ZOOM_THRESHOLD = 3.0f
 
 /**
  * Tint a base type colour by SNR so stronger signals read brighter and weak ones
- * fade back. FT8 SNRs run roughly -24..+10 dB; map that to an alpha ramp so the
- * weakest decodes are dim (but still visible) and strong ones are near-opaque.
+ * fade back. FT8 SNRs run roughly -24..+10 dB; map that to an alpha ramp. The
+ * floor is deliberately high (0.78) so even the weakest decode is an obvious,
+ * readable dot — the old 0.45 floor let weak markers wash out against the map.
  */
 internal fun snrTint(base: Color, snr: Int): Color {
     val t = ((snr + 24f) / 34f).coerceIn(0f, 1f)
-    val alpha = 0.45f + 0.55f * t
+    val alpha = 0.78f + 0.22f * t
     return base.copy(alpha = alpha)
 }
 
@@ -72,8 +73,9 @@ internal fun markerStyleFor(
         else -> StatusNew
     }
     // Selected markers ignore the SNR fade (always full strength) and draw larger.
+    // Bumped up from 3.5/5.5 so every indicator is an obvious dot, not a speck.
     val fill = if (isSelected) base else snrTint(base, snr)
-    val radius = if (isSelected) 5.5f else 3.5f
+    val radius = if (isSelected) 9f else 6f
     val showLabel = isSelected || currentZoom >= LABEL_ZOOM_THRESHOLD
     return MarkerStyle(shape, fill, radius, showLabel)
 }

@@ -76,4 +76,15 @@ internal class EquirectViewport(
         val my = maxPanY()
         return Offset(px.coerceIn(-mx, mx), py.coerceIn(-my, my))
     }
+
+    /**
+     * The clamped pan that puts geographic [lat]/[lon] as close to the canvas
+     * centre as the clamp allows — used by the "Me" recenter button. Solving
+     * `project(...).x == cx` gives `panX = -p.x * worldPxW/2` (and likewise y),
+     * then [clampPan] keeps the map from being dragged off into empty space.
+     */
+    fun panToCenter(lat: Double, lon: Double): Offset {
+        val p = equirectProject(lat, lon)
+        return clampPan(-p.x * (worldPxW / 2f), -p.y * (worldPxH / 2f))
+    }
 }
