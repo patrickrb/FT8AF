@@ -77,6 +77,7 @@ import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import kotlin.math.PI
 import kotlin.math.acos
+import kotlin.math.roundToInt
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -280,10 +281,14 @@ fun MapScreen(mainViewModel: MainViewModel) {
     var mapScale by rememberSaveable { mutableStateOf(1f) }
     var mapPanX by rememberSaveable { mutableStateOf(0f) }
     var mapPanY by rememberSaveable { mutableStateOf(0f) }
+    // Once the operator pinches/pans/zooms, stop auto-framing so we don't yank the
+    // view back. Reset on projection change so the new projection re-frames.
+    var userAdjustedView by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(viewMode) {
         mapScale = 1f
         mapPanX = 0f
         mapPanY = 0f
+        userAdjustedView = false
     }
 
     // PSK Reporter polling — fires immediately on enter and every 5 min while enabled.
@@ -430,6 +435,41 @@ fun MapScreen(mainViewModel: MainViewModel) {
     }
     val workedCount = remember(stations) { stations.count { it.isWorked } }
 
+    // Auto-frame the map to the region that has markers (plus the operator), so the
+    // canvas fills with the active area instead of a mostly-empty world. Runs only
+    // on the standard projection and only until the operator adjusts the view; the
+    // bounds key re-frames when the spread of markers meaningfully changes.
+    val fitPoints = remember(visibleStations, opLatLng) {
+        val pts = visibleStations.map { it.lat to it.lon }.toMutableList()
+        opLatLng?.let { pts.add(it.latitude to it.longitude) }
+        pts
+    }
+    val fitBoundsKey = remember(fitPoints) {
+        if (fitPoints.isEmpty()) {
+            ""
+        } else {
+            "${fitPoints.minOf { it.first }.roundToInt()},${fitPoints.maxOf { it.first }.roundToInt()}," +
+                "${fitPoints.minOf { it.second }.roundToInt()},${fitPoints.maxOf { it.second }.roundToInt()}"
+        }
+    }
+    LaunchedEffect(canvasSize, viewMode, fitBoundsKey, userAdjustedView) {
+        if (!userAdjustedView && viewMode == MapViewMode.STANDARD &&
+            canvasSize.width > 0 && canvasSize.height > 0 && fitPoints.isNotEmpty()
+        ) {
+            fitEquirectView(
+                fitPoints,
+                canvasSize.width.toFloat(),
+                canvasSize.height.toFloat(),
+                MAP_MIN_ZOOM,
+                MAP_MAX_ZOOM,
+            )?.let { fit ->
+                mapScale = fit.scale
+                mapPanX = fit.panX
+                mapPanY = fit.panY
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -486,6 +526,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 .onSizeChanged { canvasSize = it }
                 .pointerInput(viewMode) {
                     detectTransformGestures { _, panDelta, zoom, _ ->
+                        userAdjustedView = true
                         val newScale = (mapScale * zoom).coerceIn(MAP_MIN_ZOOM, MAP_MAX_ZOOM)
                         val clamped = clampPan(mapPanX + panDelta.x, mapPanY + panDelta.y, newScale)
                         mapPanX = clamped.x
@@ -496,6 +537,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 .pointerInput(viewMode) {
                     detectTapGestures(
                         onDoubleTap = { tap ->
+                            userAdjustedView = true
                             // Toggle between 1× and ZOOM_STEP×, zooming around the tap point so
                             // the tapped feature stays under the finger.
                             val target = if (mapScale < MAP_ZOOM_STEP * 0.95f) MAP_ZOOM_STEP else 1f
@@ -570,6 +612,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
         MapEdgeControls(
             scale = mapScale,
             onZoomIn = {
+                userAdjustedView = true
                 val newScale = (mapScale * MAP_ZOOM_STEP).coerceAtMost(MAP_MAX_ZOOM)
                 if (newScale != mapScale) {
                     val factor = newScale / mapScale
@@ -580,6 +623,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 }
             },
             onZoomOut = {
+                userAdjustedView = true
                 val newScale = (mapScale / MAP_ZOOM_STEP).coerceAtLeast(MAP_MIN_ZOOM)
                 val factor = newScale / mapScale
                 val clamped = clampPan(mapPanX * factor, mapPanY * factor, newScale)
@@ -588,6 +632,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 mapScale = newScale
             },
             onRecenter = {
+                userAdjustedView = true
                 if (viewMode == MapViewMode.STANDARD) {
                     val w = canvasSize.width.toFloat()
                     val h = canvasSize.height.toFloat()
@@ -1309,12 +1354,11 @@ private fun AzimuthalMapCanvas(
             drawConnectionLine(opX, opY, ex, ey, line.style, line.color)
         }
 
-        // Operator center marker
-        drawCircle(
-            color = Accent,
-            radius = 4f,
-            center = Offset(opX, opY),
-        )
+        // Operator center marker — a bold amber "you are here" dot with a glow halo.
+        drawCircle(color = Accent.copy(alpha = 0.22f), radius = 20f, center = Offset(opX, opY))
+        drawCircle(color = Accent.copy(alpha = 0.5f), radius = 11f, center = Offset(opX, opY))
+        drawCircle(color = Accent, radius = 6f, center = Offset(opX, opY))
+        drawCircle(color = BgApp, radius = 6f, center = Offset(opX, opY), style = Stroke(width = 1.6f))
 
         // PSK Reporter spots — drawn before stations so decoded markers layer on top.
         // Square shape distinguishes them from circular station markers.
@@ -1370,7 +1414,7 @@ private fun AzimuthalMapCanvas(
                 isSelected = isSelected,
                 currentZoom = scale,
             )
-            val glowR = if (isSelected) 12f else 8f
+            val glowR = if (isSelected) 18f else 13f
 
             // Pulse rings: 2 expanding rings per station, staggered by 0.5 phase. Phase derived from
             // shared infinite transition with per-station offset (no per-marker InfiniteTransition).
@@ -1401,9 +1445,14 @@ private fun AzimuthalMapCanvas(
                 )
             }
 
-            // Glow
+            // Glow — a layered halo so each marker reads clearly over the basemap.
             drawCircle(
-                color = style.fill.copy(alpha = if (isSelected) 0.25f else 0.15f),
+                color = style.fill.copy(alpha = if (isSelected) 0.28f else 0.20f),
+                radius = glowR * 1.6f,
+                center = Offset(sx, sy),
+            )
+            drawCircle(
+                color = style.fill.copy(alpha = if (isSelected) 0.55f else 0.40f),
                 radius = glowR,
                 center = Offset(sx, sy),
             )
@@ -1505,16 +1554,11 @@ private fun StandardMapCanvas(
         val opPos = vp.projectLatLon(opLat, opLon)
         val opX = opPos.x
         val opY = opPos.y
-        drawCircle(
-            color = Accent.copy(alpha = 0.25f),
-            radius = 8f,
-            center = Offset(opX, opY),
-        )
-        drawCircle(
-            color = Accent,
-            radius = 4f,
-            center = Offset(opX, opY),
-        )
+        // Operator marker — a bold amber "you are here" dot with a glow halo.
+        drawCircle(color = Accent.copy(alpha = 0.22f), radius = 20f, center = Offset(opX, opY))
+        drawCircle(color = Accent.copy(alpha = 0.5f), radius = 11f, center = Offset(opX, opY))
+        drawCircle(color = Accent, radius = 6f, center = Offset(opX, opY))
+        drawCircle(color = BgApp, radius = 6f, center = Offset(opX, opY), style = Stroke(width = 1.6f))
 
         // Connection lines (operator -> TX target / stations calling us). Drawn under
         // the station markers; both endpoints project through the viewport so they
@@ -1568,7 +1612,7 @@ private fun StandardMapCanvas(
                 isSelected = isSelected,
                 currentZoom = scale,
             )
-            val glowR = if (isSelected) 12f else 8f
+            val glowR = if (isSelected) 18f else 13f
 
             // Pulse rings (same pattern as azimuthal: shared transition + per-station phase offset)
             val baseAmp = if (isSelected) 1f else 0.55f
@@ -1598,9 +1642,14 @@ private fun StandardMapCanvas(
                 )
             }
 
-            // Glow
+            // Glow — a layered halo so each marker reads clearly over the basemap.
             drawCircle(
-                color = style.fill.copy(alpha = if (isSelected) 0.25f else 0.15f),
+                color = style.fill.copy(alpha = if (isSelected) 0.28f else 0.20f),
+                radius = glowR * 1.6f,
+                center = Offset(sx, sy),
+            )
+            drawCircle(
+                color = style.fill.copy(alpha = if (isSelected) 0.55f else 0.40f),
                 radius = glowR,
                 center = Offset(sx, sy),
             )

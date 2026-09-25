@@ -88,6 +88,39 @@ class MapRedesignTest {
         assertThat(abs(p.y - 500f)).isLessThan(0.5f)
     }
 
+    // ---- fit-to-markers framing --------------------------------------------
+
+    @Test
+    fun fitEquirectView_nullWhenNothingToFrame() {
+        assertThat(fitEquirectView(emptyList(), 1000f, 2000f, 1f, 8f)).isNull()
+        assertThat(fitEquirectView(listOf(40.0 to -100.0), 0f, 0f, 1f, 8f)).isNull()
+    }
+
+    @Test
+    fun fitEquirectView_zoomsIntoAClusteredRegion() {
+        // A tight US cluster should zoom well past 1x and frame that region.
+        val pts = listOf(40.0 to -105.0, 41.0 to -104.0, 39.0 to -106.0)
+        val fit = fitEquirectView(pts, 1200f, 1920f, 1f, 8f)
+        assertThat(fit).isNotNull()
+        assertThat(fit!!.scale).isGreaterThan(1.5f)
+        assertThat(fit.scale).isAtMost(8f)
+
+        // The cluster's centre projects near the canvas centre after the fit.
+        val vp = EquirectViewport(1200f, 1920f, fit.scale, fit.panX, fit.panY)
+        val c = vp.projectLatLon(40.0, -105.0)
+        assertThat(abs(c.x - 600f)).isLessThan(140f)
+        assertThat(abs(c.y - 960f)).isLessThan(220f)
+    }
+
+    @Test
+    fun fitEquirectView_globalSpreadStaysZoomedOut() {
+        // Markers on every continent can't be zoomed into — clamp at min zoom.
+        val pts = listOf(40.0 to -100.0, 50.0 to 10.0, 36.0 to 140.0, -33.0 to 151.0, -23.0 to -46.0)
+        val fit = fitEquirectView(pts, 1200f, 1920f, 1f, 8f)
+        assertThat(fit).isNotNull()
+        assertThat(fit!!.scale).isWithin(0.01f).of(1f)
+    }
+
     @Test
     fun panToCenter_isClampedWithinBounds() {
         // At zoom 1 on a square canvas the world can't pan off vertically, so the
