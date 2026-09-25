@@ -516,6 +516,18 @@
     </plurals>
     <string name="map_reach_furthest">Furthest · %1$s</string>
     <string name="map_reach_best">Best · %1$s</string>
+    <!-- Map redesign (concept 4c): header, layer chips, controls -->
+    <string name="map_header_subtitle">%1$d decoded · %2$d worked this session</string>
+    <string name="map_layer_decodes">Decodes</string>
+    <string name="map_layer_psk">PSK spots</string>
+    <string name="map_layer_worked">Worked</string>
+    <string name="map_ctrl_me">Me</string>
+    <string name="map_ctrl_me_cd">Recenter on my location</string>
+    <string name="map_greyline_in">%1$s · greyline in %2$s</string>
+    <string name="map_details">Details</string>
+    <string name="map_option_projection">Projection</string>
+    <string name="map_option_grayline">Gray line</string>
+    <string name="map_menu_cd">Map options</string>
     <string name="waterfall_title">Waterfall</string>
     <string name="waterfall_toggle_nr">NR</string>
     <string name="waterfall_toggle_msg">MSG</string>
