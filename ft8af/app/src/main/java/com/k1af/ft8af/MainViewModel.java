@@ -128,6 +128,7 @@ import com.k1af.ft8af.rigs.Yaesu39Rig;
 import com.k1af.ft8af.rigs.YaesuDX10Rig;
 import com.k1af.ft8af.spectrum.SpectrumListener;
 import com.k1af.ft8af.timer.ClockSelfSync;
+import com.k1af.ft8af.timer.DecodeDtDisplay;
 import com.k1af.ft8af.timer.OnUtcTimer;
 import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.ui.ToastMessage;
@@ -184,6 +185,12 @@ public class MainViewModel extends ViewModel {
     // reset by the settings toggle / GPS discipline takeover. Public so
     // TimeSyncSettings can reset it when the operator flips the toggles.
     public final ClockSelfSync clockSelfSync = new ClockSelfSync();
+
+    // Robust, smoothed source for the DT figure the UI shows (clock-sync pill + Time Sync
+    // readout). Always on — unlike clockSelfSync it never touches the clock, it only decides
+    // what number is honest to display. See DecodeDtDisplay for why the raw per-slot mean
+    // this replaced made a perfectly-synced rig look 2 s out.
+    public final DecodeDtDisplay decodeDtDisplay = new DecodeDtDisplay();
 
 
     //public CallsignDatabase callsignDatabase = null;//callsign information database
@@ -705,6 +712,14 @@ public class MainViewModel extends ViewModel {
                 // already ignore own-callsign messages.
                 OwnTxEchoFilter filtered = OwnTxEchoFilter.filter(decoded);
                 ArrayList<Ft8Message> messages = filtered.kept;
+                // This pass's per-decode DTs (seconds). Feeds both the self-syncing clock
+                // (fast pass only, below) and the displayed DT (every pass), so the number
+                // on screen and the correction the estimator makes are measured from
+                // exactly the same samples.
+                final float[] dtSamples = new float[messages.size()];
+                for (int i = 0; i < messages.size(); i++) {
+                    dtSamples[i] = messages.get(i).time_sec;
+                }
                 // Full duplex (satellite operating): our own downlink coming back
                 // IS the measurement, so put the echoes the filter just dropped
                 // back on screen. Strictly display — `display` feeds only the
@@ -734,10 +749,6 @@ public class MainViewModel extends ViewModel {
                     if (ClockSelfSync.mayRun(GeneralVariables.autoSyncClockFromDecodes,
                             GeneralVariables.disciplineClockFromGPS,
                             GeneralVariables.disciplineClockFromNtp)) {
-                        float[] dtSamples = new float[messages.size()];
-                        for (int i = 0; i < messages.size(); i++) {
-                            dtSamples[i] = messages.get(i).time_sec;
-                        }
                         // onSlot is atomic: slot dedup/ordering + streak update under
                         // one lock, so concurrent adjacent-slot deliveries can't
                         // interleave (out-of-order slots are rejected inside).
@@ -804,12 +815,29 @@ public class MainViewModel extends ViewModel {
 
                 appendToMessageList(display);
                 publishFt8MessageList();//post an immutable snapshot so the UI recomposes immediately
-                // Slot-wide mean DT with own-TX echoes already excluded (see
-                // OwnTxEchoFilter.meanTimeOffsetSec). NaN can't happen here — messages
-                // is non-empty, so at least one decode survived — but never post it:
-                // the pill would render it as "unknown".
-                if (!Float.isNaN(time_sec)) {
-                    mutableTimerOffset.postValue(time_sec);//this cycle's time offset
+                // Displayed DT. NOT the slot's raw mean (the `time_sec` argument, kept for
+                // the diagnostic below): a mean is at the mercy of one late station's DT, and
+                // it was re-posted on every decode pass, so the pill flashed "2.5 s off" on a
+                // rig that was working stations perfectly. DecodeDtDisplay applies the same
+                // robust measurement the self-syncing clock uses — MAD-rejected median per
+                // slot, accumulated across that slot's passes, then the median of the last
+                // few slots — and returns null when the reading hasn't meaningfully moved,
+                // which is what makes the indicator sit still when the clock is right.
+                Float shownDt = decodeDtDisplay.onDecodes(utc, dtSamples, UtcTimer.delay);
+                if (shownDt != null && !Float.isNaN(shownDt)) {
+                    mutableTimerOffset.postValue(shownDt);
+                }
+                if (!isDeep) {
+                    // Both numbers, once per slot: a debug.log where `raw` swings while
+                    // `shown` holds is the smoothing doing its job, not a drifting clock.
+                    fileLog(String.format(java.util.Locale.US,
+                            "DT: raw=%+.2f shown=%s n=%d",
+                            time_sec,
+                            decodeDtDisplay.lastPublished() == null
+                                    ? "--"
+                                    : String.format(java.util.Locale.US, "%+.2f",
+                                            decodeDtDisplay.lastPublished()),
+                            dtSamples.length));
                 }
 
 
