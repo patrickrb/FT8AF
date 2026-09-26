@@ -8,7 +8,7 @@ import kotlin.math.abs
 
 /**
  * Pure unit tests for the Map redesign (concept 4c) logic: layer-chip
- * visibility, state-border zoom gating, the gray-line info pill countdown, and
+ * visibility, state-border fade, the gray-line info pill countdown, and
  * the "Me" recenter pan. No Android/Compose runtime is touched.
  */
 class MapRedesignTest {
@@ -39,14 +39,54 @@ class MapRedesignTest {
         assertThat(isStationVisible(isWorked = true, decodesOn = false, workedOn = false)).isFalse()
     }
 
-    // ---- state-border zoom gate ----------------------------------------------
+    // ---- state-border fade ---------------------------------------------------
 
     @Test
-    fun stateBorders_hiddenUntilZoomThreshold() {
-        assertThat(showStateBorders(1f)).isFalse()
-        assertThat(showStateBorders(STATE_BORDER_ZOOM - 0.01f)).isFalse()
-        assertThat(showStateBorders(STATE_BORDER_ZOOM)).isTrue()
-        assertThat(showStateBorders(8f)).isTrue()
+    fun stateBorders_hiddenWhenBasemapIsTooCoarse() {
+        assertThat(stateBorderAlpha(0f)).isEqualTo(0f)
+        assertThat(stateBorderAlpha(STATE_BORDER_MIN_PX_PER_DEG)).isEqualTo(0f)
+    }
+
+    @Test
+    fun stateBorders_fullyDrawnOnceDenseEnough() {
+        assertThat(stateBorderAlpha(STATE_BORDER_FULL_PX_PER_DEG)).isEqualTo(1f)
+        assertThat(stateBorderAlpha(40f)).isEqualTo(1f)
+    }
+
+    @Test
+    fun stateBorders_rampLinearlyBetweenTheThresholds() {
+        val mid = (STATE_BORDER_MIN_PX_PER_DEG + STATE_BORDER_FULL_PX_PER_DEG) / 2f
+        assertThat(stateBorderAlpha(mid)).isWithin(1e-4f).of(0.5f)
+        // Monotonic across the ramp — a pinch never dims the layer.
+        var previous = 0f
+        var pxPerDeg = STATE_BORDER_MIN_PX_PER_DEG
+        while (pxPerDeg <= STATE_BORDER_FULL_PX_PER_DEG) {
+            val alpha = stateBorderAlpha(pxPerDeg)
+            assertThat(alpha).isAtLeast(previous)
+            previous = alpha
+            pxPerDeg += 0.5f
+        }
+    }
+
+    @Test
+    fun stateBorders_drawnOnTheStandardMapCardAtDefaultZoom() {
+        // The map card measures ~996x1140 px on a 1080p phone. At zoom 1 (whole world, no grid
+        // set) and at the auto-framed zoom a US operator with a grid actually gets (~2.9 — a hair
+        // under the old `scale >= 3` gate, which is why the lines never showed), the layer is on.
+        val world = EquirectViewport(canvasW = 996f, canvasH = 1140f, userScale = 1f)
+        assertThat(stateBorderAlpha(world.pxPerLonDegree)).isEqualTo(1f)
+        val framed = EquirectViewport(canvasW = 996f, canvasH = 1140f, userScale = 2.9f)
+        assertThat(stateBorderAlpha(framed.pxPerLonDegree)).isEqualTo(1f)
+    }
+
+    @Test
+    fun stateBorders_stayHiddenOnTheAzimuthalWorldDisc() {
+        // The whole globe inside a ~1000 px disc is ~2.8 px per degree: real mush, still hidden.
+        assertThat(stateBorderAlpha(azimuthalPxPerLonDegree(discRadiusPx = 500f, scale = 1f)))
+            .isEqualTo(0f)
+        // Pinched in, they fade up.
+        assertThat(stateBorderAlpha(azimuthalPxPerLonDegree(discRadiusPx = 500f, scale = 3f)))
+            .isEqualTo(1f)
     }
 
     // ---- gray-line countdown formatting --------------------------------------
