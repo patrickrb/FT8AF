@@ -64,6 +64,13 @@ internal data class TxStripActionState(
 )
 
 /**
+ * Height of the primary action row — the Call CQ button and the Hunt tile beside it. Shared so
+ * the collapsing drawer can derive its peek height from the real button height instead of
+ * repeating the number (see OperateDrawerPeekHeight).
+ */
+internal val OperatePrimaryRowHeight = 72.dp
+
+/**
  * Clamp a volume value after a +/- step to the 0–100 range.
  * Extracted so it can be unit-tested without Compose.
  */
@@ -528,7 +535,7 @@ internal fun CallCqButton(
 
     Row(
         modifier = modifier
-            .height(72.dp)
+            .height(OperatePrimaryRowHeight)
             .clip(RoundedCornerShape(14.dp))
             .background(background)
             .combinedClickable(
@@ -629,7 +636,7 @@ internal fun HuntTile(
     val contentAlpha = if (huntDisabled) 0.4f else 1f
     Column(
         modifier = modifier
-            .height(72.dp)
+            .height(OperatePrimaryRowHeight)
             .clip(RoundedCornerShape(14.dp))
             .background(if (huntDisabled) BgSurface3.copy(alpha = 0.4f) else BgSurface3)
             .border(1.dp, Border, RoundedCornerShape(14.dp))
