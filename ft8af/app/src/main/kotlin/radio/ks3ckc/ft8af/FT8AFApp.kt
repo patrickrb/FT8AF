@@ -602,7 +602,14 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     showCatChip = showCatChip,
                     catState = catState,
                     onReconnectCat = onReconnectCatAction,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                    // Bottom padding separates the status line from the sheet's rounded top edge
+                    // below it — butted together, the rounding read as if the line were clipped.
+                    modifier = Modifier.padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 10.dp,
+                    ),
                 )
                 Spacer(
                     modifier = Modifier
