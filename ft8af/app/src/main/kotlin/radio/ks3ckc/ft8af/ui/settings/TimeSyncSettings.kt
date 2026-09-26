@@ -96,8 +96,8 @@ fun TimeSyncSettings(
         GeneralVariables.mutableNtpClockSyncFailed.value
     )
 
-    // Latest cycle's average decode DT (seconds), posted in MainViewModel.afterDecode.
-    // Null until the first decode this session.
+    // Smoothed decode DT (seconds) — DecodeDtDisplay's reading, posted in
+    // MainViewModel.afterDecode. Null until the first decode this session.
     val avgDtSec by mainViewModel.mutableTimerOffset.observeAsState()
 
     // Last self-sync correction (timestamp), so the Suggestion card can show that

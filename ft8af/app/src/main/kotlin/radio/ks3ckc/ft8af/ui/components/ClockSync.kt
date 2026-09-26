@@ -29,15 +29,19 @@ import java.util.Locale
 import kotlin.math.abs
 
 /**
- * Clock-sync health derived from the mean decode DT (time offset, in seconds).
+ * Clock-sync health derived from the smoothed decode DT (time offset, in seconds) —
+ * `DecodeDtDisplay`'s reading: an outlier-rejected median per slot, smoothed over the last few
+ * slots. It is deliberately not the slot's raw mean; see that class for why a mean made a rig
+ * that was working stations perfectly report itself seconds out of sync.
  *
  * FT8 tolerates only ~2 s of clock error before decoding collapses — both ways: a
  * mis-set clock stops you decoding others *and* pushes your transmissions to the edge
  * of everyone else's receive window so they can't decode you either. Yet the app never
  * surfaced this on the operating screen; the operator had to open Settings → Time Sync
- * to notice. The mean DT of the stations you decode is a good proxy for your own clock
+ * to notice. The consensus DT of the stations you decode is a good proxy for your own clock
  * offset: most stations are themselves synced, so a consistent bias across all of them
- * is almost certainly yours.
+ * is almost certainly yours — while any single station's DT is that station's own clock, which
+ * is why the displayed value is a median over several slots rather than one slot's average.
  */
 internal enum class ClockSyncLevel { GOOD, FAIR, POOR, UNKNOWN }
 
@@ -48,7 +52,7 @@ internal const val CLOCK_SYNC_GOOD_SEC = 0.3f
 internal const val CLOCK_SYNC_FAIR_SEC = 1.0f
 
 /**
- * Classify the mean decode DT into a sync-health level. A `null` value means no decode
+ * Classify the smoothed decode DT into a sync-health level. A `null` value means no decode
  * cycle has reported yet this session; a non-finite value is treated the same way so a bad
  * reading can never mis-color the pill.
  */
