@@ -40,7 +40,7 @@ internal fun stepCorrectionMs(current: Int, deltaMs: Int): Int =
     clampCorrectionMs(current + deltaMs)
 
 /**
- * Suggest a new correction from the average decode DT of the stations we're
+ * Suggest a new correction from the smoothed decode DT of the stations we're
  * hearing — the only time reference available offline.
  *
  * `avgDtSec` is WSJT-style DT (seconds): how far into our RX window the decoded

@@ -1,10 +1,6 @@
 package radio.ks3ckc.ft8af.ui.components
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -73,11 +69,37 @@ internal fun drawerTargetExpanded(
 /** The vertical drag distance on the handle that commits to toggling the drawer. */
 internal val DrawerDragThreshold = 48.dp
 
+/** Height of the grab handle strip (grabber bar + the collapsed "More controls" hint). */
+internal val DrawerHandleHeight = 36.dp
+
+/** Gap between the handle strip and the first control row. */
+internal val DrawerContentTopGap = 10.dp
+
 /**
- * The collapsed height of the drawer — the handle (with its "More controls" hint) plus the primary
- * Call CQ + Hunt row, stopping before the next row so nothing peeks through when collapsed.
+ * Padding below the last visible control row. In the collapsed peek this is the breathing room
+ * between the Call CQ / Hunt row and the tab bar the sheet sits on, so it must be comfortably
+ * bigger than nothing and comfortably smaller than [DrawerRowSpacing] (see below).
  */
-internal val OperateDrawerPeekHeight = 120.dp
+internal val DrawerContentBottomPad = 14.dp
+
+/**
+ * Vertical gap between control rows. Deliberately larger than [DrawerContentBottomPad]: the
+ * collapsed sheet is clipped [DrawerContentBottomPad] past the primary row's bottom edge, so the
+ * next row only stays fully hidden while the gap exceeds that padding.
+ */
+internal val DrawerRowSpacing = 18.dp
+
+/**
+ * The collapsed height of the drawer — the handle (with its "More controls" hint), the primary
+ * Call CQ + Hunt row, and equal-feeling padding above and below it, stopping short of the next row
+ * so nothing peeks through when collapsed.
+ *
+ * Derived from the parts rather than hard-coded (it was a flat 120.dp, which left the 72.dp button
+ * row butted against the handle with 6.dp under it — the row read as jammed onto the tab bar) so
+ * the peek can never clip the primary row or reveal the row below it.
+ */
+internal val OperateDrawerPeekHeight =
+    DrawerHandleHeight + DrawerContentTopGap + OperatePrimaryRowHeight + DrawerContentBottomPad
 
 /**
  * The operate-controls drawer (design 3a/3b) as a *single* bottom sheet that grows in place.
@@ -199,8 +221,13 @@ fun OperateControlsDrawer(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = DrawerContentTopGap,
+                            bottom = DrawerContentBottomPad,
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(DrawerRowSpacing),
                 ) {
                     // ---- Primary row (visible in the peek): Call CQ / Stop + Hunt ----
                     CqHuntRow(
@@ -246,9 +273,13 @@ fun OperateControlsDrawer(
 
 /**
  * The drawer's grab handle: a centered grabber bar plus — while collapsed — an up-chevron and
- * "More controls" caption that gently bob to advertise that the sheet pulls up. A tap toggles the
- * drawer; a vertical drag is fed live to [onDrag] (dy, negative = up) and settled in [onDragEnd]
- * with the total drag distance.
+ * "More controls" caption advertising that the sheet pulls up. A tap toggles the drawer; a
+ * vertical drag is fed live to [onDrag] (dy, negative = up) and settled in [onDragEnd] with the
+ * total drag distance.
+ *
+ * The hint used to bob up and down on an infinite animation. It sat directly above the primary
+ * action row, where a caption drifting against fixed buttons read as uneven spacing rather than as
+ * an affordance, so it is static now — the chevron carries the message.
  */
 @Composable
 private fun DrawerHandle(
@@ -263,19 +294,10 @@ private fun DrawerHandle(
     val collapseLabel = stringResource(R.string.controls_drawer_collapse)
     val label = if (expanded) collapseLabel else expandLabel
 
-    // Gentle up-and-down bob on the hint, only while collapsed, to draw the eye to the affordance.
-    val bobTransition = rememberInfiniteTransition(label = "drawer-hint-bob")
-    val bob by bobTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
-        label = "drawer-hint-bob-offset",
-    )
-
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(42.dp)
+            .height(DrawerHandleHeight)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -293,7 +315,7 @@ private fun DrawerHandle(
                 )
             },
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
     ) {
         Box(
             modifier = Modifier
@@ -307,7 +329,6 @@ private fun DrawerHandle(
             FT8AFIcons.ChevronDown(size = 14.dp, color = TextFaint, strokeWidth = 2.2f)
         } else {
             Row(
-                modifier = Modifier.offset(y = (bob * -3f).dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp),
             ) {

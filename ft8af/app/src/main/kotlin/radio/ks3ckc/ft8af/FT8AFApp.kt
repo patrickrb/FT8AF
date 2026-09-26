@@ -319,8 +319,9 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     val operatingMode by mainViewModel.mutableOperatingMode.observeAsState(GeneralVariables.operatingMode)
     val modeName = ModeProfile.fromId(operatingMode).displayName
 
-    // Mean decode DT (seconds) for the slot-timer bar's live clock-sync pill; null until
-    // the first decode cycle reports one, so the bar renders unchanged before then.
+    // Decode DT (seconds) for the slot-timer bar's live clock-sync pill — the smoothed,
+    // outlier-rejected reading from DecodeDtDisplay, not a raw per-slot mean; null until the
+    // first decode cycle reports one, so the bar renders unchanged before then.
     val avgDtSec by mainViewModel.mutableTimerOffset.observeAsState()
 
     // Observe SWR lockout state
@@ -602,7 +603,14 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     showCatChip = showCatChip,
                     catState = catState,
                     onReconnectCat = onReconnectCatAction,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                    // Bottom padding separates the status line from the sheet's rounded top edge
+                    // below it — butted together, the rounding read as if the line were clipped.
+                    modifier = Modifier.padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 10.dp,
+                    ),
                 )
                 Spacer(
                     modifier = Modifier

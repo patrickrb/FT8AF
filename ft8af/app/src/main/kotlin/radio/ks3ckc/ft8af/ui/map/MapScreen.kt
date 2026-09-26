@@ -1325,13 +1325,17 @@ private fun AzimuthalMapCanvas(
         // Land — Natural Earth 110m vector outlines projected via azProject
         landRings?.let { rings -> drawAzimuthalLand(rings, opLat, opLon, cx, cy, r, scale, panX, panY) }
 
-        // National borders over the land; US state borders once zoomed in.
+        // National borders over the land; US state borders fade in with the basemap's density.
         countryRings?.let { rings ->
             drawAzimuthalRings(rings, opLat, opLon, cx, cy, r, scale, panX, panY, CountryBorderColor, 0.7f)
         }
-        if (showStateBorders(scale)) {
+        val stateAlpha = stateBorderAlpha(azimuthalPxPerLonDegree(r, scale))
+        if (stateAlpha > 0f) {
             stateRings?.let { rings ->
-                drawAzimuthalRings(rings, opLat, opLon, cx, cy, r, scale, panX, panY, StateBorderColor, 0.5f)
+                drawAzimuthalRings(
+                    rings, opLat, opLon, cx, cy, r, scale, panX, panY,
+                    StateBorderColor.copy(alpha = StateBorderColor.alpha * stateAlpha), 0.5f,
+                )
             }
         }
 
@@ -1537,10 +1541,15 @@ private fun StandardMapCanvas(
         // Land — Natural Earth 110m vector outlines (drawn once polygons are loaded)
         landRings?.let { rings -> drawWorldLand(rings, vp) }
 
-        // National borders over the land; US state borders once zoomed in.
+        // National borders over the land; US state borders fade in with the basemap's density.
         countryRings?.let { rings -> drawEquirectRings(rings, vp, CountryBorderColor, 0.7f) }
-        if (showStateBorders(scale)) {
-            stateRings?.let { rings -> drawEquirectRings(rings, vp, StateBorderColor, 0.5f) }
+        val stateAlpha = stateBorderAlpha(vp.pxPerLonDegree)
+        if (stateAlpha > 0f) {
+            stateRings?.let { rings ->
+                drawEquirectRings(rings, vp, StateBorderColor.copy(
+                    alpha = StateBorderColor.alpha * stateAlpha,
+                ), 0.5f)
+            }
         }
 
         // Lat/lon grid (over land so it stays visible across continents)
@@ -1825,14 +1834,52 @@ private fun DrawScope.drawWorldLand(rings: List<FloatArray>, vp: EquirectViewpor
 }
 
 // Border strokes drawn over the dissolved land layer so the basemap reads as a
-// real bordered map. National borders are always on; US state borders only when
-// zoomed in enough to make sense of them (they'd be noise at world scale).
+// real bordered map. National borders are always on; US state borders fade in with the map's
+// detail budget (see stateBorderAlpha) so a US operator sees their state lines at the default
+// view instead of only after pinching past a hard zoom gate.
 private val CountryBorderColor = Color(0x7B94A3B8)
-private val StateBorderColor = Color(0x4694A3B8)
-internal const val STATE_BORDER_ZOOM = 3f
+private val StateBorderColor = Color(0x6094A3B8)
 
-/** State borders are decluttered until the map is zoomed past [STATE_BORDER_ZOOM]. */
-internal fun showStateBorders(scale: Float): Boolean = scale >= STATE_BORDER_ZOOM
+/** At/below this many longitude px per degree the state layer would be mush, so it is hidden. */
+internal const val STATE_BORDER_MIN_PX_PER_DEG = 3f
+
+/**
+ * At/above this many longitude px per degree the state layer is drawn at full strength. Tuned on
+ * the real map card, which is ~1000x1140 px on a 1080p phone: the standard projection's default
+ * "whole world" view lands at ~6.3 px per degree, where the lower 48 are ~370 px across and their
+ * borders read cleanly, so the whole standard projection is at full strength.
+ */
+internal const val STATE_BORDER_FULL_PX_PER_DEG = 6f
+
+/**
+ * Opacity multiplier (0..1) for the US state border layer at a basemap density of
+ * [pxPerLonDegree] longitude pixels per degree — 0 below [STATE_BORDER_MIN_PX_PER_DEG], 1 at/above
+ * [STATE_BORDER_FULL_PX_PER_DEG], linear between.
+ *
+ * Replaces a hard `scale >= 3` gate that kept the layer off in exactly the view a US operator
+ * looks at: with a grid set and no decodes yet the map auto-frames the operator at scale ~2.9,
+ * a hair under the gate, so the state lines never appeared.
+ *
+ * Zoom is the wrong measure anyway. The map COVERs its card, so at the same `scale` the standard
+ * projection spends far more pixels per degree than the azimuthal disc, which squeezes the whole
+ * globe into the card width (~3 px per degree — where state outlines really are noise). Density is
+ * what decides whether the layer helps, and fading rather than snapping keeps a pinch from popping
+ * a whole layer into existence.
+ */
+internal fun stateBorderAlpha(pxPerLonDegree: Float): Float = when {
+    pxPerLonDegree <= STATE_BORDER_MIN_PX_PER_DEG -> 0f
+    pxPerLonDegree >= STATE_BORDER_FULL_PX_PER_DEG -> 1f
+    else -> (pxPerLonDegree - STATE_BORDER_MIN_PX_PER_DEG) /
+        (STATE_BORDER_FULL_PX_PER_DEG - STATE_BORDER_MIN_PX_PER_DEG)
+}
+
+/**
+ * Basemap density (longitude px per degree) of the azimuthal disc: the disc's radius spans a
+ * quarter of the globe's circumference — [azProject] puts the antipode (180° away) at the rim —
+ * so `r * scale` pixels cover 180°.
+ */
+internal fun azimuthalPxPerLonDegree(discRadiusPx: Float, scale: Float): Float =
+    discRadiusPx * scale / 180f
 
 /** Stroke a set of lon/lat rings through the equirectangular viewport (borders, no fill). */
 private fun DrawScope.drawEquirectRings(

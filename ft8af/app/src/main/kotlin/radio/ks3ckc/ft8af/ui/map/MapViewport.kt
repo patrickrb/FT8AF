@@ -47,6 +47,15 @@ internal class EquirectViewport(
     val worldPxW: Float = baseUniform * 2f * userScale
     val worldPxH: Float = baseUniform * 1f * userScale
 
+    /**
+     * Longitude pixels per degree at the current zoom — how much screen the map spends on a
+     * degree of longitude. The world is [worldPxW] px wide and spans 360°, so this is the honest
+     * measure of how much detail the basemap can carry (the raw [userScale] is not: COVER already
+     * blows the world up past the canvas at zoom 1, and by different amounts on a tall phone and a
+     * wide tablet). Drives the state-border fade — see `stateBorderAlpha`.
+     */
+    val pxPerLonDegree: Float get() = worldPxW / 360f
+
     /** Project a normalized point (from [equirectProject]) to canvas pixels. */
     fun project(p: ProjectedPoint): Offset {
         val cx = canvasW / 2f
