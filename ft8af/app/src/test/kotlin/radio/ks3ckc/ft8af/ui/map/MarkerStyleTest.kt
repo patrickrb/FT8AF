@@ -84,7 +84,7 @@ class MarkerStyleTest {
         // Tolerance covers Compose Color's 8-bit alpha quantization (~1/255 ≈ 0.004).
         val tooLow = snrTint(radio.ks3ckc.ft8af.theme.Signal, -100)
         val tooHigh = snrTint(radio.ks3ckc.ft8af.theme.Signal, 100)
-        assertThat(tooLow.alpha).isWithin(0.01f).of(0.45f)
+        assertThat(tooLow.alpha).isWithin(0.01f).of(0.78f)
         assertThat(tooHigh.alpha).isWithin(0.01f).of(1.0f)
     }
 

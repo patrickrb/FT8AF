@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -22,10 +23,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -73,6 +77,7 @@ import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import kotlin.math.PI
 import kotlin.math.acos
+import kotlin.math.roundToInt
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -241,14 +246,24 @@ fun MapScreen(mainViewModel: MainViewModel) {
     var pskFilter by rememberSaveable(stateSaver = PskFilterSaver) { mutableStateOf(PskFilter()) }
     var filterSheetOpen by rememberSaveable { mutableStateOf(false) }
 
+    // Layer chips (concept 4c): Decodes and Worked partition the station markers;
+    // PSK spots is the existing PSK Reporter overlay. Decodes on by default.
+    var decodesLayer by rememberSaveable { mutableStateOf(true) }
+    var workedLayer by rememberSaveable { mutableStateOf(false) }
+    // Map-options menu (projection + gray line) anchored to the header gear.
+    var mapMenuOpen by remember { mutableStateOf(false) }
+
     // Gray-line (day/night terminator) overlay. On by default — it's a passive,
     // translucent shade that HF operators use to spot enhanced-propagation paths.
     // `nowMillis` ticks once a minute so the terminator creeps across the map in
     // real time; the Sun moves ~0.25°/min, far slower than the tick.
     var grayLineEnabled by rememberSaveable { mutableStateOf(GeneralVariables.grayLineEnabled) }
+    // Ticks once a minute for the whole screen's lifetime — drives both the
+    // gray-line terminator creep (when enabled) and the header info pill's
+    // "greyline in Xh Ym" countdown (which is shown regardless of the overlay).
     var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(grayLineEnabled) {
-        while (grayLineEnabled) {
+    LaunchedEffect(Unit) {
+        while (true) {
             nowMillis = System.currentTimeMillis()
             delay(60_000L)
         }
@@ -266,10 +281,14 @@ fun MapScreen(mainViewModel: MainViewModel) {
     var mapScale by rememberSaveable { mutableStateOf(1f) }
     var mapPanX by rememberSaveable { mutableStateOf(0f) }
     var mapPanY by rememberSaveable { mutableStateOf(0f) }
+    // Once the operator pinches/pans/zooms, stop auto-framing so we don't yank the
+    // view back. Reset on projection change so the new projection re-frames.
+    var userAdjustedView by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(viewMode) {
         mapScale = 1f
         mapPanX = 0f
         mapPanY = 0f
+        userAdjustedView = false
     }
 
     // PSK Reporter polling — fires immediately on enter and every 5 min while enabled.
@@ -407,46 +426,139 @@ fun MapScreen(mainViewModel: MainViewModel) {
         }
     }
 
-    // Full-bleed map with floating control overlays — pinch to zoom, drag to pan,
-    // double-tap to toggle 2× zoom in/out.
-    Box(
+    // Redesign (concept 4c): header + layer chips above an inset, rounded map card.
+    // Only the station markers matching the active layer chips are drawn.
+    val bandLabel = freqHzToBand(GeneralVariables.band)?.label
+    val hasGrid = !myGrid.isNullOrEmpty()
+    val visibleStations = remember(stations, decodesLayer, workedLayer) {
+        stations.filter { isStationVisible(it.isWorked, decodesLayer, workedLayer) }
+    }
+    val workedCount = remember(stations) { stations.count { it.isWorked } }
+
+    // Auto-frame the map to the region that has markers (plus the operator), so the
+    // canvas fills with the active area instead of a mostly-empty world. Runs only
+    // on the standard projection and only until the operator adjusts the view; the
+    // bounds key re-frames when the spread of markers meaningfully changes.
+    val fitPoints = remember(visibleStations, opLatLng) {
+        val pts = visibleStations.map { it.lat to it.lon }.toMutableList()
+        opLatLng?.let { pts.add(it.latitude to it.longitude) }
+        pts
+    }
+    val fitBoundsKey = remember(fitPoints) {
+        if (fitPoints.isEmpty()) {
+            ""
+        } else {
+            "${fitPoints.minOf { it.first }.roundToInt()},${fitPoints.maxOf { it.first }.roundToInt()}," +
+                "${fitPoints.minOf { it.second }.roundToInt()},${fitPoints.maxOf { it.second }.roundToInt()}"
+        }
+    }
+    LaunchedEffect(canvasSize, viewMode, fitBoundsKey, userAdjustedView) {
+        if (!userAdjustedView && viewMode == MapViewMode.STANDARD &&
+            canvasSize.width > 0 && canvasSize.height > 0 && fitPoints.isNotEmpty()
+        ) {
+            fitEquirectView(
+                fitPoints,
+                canvasSize.width.toFloat(),
+                canvasSize.height.toFloat(),
+                MAP_MIN_ZOOM,
+                MAP_MAX_ZOOM,
+            )?.let { fit ->
+                mapScale = fit.scale
+                mapPanX = fit.panX
+                mapPanY = fit.panY
+            }
+        }
+    }
+
+    Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BgApp)
-            .onSizeChanged { canvasSize = it }
-            .pointerInput(viewMode) {
-                detectTransformGestures { _, panDelta, zoom, _ ->
-                    val newScale = (mapScale * zoom).coerceIn(MAP_MIN_ZOOM, MAP_MAX_ZOOM)
-                    val clamped = clampPan(mapPanX + panDelta.x, mapPanY + panDelta.y, newScale)
-                    mapPanX = clamped.x
-                    mapPanY = clamped.y
-                    mapScale = newScale
-                }
-            }
-            .pointerInput(viewMode) {
-                detectTapGestures(
-                    onDoubleTap = { tap ->
-                        // Toggle between 1× and ZOOM_STEP×, zooming around the tap point so
-                        // the tapped feature stays under the finger.
-                        val target = if (mapScale < MAP_ZOOM_STEP * 0.95f) MAP_ZOOM_STEP else 1f
-                        val cx = size.width / 2f
-                        val cy = size.height / 2f
-                        val factor = target / mapScale
-                        val newPanX = (1f - factor) * (tap.x - cx) + factor * mapPanX
-                        val newPanY = (1f - factor) * (tap.y - cy) + factor * mapPanY
-                        val clamped = clampPan(newPanX, newPanY, target)
-                        mapPanX = clamped.x
-                        mapPanY = clamped.y
-                        mapScale = target
-                    },
+            .background(BgApp),
+    ) {
+        MapHeader(
+            decoded = stations.size,
+            worked = workedCount,
+            viewMode = viewMode,
+            grayLineEnabled = grayLineEnabled,
+            menuOpen = mapMenuOpen,
+            onMenuOpen = { mapMenuOpen = true },
+            onMenuDismiss = { mapMenuOpen = false },
+            onProjectionChange = { viewMode = it },
+            onGrayLineToggle = { newVal ->
+                grayLineEnabled = newVal
+                GeneralVariables.grayLineEnabled = newVal
+                mainViewModel.databaseOpr.writeConfig(
+                    "grayLineEnabled",
+                    if (newVal) "1" else "0",
+                    null,
                 )
             },
-    ) {
+        )
+
+        LayerChipRow(
+            decodesOn = decodesLayer,
+            onDecodes = { decodesLayer = !decodesLayer },
+            pskOn = pskOverlayEnabled,
+            onPsk = { newVal ->
+                pskOverlayEnabled = newVal
+                if (!newVal) filterSheetOpen = false
+                GeneralVariables.pskOverlayEnabled = newVal
+                mainViewModel.databaseOpr.writeConfig(
+                    "pskOverlayEnabled",
+                    if (newVal) "1" else "0",
+                    null,
+                )
+            },
+            workedOn = workedLayer,
+            onWorked = { workedLayer = !workedLayer },
+        )
+
+        // Inset, rounded map card — the map fills it; controls float inside.
+        // Pinch to zoom, drag to pan, double-tap to toggle 2× zoom in/out.
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 14.dp, bottom = 14.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(BgSurface)
+                .border(1.dp, Color(0x1F94A3B8), RoundedCornerShape(18.dp))
+                .onSizeChanged { canvasSize = it }
+                .pointerInput(viewMode) {
+                    detectTransformGestures { _, panDelta, zoom, _ ->
+                        userAdjustedView = true
+                        val newScale = (mapScale * zoom).coerceIn(MAP_MIN_ZOOM, MAP_MAX_ZOOM)
+                        val clamped = clampPan(mapPanX + panDelta.x, mapPanY + panDelta.y, newScale)
+                        mapPanX = clamped.x
+                        mapPanY = clamped.y
+                        mapScale = newScale
+                    }
+                }
+                .pointerInput(viewMode) {
+                    detectTapGestures(
+                        onDoubleTap = { tap ->
+                            userAdjustedView = true
+                            // Toggle between 1× and ZOOM_STEP×, zooming around the tap point so
+                            // the tapped feature stays under the finger.
+                            val target = if (mapScale < MAP_ZOOM_STEP * 0.95f) MAP_ZOOM_STEP else 1f
+                            val cx = size.width / 2f
+                            val cy = size.height / 2f
+                            val factor = target / mapScale
+                            val newPanX = (1f - factor) * (tap.x - cx) + factor * mapPanX
+                            val newPanY = (1f - factor) * (tap.y - cy) + factor * mapPanY
+                            val clamped = clampPan(newPanX, newPanY, target)
+                            mapPanX = clamped.x
+                            mapPanY = clamped.y
+                            mapScale = target
+                        },
+                    )
+                },
+        ) {
         when (viewMode) {
             MapViewMode.STANDARD -> StandardMapCanvas(
                 opLat = opLat,
                 opLon = opLon,
-                stations = stations,
+                stations = visibleStations,
                 pskSpots = pskSpots,
                 connectionLines = connectionLines,
                 nightRing = nightRing,
@@ -460,7 +572,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
             MapViewMode.AZIMUTHAL -> AzimuthalMapCanvas(
                 opLat = opLat,
                 opLon = opLon,
-                stations = stations,
+                stations = visibleStations,
                 pskSpots = pskSpots,
                 connectionLines = connectionLines,
                 selectedCallsign = selectedCallsign,
@@ -472,10 +584,35 @@ fun MapScreen(mainViewModel: MainViewModel) {
             )
         }
 
-        // Right edge: zoom controls.
-        ZoomControls(
+        // Top-left: band + gray-line countdown info pill.
+        MapInfoPill(
+            bandLabel = bandLabel,
+            opLat = opLat,
+            opLon = opLon,
+            hasGrid = hasGrid,
+            nowMillis = nowMillis,
+            pskError = if (pskOverlayEnabled) pskError else null,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(12.dp),
+        )
+
+        // Top-right: PSK filter pill (only when the PSK layer is on).
+        if (pskOverlayEnabled) {
+            FilterPill(
+                active = filterSheetOpen,
+                onClick = { filterSheetOpen = !filterSheetOpen },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(12.dp),
+            )
+        }
+
+        // Right edge: zoom + recenter ("Me"), 44dp targets for thumb reach.
+        MapEdgeControls(
             scale = mapScale,
             onZoomIn = {
+                userAdjustedView = true
                 val newScale = (mapScale * MAP_ZOOM_STEP).coerceAtMost(MAP_MAX_ZOOM)
                 if (newScale != mapScale) {
                     val factor = newScale / mapScale
@@ -486,6 +623,7 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 }
             },
             onZoomOut = {
+                userAdjustedView = true
                 val newScale = (mapScale / MAP_ZOOM_STEP).coerceAtLeast(MAP_MIN_ZOOM)
                 val factor = newScale / mapScale
                 val clamped = clampPan(mapPanX * factor, mapPanY * factor, newScale)
@@ -493,75 +631,27 @@ fun MapScreen(mainViewModel: MainViewModel) {
                 mapPanY = clamped.y
                 mapScale = newScale
             },
-            onReset = {
-                mapScale = 1f
-                mapPanX = 0f
-                mapPanY = 0f
+            onRecenter = {
+                userAdjustedView = true
+                if (viewMode == MapViewMode.STANDARD) {
+                    val w = canvasSize.width.toFloat()
+                    val h = canvasSize.height.toFloat()
+                    if (w > 0f && h > 0f && opLatLng != null) {
+                        val off = EquirectViewport(w, h, mapScale).panToCenter(opLat, opLon)
+                        mapPanX = off.x
+                        mapPanY = off.y
+                    }
+                } else {
+                    // Azimuthal is operator-centred already — just undo zoom/pan.
+                    mapScale = 1f
+                    mapPanX = 0f
+                    mapPanY = 0f
+                }
             },
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .padding(8.dp),
+                .padding(10.dp),
         )
-
-        // Top-left: grid + station/heard counts + projection (floating chip).
-        MapInfoChip(
-            myGrid = myGrid,
-            stationCount = stations.size,
-            pskOverlayEnabled = pskOverlayEnabled,
-            pskSpotCount = pskSpots.size,
-            pskError = pskError,
-            viewMode = viewMode,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(12.dp),
-        )
-
-        // Top-right: filter button (when overlay on) + PSK overlay toggle + STD/AZ toggle.
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (pskOverlayEnabled) {
-                FilterPill(active = filterSheetOpen, onClick = { filterSheetOpen = !filterSheetOpen })
-                Spacer(modifier = Modifier.width(6.dp))
-            }
-            // Gray-line toggle — only the equirectangular map draws the terminator.
-            if (viewMode == MapViewMode.STANDARD) {
-                GrayLineToggle(
-                    enabled = grayLineEnabled,
-                    onToggle = { newVal ->
-                        grayLineEnabled = newVal
-                        GeneralVariables.grayLineEnabled = newVal
-                        mainViewModel.databaseOpr.writeConfig(
-                            "grayLineEnabled",
-                            if (newVal) "1" else "0",
-                            null,
-                        )
-                    },
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-            }
-            PskOverlayToggle(
-                enabled = pskOverlayEnabled,
-                onToggle = { newVal ->
-                    pskOverlayEnabled = newVal
-                    if (!newVal) filterSheetOpen = false
-                    GeneralVariables.pskOverlayEnabled = newVal
-                    mainViewModel.databaseOpr.writeConfig(
-                        "pskOverlayEnabled",
-                        if (newVal) "1" else "0",
-                        null,
-                    )
-                },
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            MapViewToggle(
-                mode = viewMode,
-                onModeChange = { viewMode = it },
-            )
-        }
 
         // Bottom: the PSK filter sheet takes the bottom slot when open; otherwise the
         // selected-station card, or — when the "Heard me" overlay is on and nothing is
@@ -603,6 +693,243 @@ fun MapScreen(mainViewModel: MainViewModel) {
                     .fillMaxWidth(),
             )
         }
+        } // map card Box
+    } // Column
+}
+
+// ---------------------------------------------------------------------------
+// Redesign (concept 4c): header, layer chips, info pill, edge controls
+// ---------------------------------------------------------------------------
+
+private val BorderSubtle = Color(0x2494A3B8)
+
+@Composable
+private fun MapHeader(
+    decoded: Int,
+    worked: Int,
+    viewMode: MapViewMode,
+    grayLineEnabled: Boolean,
+    menuOpen: Boolean,
+    onMenuOpen: () -> Unit,
+    onMenuDismiss: () -> Unit,
+    onProjectionChange: (MapViewMode) -> Unit,
+    onGrayLineToggle: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 18.dp, end = 12.dp, top = 14.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column {
+            Text(
+                text = stringResource(R.string.map_title),
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 24.sp,
+            )
+            Text(
+                text = stringResource(R.string.map_header_subtitle, decoded, worked),
+                color = TextMuted,
+                fontSize = 12.5.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        Box {
+            val menuCd = stringResource(R.string.map_menu_cd)
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(BgSurface2)
+                    .border(1.dp, BorderSubtle, RoundedCornerShape(14.dp))
+                    .clickable(onClick = onMenuOpen)
+                    .semantics { contentDescription = menuCd },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = "⚙", color = TextMuted, fontSize = 18.sp)
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = onMenuDismiss) {
+                val projLabel = if (viewMode == MapViewMode.STANDARD) {
+                    stringResource(R.string.map_projection_equirectangular)
+                } else {
+                    stringResource(R.string.map_projection_azimuthal)
+                }
+                DropdownMenuItem(
+                    text = { Text("${stringResource(R.string.map_option_projection)}: $projLabel") },
+                    onClick = {
+                        onProjectionChange(
+                            if (viewMode == MapViewMode.STANDARD) MapViewMode.AZIMUTHAL else MapViewMode.STANDARD,
+                        )
+                    },
+                )
+                DropdownMenuItem(
+                    text = {
+                        val state = if (grayLineEnabled) "On" else "Off"
+                        Text("${stringResource(R.string.map_option_grayline)}: $state")
+                    },
+                    onClick = { onGrayLineToggle(!grayLineEnabled) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LayerChipRow(
+    decodesOn: Boolean,
+    onDecodes: () -> Unit,
+    pskOn: Boolean,
+    onPsk: (Boolean) -> Unit,
+    workedOn: Boolean,
+    onWorked: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        LayerChip(stringResource(R.string.map_layer_decodes), decodesOn, Accent, onDecodes)
+        LayerChip(stringResource(R.string.map_layer_psk), pskOn, Signal) { onPsk(!pskOn) }
+        LayerChip(stringResource(R.string.map_layer_worked), workedOn, StatusConfirmed, onWorked)
+    }
+}
+
+@Composable
+private fun LayerChip(label: String, active: Boolean, accent: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .height(44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (active) accent.copy(alpha = 0.14f) else BgSurface2)
+            .border(
+                1.dp,
+                if (active) accent.copy(alpha = 0.34f) else BorderSubtle,
+                RoundedCornerShape(12.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (active) accent else TextMuted,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+            fontSize = 12.5.sp,
+        )
+    }
+}
+
+@Composable
+private fun MapInfoPill(
+    bandLabel: String?,
+    opLat: Double,
+    opLon: Double,
+    hasGrid: Boolean,
+    nowMillis: Long,
+    pskError: String?,
+    modifier: Modifier = Modifier,
+) {
+    val band = bandLabel?.takeIf { it.isNotEmpty() } ?: "—"
+    val text = if (hasGrid) {
+        val mins = remember(opLat, opLon, nowMillis) { minutesToGrayLine(opLat, opLon, nowMillis) }
+        if (mins != null) {
+            stringResource(R.string.map_greyline_in, band, formatHoursMinutes(mins))
+        } else {
+            band
+        }
+    } else {
+        band
+    }
+    GlassCard(modifier = modifier) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
+            Text(
+                text = text,
+                color = TextMuted,
+                fontFamily = GeistMonoFamily,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            if (pskError != null) {
+                Text(
+                    text = stringResource(R.string.map_psk_error, pskError),
+                    color = StatusNew,
+                    fontSize = 10.sp,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapEdgeControls(
+    scale: Float,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    onRecenter: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val canZoomIn = scale < MAP_MAX_ZOOM - 0.001f
+    val canZoomOut = scale > MAP_MIN_ZOOM + 0.001f
+    val meCd = stringResource(R.string.map_ctrl_me_cd)
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        EdgeButton(enabled = canZoomIn, onClick = onZoomIn) {
+            Text(
+                text = "+",
+                color = if (canZoomIn) TextPrimary else TextFaint,
+                fontFamily = GeistMonoFamily,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        EdgeButton(enabled = canZoomOut, onClick = onZoomOut) {
+            Text(
+                text = "−",
+                color = if (canZoomOut) TextPrimary else TextFaint,
+                fontFamily = GeistMonoFamily,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        EdgeButton(
+            enabled = true,
+            onClick = onRecenter,
+            modifier = Modifier.semantics { contentDescription = meCd },
+        ) {
+            Text(
+                text = stringResource(R.string.map_ctrl_me),
+                color = Accent,
+                fontFamily = GeistMonoFamily,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EdgeButton(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Box(
+        modifier = modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xBF07090F))
+            .border(1.dp, Color(0x2994A3B8), RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        content()
     }
 }
 
@@ -611,9 +938,9 @@ fun MapScreen(mainViewModel: MainViewModel) {
 // ---------------------------------------------------------------------------
 
 @Composable
-private fun FilterPill(active: Boolean, onClick: () -> Unit) {
+private fun FilterPill(active: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(8.dp))
             .background(if (active) Accent else BgSurface3)
             .clickable(onClick = onClick)
@@ -972,6 +1299,12 @@ private fun AzimuthalMapCanvas(
     val landRings by produceState<List<FloatArray>?>(initialValue = null, context) {
         value = withContext(Dispatchers.IO) { WorldOutlines.load(context) }
     }
+    val countryRings by produceState<List<FloatArray>?>(initialValue = null, context) {
+        value = withContext(Dispatchers.IO) { WorldCountryOutlines.load(context) }
+    }
+    val stateRings by produceState<List<FloatArray>?>(initialValue = null, context) {
+        value = withContext(Dispatchers.IO) { UsStateOutlines.load(context) }
+    }
 
     Canvas(modifier = modifier) {
         val cx = size.width / 2f
@@ -992,6 +1325,16 @@ private fun AzimuthalMapCanvas(
         // Land — Natural Earth 110m vector outlines projected via azProject
         landRings?.let { rings -> drawAzimuthalLand(rings, opLat, opLon, cx, cy, r, scale, panX, panY) }
 
+        // National borders over the land; US state borders once zoomed in.
+        countryRings?.let { rings ->
+            drawAzimuthalRings(rings, opLat, opLon, cx, cy, r, scale, panX, panY, CountryBorderColor, 0.7f)
+        }
+        if (showStateBorders(scale)) {
+            stateRings?.let { rings ->
+                drawAzimuthalRings(rings, opLat, opLon, cx, cy, r, scale, panX, panY, StateBorderColor, 0.5f)
+            }
+        }
+
         // Range rings (scale with zoom, follow operator on pan)
         drawRangeRings(opX, opY, r, scale)
 
@@ -1011,12 +1354,11 @@ private fun AzimuthalMapCanvas(
             drawConnectionLine(opX, opY, ex, ey, line.style, line.color)
         }
 
-        // Operator center marker
-        drawCircle(
-            color = Accent,
-            radius = 4f,
-            center = Offset(opX, opY),
-        )
+        // Operator center marker — a bold amber "you are here" dot with a glow halo.
+        drawCircle(color = Accent.copy(alpha = 0.22f), radius = 20f, center = Offset(opX, opY))
+        drawCircle(color = Accent.copy(alpha = 0.5f), radius = 11f, center = Offset(opX, opY))
+        drawCircle(color = Accent, radius = 6f, center = Offset(opX, opY))
+        drawCircle(color = BgApp, radius = 6f, center = Offset(opX, opY), style = Stroke(width = 1.6f))
 
         // PSK Reporter spots — drawn before stations so decoded markers layer on top.
         // Square shape distinguishes them from circular station markers.
@@ -1072,7 +1414,7 @@ private fun AzimuthalMapCanvas(
                 isSelected = isSelected,
                 currentZoom = scale,
             )
-            val glowR = if (isSelected) 12f else 8f
+            val glowR = if (isSelected) 18f else 13f
 
             // Pulse rings: 2 expanding rings per station, staggered by 0.5 phase. Phase derived from
             // shared infinite transition with per-station offset (no per-marker InfiniteTransition).
@@ -1103,9 +1445,14 @@ private fun AzimuthalMapCanvas(
                 )
             }
 
-            // Glow
+            // Glow — a layered halo so each marker reads clearly over the basemap.
             drawCircle(
-                color = style.fill.copy(alpha = if (isSelected) 0.25f else 0.15f),
+                color = style.fill.copy(alpha = if (isSelected) 0.28f else 0.20f),
+                radius = glowR * 1.6f,
+                center = Offset(sx, sy),
+            )
+            drawCircle(
+                color = style.fill.copy(alpha = if (isSelected) 0.55f else 0.40f),
                 radius = glowR,
                 center = Offset(sx, sy),
             )
@@ -1174,6 +1521,12 @@ private fun StandardMapCanvas(
     val landRings by produceState<List<FloatArray>?>(initialValue = null, context) {
         value = withContext(Dispatchers.IO) { WorldOutlines.load(context) }
     }
+    val countryRings by produceState<List<FloatArray>?>(initialValue = null, context) {
+        value = withContext(Dispatchers.IO) { WorldCountryOutlines.load(context) }
+    }
+    val stateRings by produceState<List<FloatArray>?>(initialValue = null, context) {
+        value = withContext(Dispatchers.IO) { UsStateOutlines.load(context) }
+    }
 
     Canvas(modifier = modifier) {
         val vp = EquirectViewport(size.width, size.height, scale, panX, panY)
@@ -1183,6 +1536,12 @@ private fun StandardMapCanvas(
 
         // Land — Natural Earth 110m vector outlines (drawn once polygons are loaded)
         landRings?.let { rings -> drawWorldLand(rings, vp) }
+
+        // National borders over the land; US state borders once zoomed in.
+        countryRings?.let { rings -> drawEquirectRings(rings, vp, CountryBorderColor, 0.7f) }
+        if (showStateBorders(scale)) {
+            stateRings?.let { rings -> drawEquirectRings(rings, vp, StateBorderColor, 0.5f) }
+        }
 
         // Lat/lon grid (over land so it stays visible across continents)
         drawEquirectGrid(vp)
@@ -1195,16 +1554,11 @@ private fun StandardMapCanvas(
         val opPos = vp.projectLatLon(opLat, opLon)
         val opX = opPos.x
         val opY = opPos.y
-        drawCircle(
-            color = Accent.copy(alpha = 0.25f),
-            radius = 8f,
-            center = Offset(opX, opY),
-        )
-        drawCircle(
-            color = Accent,
-            radius = 4f,
-            center = Offset(opX, opY),
-        )
+        // Operator marker — a bold amber "you are here" dot with a glow halo.
+        drawCircle(color = Accent.copy(alpha = 0.22f), radius = 20f, center = Offset(opX, opY))
+        drawCircle(color = Accent.copy(alpha = 0.5f), radius = 11f, center = Offset(opX, opY))
+        drawCircle(color = Accent, radius = 6f, center = Offset(opX, opY))
+        drawCircle(color = BgApp, radius = 6f, center = Offset(opX, opY), style = Stroke(width = 1.6f))
 
         // Connection lines (operator -> TX target / stations calling us). Drawn under
         // the station markers; both endpoints project through the viewport so they
@@ -1258,7 +1612,7 @@ private fun StandardMapCanvas(
                 isSelected = isSelected,
                 currentZoom = scale,
             )
-            val glowR = if (isSelected) 12f else 8f
+            val glowR = if (isSelected) 18f else 13f
 
             // Pulse rings (same pattern as azimuthal: shared transition + per-station phase offset)
             val baseAmp = if (isSelected) 1f else 0.55f
@@ -1288,9 +1642,14 @@ private fun StandardMapCanvas(
                 )
             }
 
-            // Glow
+            // Glow — a layered halo so each marker reads clearly over the basemap.
             drawCircle(
-                color = style.fill.copy(alpha = if (isSelected) 0.25f else 0.15f),
+                color = style.fill.copy(alpha = if (isSelected) 0.28f else 0.20f),
+                radius = glowR * 1.6f,
+                center = Offset(sx, sy),
+            )
+            drawCircle(
+                color = style.fill.copy(alpha = if (isSelected) 0.55f else 0.40f),
                 radius = glowR,
                 center = Offset(sx, sy),
             )
@@ -1465,6 +1824,40 @@ private fun DrawScope.drawWorldLand(rings: List<FloatArray>, vp: EquirectViewpor
     drawPath(path, color = Color(0x9094A3B8), style = Stroke(width = 0.75f))   // outline
 }
 
+// Border strokes drawn over the dissolved land layer so the basemap reads as a
+// real bordered map. National borders are always on; US state borders only when
+// zoomed in enough to make sense of them (they'd be noise at world scale).
+private val CountryBorderColor = Color(0x7B94A3B8)
+private val StateBorderColor = Color(0x4694A3B8)
+internal const val STATE_BORDER_ZOOM = 3f
+
+/** State borders are decluttered until the map is zoomed past [STATE_BORDER_ZOOM]. */
+internal fun showStateBorders(scale: Float): Boolean = scale >= STATE_BORDER_ZOOM
+
+/** Stroke a set of lon/lat rings through the equirectangular viewport (borders, no fill). */
+private fun DrawScope.drawEquirectRings(
+    rings: List<FloatArray>,
+    vp: EquirectViewport,
+    color: Color,
+    width: Float,
+) {
+    val cx = vp.canvasW / 2f
+    val cy = vp.canvasH / 2f
+    val sxUnit = vp.worldPxW / 2f
+    val syUnit = vp.worldPxH / 2f
+    fun px(lon: Float) = cx + (lon / 180f) * sxUnit + vp.panX
+    fun py(lat: Float) = cy + (-lat / 90f) * syUnit + vp.panY
+
+    val path = Path()
+    for (ring in rings) {
+        val plotted = forEachRingVertex(ring, minVertices = 2) { lon, lat, first ->
+            if (first) path.moveTo(px(lon), py(lat)) else path.lineTo(px(lon), py(lat))
+        }
+        if (plotted) path.close()
+    }
+    drawPath(path, color = color, style = Stroke(width = width))
+}
+
 /**
  * Draw the gray-line overlay on the equirectangular map: fill the night side
  * with a translucent wash and stroke the terminator itself. [ring] is the flat
@@ -1542,6 +1935,38 @@ private fun DrawScope.drawAzimuthalLand(
         drawPath(land, color = Color(0x4094A3B8))
         drawPath(land, color = Color(0x9094A3B8), style = Stroke(width = 0.75f))
     }
+}
+
+/** Stroke lon/lat rings through the azimuthal projection, clipped to the map disc. */
+private fun DrawScope.drawAzimuthalRings(
+    rings: List<FloatArray>,
+    opLat: Double,
+    opLon: Double,
+    cx: Float,
+    cy: Float,
+    r: Float,
+    scale: Float,
+    panX: Float,
+    panY: Float,
+    color: Color,
+    width: Float,
+) {
+    val path = Path()
+    for (ring in rings) {
+        val plotted = forEachRingVertex(ring, minVertices = 2) { lonF, latF, first ->
+            val proj = azProject(opLat, opLon, latF.toDouble(), lonF.toDouble())
+            val px = cx + proj.x * r * scale + panX
+            val py = cy + proj.y * r * scale + panY
+            if (first) path.moveTo(px, py) else path.lineTo(px, py)
+        }
+        if (plotted) path.close()
+    }
+    val disc = Path().apply {
+        addOval(androidx.compose.ui.geometry.Rect(
+            left = cx - r, top = cy - r, right = cx + r, bottom = cy + r,
+        ))
+    }
+    clipPath(disc) { drawPath(path, color = color, style = Stroke(width = width)) }
 }
 
 private fun DrawScope.drawRangeRings(cx: Float, cy: Float, r: Float, scale: Float = 1f) {
@@ -1632,37 +2057,64 @@ private fun SelectedStationCard(
 ) {
     val distKm = greatCircleKm(opLat, opLon, station.lat, station.lon)
     val bearing = computeBearing(opLat, opLon, station.lat, station.lon)
+    val initials = station.callsign.filter { it.isLetterOrDigit() }.take(2).uppercase()
 
-    GlassCard(modifier = modifier.clickable { onDismiss() }) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+    GlassCard(modifier = modifier) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // Avatar placeholder (callsign initials) \u2014 matches the 4c station card.
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(BgSurface2)
+                    .border(1.dp, station.color.copy(alpha = 0.4f), RoundedCornerShape(50)),
+                contentAlignment = Alignment.Center,
             ) {
+                Text(
+                    text = initials,
+                    color = station.color,
+                    fontFamily = GeistMonoFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = station.callsign,
                     color = station.color,
                     fontFamily = GeistMonoFamily,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
+                    fontSize = 17.sp,
                 )
                 Text(
-                    text = station.grid,
+                    text = "${station.grid} \u00B7 ${MaidenheadGrid.formatDist(distKm)} \u00B7 ${String.format("%.0f", bearing)}\u00B0 \u00B7 ${station.snr} dB",
                     color = TextMuted,
-                    fontFamily = GeistMonoFamily,
-                    fontSize = 12.sp,
+                    fontSize = 11.5.sp,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            // Details button \u2014 closes the card for now; a follow-up can open the
+            // same QSO sheet the decode list uses.
+            Box(
+                modifier = Modifier
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(BgSurface2)
+                    .border(1.dp, BorderSubtle, RoundedCornerShape(12.dp))
+                    .clickable(onClick = onDismiss)
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center,
             ) {
-                InfoChip(MaidenheadGrid.formatDist(distKm), stringResource(R.string.map_info_distance))
-                InfoChip("${String.format("%.0f", bearing)}\u00B0", stringResource(R.string.map_info_bearing))
-                InfoChip("${station.snr} dB", stringResource(R.string.map_info_snr))
+                Text(
+                    text = stringResource(R.string.map_details),
+                    color = TextPrimary,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.5.sp,
+                )
             }
         }
     }
