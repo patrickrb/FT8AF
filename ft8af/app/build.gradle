@@ -109,6 +109,15 @@ android {
         debug{
             versionNameSuffix '-dev'
             buildConfigField("String", "apkBuildTime", "\"${currentTime}\"")
+            // Band Advisor rollout flags (radio.ks3ckc.ft8af.flags): build-time
+            // defaults, overridable per-developer from the debug flag screen and
+            // by the cached remote feature configuration. Debug ships enabled so
+            // the feature is exercised during development; release ships disabled
+            // until intentionally rolled out. These are rollout controls, not
+            // access control — see FeatureFlag.kt.
+            buildConfigField "boolean", "FEATURE_BAND_ADVISOR_DEFAULT", "true"
+            buildConfigField "boolean", "FEATURE_PERSONAL_PSK_ANALYTICS_DEFAULT", "true"
+            buildConfigField "boolean", "FEATURE_PROPAGATION_ALERTS_DEFAULT", "true"
         }
         release {
             if (project.hasProperty('RELEASE_STORE_FILE')) {
@@ -123,6 +132,11 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             buildConfigField("String", "apkBuildTime", "\"${currentTime}\"")
+            // Off in release until each feature is intentionally rolled out via
+            // the remote feature configuration (see FeatureFlag.kt).
+            buildConfigField "boolean", "FEATURE_BAND_ADVISOR_DEFAULT", "false"
+            buildConfigField "boolean", "FEATURE_PERSONAL_PSK_ANALYTICS_DEFAULT", "false"
+            buildConfigField "boolean", "FEATURE_PROPAGATION_ALERTS_DEFAULT", "false"
 
         }
     }

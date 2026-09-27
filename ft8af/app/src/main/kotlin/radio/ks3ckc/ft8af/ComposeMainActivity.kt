@@ -37,6 +37,7 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import radio.ks3ckc.ft8af.crash.CrashReporting
+import radio.ks3ckc.ft8af.flags.FeatureFlags
 import radio.ks3ckc.ft8af.sync.QsoAutoSync
 import radio.ks3ckc.ft8af.util.bluetoothAdapter
 import com.k1af.ft8af.service.RxForegroundService
@@ -193,6 +194,13 @@ class ComposeMainActivity : AppCompatActivity() {
             register()
             syncNow("app-start")
         }
+
+        // Opportunistic remote feature-config refresh (fire-and-forget on IO,
+        // internally rate-limited). Lives here rather than Application.onCreate
+        // so process start — including Robolectric test runs — never attempts
+        // network. A failure changes nothing: flags keep their cached/default
+        // values.
+        FeatureFlags.refreshRemoteConfigAsync()
 
         // Set Compose UI — splash plays once per cold start, then crossfades into the app.
         setContent {
