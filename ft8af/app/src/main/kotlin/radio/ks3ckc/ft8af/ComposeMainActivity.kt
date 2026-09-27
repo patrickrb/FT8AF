@@ -37,6 +37,8 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import radio.ks3ckc.ft8af.crash.CrashReporting
+import radio.ks3ckc.ft8af.bandadvisor.alerts.PropagationAlertNotifier
+import radio.ks3ckc.ft8af.bandadvisor.alerts.PropagationAlertScheduler
 import radio.ks3ckc.ft8af.flags.FeatureFlags
 import radio.ks3ckc.ft8af.sync.QsoAutoSync
 import radio.ks3ckc.ft8af.util.bluetoothAdapter
@@ -202,6 +204,12 @@ class ComposeMainActivity : AppCompatActivity() {
         // values.
         FeatureFlags.refreshRemoteConfigAsync()
 
+        // Reconcile the propagation-alert background work with the current
+        // flag + preference state: schedules when both are on, and — the
+        // important direction — cancels leftover work when either turned off
+        // since the last run (e.g. a remote-config rollback).
+        PropagationAlertScheduler.sync(this)
+
         // Set Compose UI — splash plays once per cold start, then crossfades into the app.
         setContent {
             FT8AFTheme {
@@ -272,6 +280,11 @@ class ComposeMainActivity : AppCompatActivity() {
      * so the Decode screen can switch to itself and scroll to + highlight that station.
      */
     private fun handleAlertIntent(intent: Intent?) {
+        // A tapped propagation alert asks for the Band Advisor detail sheet.
+        if (intent?.getBooleanExtra(PropagationAlertNotifier.EXTRA_OPEN_ADVISOR, false) == true) {
+            fileLog("handleAlertIntent: open band advisor")
+            PropagationAlertNotifier.openAdvisorRequest.postValue(System.currentTimeMillis())
+        }
         val callsign = intent?.getStringExtra(
             com.k1af.ft8af.alert.DxAlertNotifier.EXTRA_CALLSIGN,
         ) ?: return

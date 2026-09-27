@@ -273,6 +273,16 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             bandAdvisor.loadPersonal(bandAdvisorScope)
         }
     }
+    // A tapped propagation-alert notification opens the advisor detail sheet
+    // (ComposeMainActivity posts the request from the notification intent).
+    val advisorOpenRequest by radio.ks3ckc.ft8af.bandadvisor.alerts.PropagationAlertNotifier
+        .openAdvisorRequest.observeAsState()
+    LaunchedEffect(advisorOpenRequest) {
+        if (advisorOpenRequest != null && FeatureFlags.isEnabled(FeatureFlag.BAND_ADVISOR)) {
+            BandAdvisorTelemetry.event("alert_opened", null)
+            showBandAdvisor = true
+        }
+    }
 
     // A tapped Needed-DX notification asks us to jump to the Decode tab (DecodeScreen
     // then scrolls to + highlights the alerted station).
