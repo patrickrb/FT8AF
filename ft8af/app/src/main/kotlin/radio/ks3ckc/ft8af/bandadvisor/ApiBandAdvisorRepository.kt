@@ -184,8 +184,6 @@ class ApiBandAdvisorRepository(
             }
         } catch (e: IOException) {
             FetchOutcome.Transport(e.message)
-        } catch (e: Exception) {
-            FetchOutcome.Transport("${e.javaClass.simpleName}: ${e.message}")
         } finally {
             conn?.disconnect()
         }

@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.charset.StandardCharsets
@@ -69,7 +70,7 @@ class RemoteFlagConfigFetcher(
             } else {
                 conn.inputStream.bufferedReader(StandardCharsets.UTF_8).use { it.readText() }
             }
-        } catch (e: Exception) {
+        } catch (e: IOException) {
             Log.d(TAG, "feature-config fetch failed: ${e.javaClass.simpleName}")
             null
         } finally {

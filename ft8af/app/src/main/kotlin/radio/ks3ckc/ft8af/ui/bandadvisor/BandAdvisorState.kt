@@ -154,13 +154,11 @@ class BandAdvisorStateHolder(private val appContext: Context) {
         state = if (cached != null) uiStateOf(cached) else BandAdvisorUiState.Loading
         if (force) BandAdvisorTelemetry.event("manual_refresh", null)
         inFlight = scope.launch {
-            val result = try {
+            // Repository contract says it never throws; belt-and-braces so a
+            // bug here can never take down the app.
+            val result = runCatching {
                 BandAdvisor.repository(appContext).recommendation(request, force)
-            } catch (e: Exception) {
-                // Repository contract says it never throws; belt-and-braces so a
-                // bug here can never take down the app.
-                AdvisorResult.Unavailable(UnavailableReason.OFFLINE, e.message)
-            }
+            }.getOrElse { AdvisorResult.Unavailable(UnavailableReason.OFFLINE, it.message) }
             state = uiStateOf(result)
             when (val s = state) {
                 is BandAdvisorUiState.Ready ->
@@ -192,15 +190,13 @@ class BandAdvisorStateHolder(private val appContext: Context) {
         if (personalInFlight?.isActive == true) return
         if (personalPanel == null) personalPanel = PersonalPanelState.Loading
         personalInFlight = scope.launch {
-            val loaded = try {
+            val loaded = runCatching {
                 loadPersonalPanel(
                     context = appContext,
                     callsign = GeneralVariables.myCallsign,
                     grid = GeneralVariables.getMyMaidenheadGrid(),
                 )
-            } catch (e: Exception) {
-                PersonalPanelState.Error
-            }
+            }.getOrElse { PersonalPanelState.Error }
             // Null = cooldown/transport skip: keep showing the previous data
             // rather than flashing an error over a perfectly good panel.
             if (loaded != null) {
