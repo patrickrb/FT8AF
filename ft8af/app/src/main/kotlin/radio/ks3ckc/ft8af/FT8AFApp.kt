@@ -814,6 +814,8 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 visible = showBandAdvisor,
                 state = bandAdvisor.state,
                 goal = bandAdvisor.goal,
+                targetRegion = bandAdvisor.targetRegion,
+                onSelectTargetRegion = { bandAdvisor.setTargetRegion(bandAdvisorScope, it) },
                 catAvailable = catState == CatConnectionState.CONNECTED,
                 nowMs = System.currentTimeMillis(),
                 personalPanel = bandAdvisor.personalPanel,

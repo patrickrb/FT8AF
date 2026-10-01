@@ -69,7 +69,7 @@ class ApiBandAdvisorRepository(
         val cachedRec = cachedRecommendation()
         if (cachedRec != null && !force &&
             freshnessOf(cachedRec, now) == Freshness.FRESH &&
-            matchesRequest(cachedRec, grid, request)
+            recommendationMatchesRequest(cachedRec, grid, request)
         ) {
             return@withContext AdvisorResult.Available(cachedRec, Freshness.FRESH, fromCache = true)
         }
@@ -77,12 +77,14 @@ class ApiBandAdvisorRepository(
         if (now < rateLimitedUntilMs) {
             return@withContext cachedOrUnavailable(
                 now,
+                grid,
+                request,
                 UnavailableReason.RATE_LIMITED,
                 "server asked us to back off",
             )
         }
         if (!force && lastAttemptMs != 0L && now - lastAttemptMs < MIN_FETCH_INTERVAL_MS) {
-            return@withContext cachedOrUnavailable(now, UnavailableReason.RATE_LIMITED, "cooldown")
+            return@withContext cachedOrUnavailable(now, grid, request, UnavailableReason.RATE_LIMITED, "cooldown")
         }
         lastAttemptMs = now
 
@@ -92,7 +94,7 @@ class ApiBandAdvisorRepository(
                 val parsed = parseBandRecommendation(outcome.body)
                 if (parsed == null) {
                     Log.w(TAG, "invalid recommendation payload")
-                    cachedOrUnavailable(now, UnavailableReason.INVALID_RESPONSE, null)
+                    cachedOrUnavailable(now, grid, request, UnavailableReason.INVALID_RESPONSE, null)
                 } else {
                     cacheStore.save(outcome.body)
                     AdvisorResult.Available(parsed, freshnessOf(parsed, now), fromCache = false)
@@ -102,10 +104,10 @@ class ApiBandAdvisorRepository(
                 if (outcome.code == 429 || outcome.code == 503) {
                     rateLimitedUntilMs = clock() + RATE_LIMIT_BACKOFF_MS
                 }
-                cachedOrUnavailable(now, UnavailableReason.HTTP_ERROR, "http ${outcome.code}")
+                cachedOrUnavailable(now, grid, request, UnavailableReason.HTTP_ERROR, "http ${outcome.code}")
             }
             is FetchOutcome.Transport ->
-                cachedOrUnavailable(now, UnavailableReason.OFFLINE, outcome.message)
+                cachedOrUnavailable(now, grid, request, UnavailableReason.OFFLINE, outcome.message)
         }
     }
 
@@ -124,23 +126,15 @@ class ApiBandAdvisorRepository(
     /** Cache hit (marked with its real freshness) beats a typed failure. */
     private fun cachedOrUnavailable(
         nowMs: Long,
+        grid: String,
+        request: AdvisorRequest,
         reason: UnavailableReason,
         detail: String?,
     ): AdvisorResult {
-        val rec = cachedRecommendation()
+        val rec = cachedRecommendation()?.takeIf { recommendationMatchesRequest(it, grid, request) }
             ?: return AdvisorResult.Unavailable(reason, detail)
         return AdvisorResult.Available(rec, freshnessOf(rec, nowMs), fromCache = true)
     }
-
-    private fun matchesRequest(
-        rec: BandRecommendation,
-        grid: String,
-        request: AdvisorRequest,
-    ): Boolean = rec.grid.equals(grid, ignoreCase = true) &&
-        rec.goal == request.goal &&
-        rec.mode.equals(request.mode, ignoreCase = true) &&
-        // Personal analytics on/off changes the payload, so a mismatch refetches.
-        (rec.callsign != null) == wantsPersonal(request)
 
     private fun wantsPersonal(request: AdvisorRequest): Boolean =
         isPlausibleCallsign(request.callsign)
@@ -200,3 +194,15 @@ class ApiBandAdvisorRepository(
             URLEncoder.encode(s, StandardCharsets.UTF_8.name())
     }
 }
+
+/** An answer to a different station, goal or target cannot satisfy this request. */
+internal fun recommendationMatchesRequest(
+    rec: BandRecommendation,
+    grid: String,
+    request: AdvisorRequest,
+): Boolean =
+    rec.grid.equals(grid, ignoreCase = true) &&
+        rec.goal == request.goal &&
+        rec.mode.equals(request.mode, ignoreCase = true) &&
+        rec.callsign == request.callsign?.takeIf { isPlausibleCallsign(it) }?.trim()?.uppercase() &&
+        rec.targetRegion == request.targetRegion

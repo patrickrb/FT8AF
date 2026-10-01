@@ -21,6 +21,22 @@ enum class OperatingGoal(val wireName: String) {
     }
 }
 
+/** Concrete destinations supported by the backend TARGET goal. */
+enum class AdvisorTargetRegion {
+    EUROPE,
+    NORTH_AMERICA_EAST,
+    NORTH_AMERICA_WEST,
+    SOUTH_AMERICA,
+    AFRICA,
+    ASIA,
+    OCEANIA,
+    ;
+
+    companion object {
+        fun fromWireName(raw: String?): AdvisorTargetRegion = entries.firstOrNull { it.name == raw } ?: EUROPE
+    }
+}
+
 /** Where one piece of supporting evidence came from. */
 enum class EvidenceType(val wireName: String) {
     VOACAP("VOACAP"),
@@ -92,6 +108,7 @@ data class SourceAvailability(
 
 /** A complete Band Advisor recommendation. */
 data class BandRecommendation(
+    val targetRegion: String? = null,
     val generatedAtMs: Long,
     val validUntilMs: Long,
     val grid: String,

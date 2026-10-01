@@ -225,4 +225,54 @@ class ApiBandAdvisorRepositoryTest {
         now = iso("2026-09-27T14:00:00Z") // Far past validity + grace.
         assertThat(r.cached()!!.freshness).isEqualTo(Freshness.EXPIRED)
     }
+
+    @Test
+    fun `changing target region refetches instead of reusing another target`() =
+        runBlocking {
+            val r = repo()
+            val targetRequest = request.copy(goal = OperatingGoal.TARGET, targetRegion = "EUROPE")
+            server.enqueue(
+                MockResponse().setBody(
+                    body(goal = "TARGET").replace(
+                        "\"goal\": \"TARGET\"",
+                        "\"goal\": \"TARGET\", \"targetRegion\": \"EUROPE\"",
+                    ),
+                ),
+            )
+            r.recommendation(targetRequest)
+            assertThat(server.takeRequest().path).contains("targetRegion=EUROPE")
+            now += 61_000
+            server.enqueue(
+                MockResponse().setBody(
+                    body(goal = "TARGET").replace(
+                        "\"goal\": \"TARGET\"",
+                        "\"goal\": \"TARGET\", \"targetRegion\": \"ASIA\"",
+                    ),
+                ),
+            )
+            val changed = r.recommendation(targetRequest.copy(targetRegion = "ASIA")) as AdvisorResult.Available
+            assertThat(server.takeRequest().path).contains("targetRegion=ASIA")
+            assertThat(changed.recommendation.targetRegion).isEqualTo("ASIA")
+            assertThat(changed.fromCache).isFalse()
+            assertThat(r.recommendation(targetRequest.copy(targetRegion = "ASIA")))
+                .isEqualTo(changed.copy(fromCache = true))
+            assertThat(server.requestCount).isEqualTo(2)
+        }
+
+    @Test
+    fun `target cooldown does not display a cached answer for another region`() =
+        runBlocking {
+            cache.save(
+                body(goal = "TARGET").replace(
+                    "\"goal\": \"TARGET\"",
+                    "\"goal\": \"TARGET\", \"targetRegion\": \"EUROPE\"",
+                ),
+            )
+            server.enqueue(MockResponse().setResponseCode(503))
+            val r = repo()
+            val asia = request.copy(goal = OperatingGoal.TARGET, targetRegion = "ASIA")
+            assertThat(r.recommendation(asia)).isInstanceOf(AdvisorResult.Unavailable::class.java)
+            assertThat(r.recommendation(asia, force = true)).isInstanceOf(AdvisorResult.Unavailable::class.java)
+            assertThat(server.requestCount).isEqualTo(1)
+        }
 }

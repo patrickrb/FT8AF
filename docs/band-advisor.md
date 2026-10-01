@@ -251,3 +251,16 @@ install -e '.[dev]' && .venv/bin/pytest` (190 tests, no network).
    background work and notifications).
 5. Rollback = flip the remote flag off; clients revert on their next config
    refresh, and the alert scheduler cancels its work on next app start / sync.
+
+### Integration safeguards
+
+Recommendation and conditions handlers run synchronous upstream work in the
+FastAPI thread pool, keeping health checks responsive. Service locks protect
+shared PSK rate-limit/baseline state and VOACAP cache population. Regional
+observers share the raw PSK response for the upstream minimum interval, then
+aggregate their own nearby statistics; each raw window trains the baseline once.
+
+The Target goal includes a persisted concrete-region selector (Europe by
+default). Recommendations echo `targetRegion`, which participates in client
+cache matching. Background alert workers read the saved grid from `data.db`
+without needing an Activity or FT8 engine to initialize process globals.

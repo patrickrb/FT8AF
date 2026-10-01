@@ -152,6 +152,7 @@ internal fun buildFixtureRecommendation(
     }
 
     return BandRecommendation(
+        targetRegion = request.targetRegion,
         generatedAtMs = nowMs,
         validUntilMs = nowMs + 15 * 60_000,
         grid = grid,

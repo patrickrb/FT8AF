@@ -111,6 +111,8 @@ class RecommendationService:
             ),
             "grid": req.grid,
         }
+        if req.target_region:
+            response["targetRegion"] = req.target_region
         if req.callsign:
             response["callsign"] = req.callsign
         response.update(

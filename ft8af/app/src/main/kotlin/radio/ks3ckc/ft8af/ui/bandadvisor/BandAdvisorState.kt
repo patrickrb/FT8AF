@@ -9,15 +9,18 @@ import com.k1af.ft8af.R
 import com.k1af.ft8af.database.OperationBand
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import radio.ks3ckc.ft8af.bandadvisor.AdvisorRequest
 import radio.ks3ckc.ft8af.bandadvisor.AdvisorResult
 import radio.ks3ckc.ft8af.bandadvisor.BandAdvisor
 import radio.ks3ckc.ft8af.bandadvisor.UnavailableReason
+import radio.ks3ckc.ft8af.bandadvisor.model.AdvisorTargetRegion
 import radio.ks3ckc.ft8af.bandadvisor.model.BandRecommendation
 import radio.ks3ckc.ft8af.bandadvisor.model.Freshness
 import radio.ks3ckc.ft8af.bandadvisor.model.OperatingGoal
 import radio.ks3ckc.ft8af.bandadvisor.model.isPlausibleCallsign
+import radio.ks3ckc.ft8af.bandadvisor.recommendationMatchesRequest
 import radio.ks3ckc.ft8af.flags.FeatureFlag
 import radio.ks3ckc.ft8af.flags.FeatureFlags
 
@@ -65,11 +68,13 @@ internal fun advisorRequestFrom(
     personalAnalyticsEnabled: Boolean,
     goal: OperatingGoal,
     mode: String,
+    targetRegion: AdvisorTargetRegion = AdvisorTargetRegion.EUROPE,
 ): AdvisorRequest = AdvisorRequest(
     grid = grid,
     callsign = callsign?.takeIf { personalAnalyticsEnabled && isPlausibleCallsign(it) },
     goal = goal,
     mode = mode,
+    targetRegion = targetRegion.name.takeIf { goal == OperatingGoal.TARGET },
 )
 
 /**
@@ -119,6 +124,19 @@ class BandAdvisorStateHolder(private val appContext: Context) {
     var goal by mutableStateOf(BandAdvisor.goal(appContext))
         private set
 
+    var targetRegion by mutableStateOf(BandAdvisor.targetRegion(appContext))
+        private set
+
+    fun setTargetRegion(
+        scope: CoroutineScope,
+        region: AdvisorTargetRegion,
+    ) {
+        if (region == targetRegion) return
+        targetRegion = region
+        BandAdvisor.setTargetRegion(appContext, region)
+        if (goal == OperatingGoal.TARGET) load(scope, force = true)
+    }
+
     /** Null while the personal flag is off or no callsign is configured. */
     var personalPanel by mutableStateOf<PersonalPanelState?>(null)
         private set
@@ -131,7 +149,7 @@ class BandAdvisorStateHolder(private val appContext: Context) {
         goal = newGoal
         BandAdvisor.setGoal(appContext, newGoal)
         BandAdvisorTelemetry.event("goal_selected", newGoal.wireName)
-        load(scope, force = false)
+        load(scope, force = true)
     }
 
     /** Fetch a recommendation. No-op while the flag is off. */
@@ -141,16 +159,21 @@ class BandAdvisorStateHolder(private val appContext: Context) {
             return
         }
         if (inFlight?.isActive == true && !force) return
+        if (force) inFlight?.cancel()
         val request = advisorRequestFrom(
             grid = GeneralVariables.getMyMaidenheadGrid(),
             callsign = GeneralVariables.myCallsign,
             personalAnalyticsEnabled =
                 FeatureFlags.isEnabled(FeatureFlag.PERSONAL_PSK_ANALYTICS),
             goal = goal,
+            targetRegion = targetRegion,
             mode = GeneralVariables.currentMode().displayName,
         )
         // Show the cache instantly (if any) while the refresh runs.
-        val cached = BandAdvisor.repository(appContext).cached()
+        val cached =
+            BandAdvisor.repository(appContext).cached()?.takeIf {
+                recommendationMatchesRequest(it.recommendation, request.grid?.take(4).orEmpty(), request)
+            }
         state = if (cached != null) uiStateOf(cached) else BandAdvisorUiState.Loading
         if (force) BandAdvisorTelemetry.event("manual_refresh", null)
         inFlight = scope.launch {
@@ -159,6 +182,7 @@ class BandAdvisorStateHolder(private val appContext: Context) {
             val result = runCatching {
                 BandAdvisor.repository(appContext).recommendation(request, force)
             }.getOrElse { AdvisorResult.Unavailable(UnavailableReason.OFFLINE, it.message) }
+            coroutineContext.ensureActive()
             state = uiStateOf(result)
             when (val s = state) {
                 is BandAdvisorUiState.Ready ->

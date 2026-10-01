@@ -229,6 +229,7 @@ class TestRecommendationContract:
             "/v1/recommendation?grid=EM28&goal=TARGET&targetRegion=EUROPE"
         ).json()
         assert body["goal"] == "TARGET"
+        assert body["targetRegion"] == "EUROPE"
         assert voacap.calls[0]["target_region"] == "EUROPE"
 
 
@@ -342,3 +343,42 @@ class TestConditions:
     def test_missing_grid(self, settings, fixed_clock):
         response = make_client(settings, fixed_clock).get("/v1/conditions")
         assert response.status_code == 400
+
+
+@pytest.mark.parametrize("path", ["/v1/recommendation?grid=EM28", "/v1/conditions?grid=EM28"])
+def test_health_remains_responsive_during_blocking_upstream(settings, fixed_clock, path):
+    import asyncio
+    import threading
+    import httpx
+
+    started = threading.Event()
+    release = threading.Event()
+
+    class BlockingRecommender:
+        def recommend(self, req):
+            started.set()
+            assert release.wait(3)
+            return {"ok": True}
+
+        def conditions(self, grid):
+            return self.recommend(None)
+
+    app = create_app(
+        settings, fixed_clock,
+        voacap_service=FakeVoacapService(),
+        recommendation_service=BlockingRecommender(),
+    )
+
+    async def run():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            pending = asyncio.create_task(client.get(path))
+            try:
+                assert await asyncio.to_thread(started.wait, 1)
+                assert not release.is_set()
+                response = await asyncio.wait_for(client.get("/healthz"), 1)
+                assert response.status_code == 200
+            finally:
+                release.set()
+                await pending
+
+    asyncio.run(run())

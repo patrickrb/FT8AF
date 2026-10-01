@@ -38,6 +38,7 @@ fun parseBandRecommendation(json: String): BandRecommendation? {
         )
 
         BandRecommendation(
+            targetRegion = root.optString("targetRegion").takeIf { it.isNotBlank() },
             generatedAtMs = generatedAtMs,
             validUntilMs = validUntilMs,
             grid = grid,

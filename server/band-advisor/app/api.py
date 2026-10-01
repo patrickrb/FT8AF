@@ -159,7 +159,7 @@ def create_app(
         }
 
     @app.get("/v1/recommendation")
-    async def recommendation(
+    def recommendation(
         grid: str | None = None,
         goal: str | None = None,
         mode: str | None = None,
@@ -182,7 +182,7 @@ def create_app(
         return recommender.recommend(req)
 
     @app.get("/v1/conditions")
-    async def conditions(grid: str | None = None):
+    def conditions(grid: str | None = None):
         if grid is None:
             raise ApiError(400, "MISSING_PARAMETER", "grid is required")
         try:

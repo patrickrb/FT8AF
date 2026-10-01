@@ -5,10 +5,11 @@ import com.k1af.ft8af.FT8Common
 import com.k1af.ft8af.R
 import com.k1af.ft8af.database.OperationBand
 import org.junit.Test
-import radio.ks3ckc.ft8af.bandadvisor.AdvisorResult
 import radio.ks3ckc.ft8af.bandadvisor.AdvisorRequest
+import radio.ks3ckc.ft8af.bandadvisor.AdvisorResult
 import radio.ks3ckc.ft8af.bandadvisor.UnavailableReason
 import radio.ks3ckc.ft8af.bandadvisor.buildFixtureRecommendation
+import radio.ks3ckc.ft8af.bandadvisor.model.AdvisorTargetRegion
 import radio.ks3ckc.ft8af.bandadvisor.model.Freshness
 import radio.ks3ckc.ft8af.bandadvisor.model.OperatingGoal
 import radio.ks3ckc.ft8af.bandadvisor.model.PersonalAnalyticsSummary
@@ -131,5 +132,19 @@ class BandAdvisorStateTest {
         assertThat(
             personalPanelFromSummary(PersonalAnalyticsSummary(enabled = true, reportsReceived = 0)),
         ).isEqualTo(PersonalPanelState.Empty)
+    }
+
+    @Test
+    fun `target requests include selected region and other goals omit it`() {
+        for (region in AdvisorTargetRegion.entries) {
+            val request = advisorRequestFrom("EM28", null, false, OperatingGoal.TARGET, "FT8", region)
+            assertThat(request.targetRegion).isEqualTo(region.name)
+        }
+        assertThat(advisorRequestFrom("EM28", null, false, OperatingGoal.TARGET, "FT8").targetRegion)
+            .isEqualTo("EUROPE")
+        assertThat(advisorRequestFrom("EM28", null, false, OperatingGoal.DX, "FT8").targetRegion)
+            .isNull()
+        assertThat(AdvisorTargetRegion.entries.map { targetRegionLabelRes(it) }.toSet())
+            .hasSize(AdvisorTargetRegion.entries.size)
     }
 }

@@ -678,4 +678,11 @@
     <string name="band_advisor_clear_local_desc">Delete locally stored recommendations and personal signal history</string>
     <string name="band_advisor_cleared">Cached Band Advisor data cleared</string>
     <string name="band_advisor_privacy_note">Band Advisor sends only your 4-character grid square (about 100×200 km) and, if personal analytics are on, your callsign. GPS coordinates never leave the device.</string>
+    <string name="band_advisor_region_europe">Europe</string>
+    <string name="band_advisor_region_na_east">North America East</string>
+    <string name="band_advisor_region_na_west">North America West</string>
+    <string name="band_advisor_region_south_america">South America</string>
+    <string name="band_advisor_region_africa">Africa</string>
+    <string name="band_advisor_region_asia">Asia</string>
+    <string name="band_advisor_region_oceania">Oceania</string>
 </resources>

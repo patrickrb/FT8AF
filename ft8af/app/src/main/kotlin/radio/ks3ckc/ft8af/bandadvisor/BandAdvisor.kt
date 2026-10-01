@@ -3,6 +3,7 @@ package radio.ks3ckc.ft8af.bandadvisor
 import android.content.Context
 import android.content.SharedPreferences
 import com.k1af.ft8af.BuildConfig
+import radio.ks3ckc.ft8af.bandadvisor.model.AdvisorTargetRegion
 import radio.ks3ckc.ft8af.bandadvisor.model.OperatingGoal
 
 /**
@@ -56,6 +57,16 @@ object BandAdvisor {
 
     fun setGoal(context: Context, goal: OperatingGoal) {
         prefs(context).edit().putString(KEY_GOAL, goal.wireName).apply()
+    }
+
+    fun targetRegion(context: Context): AdvisorTargetRegion =
+        AdvisorTargetRegion.fromWireName(prefs(context).getString("target_region", null))
+
+    fun setTargetRegion(
+        context: Context,
+        region: AdvisorTargetRegion,
+    ) {
+        prefs(context).edit().putString("target_region", region.name).apply()
     }
 
     /** Clear locally cached recommendation + personal analytics (privacy). */

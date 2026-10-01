@@ -1,6 +1,7 @@
 package radio.ks3ckc.ft8af.bandadvisor.alerts
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -8,7 +9,8 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.k1af.ft8af.GeneralVariables
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import radio.ks3ckc.ft8af.bandadvisor.model.normalizeAdvisorGrid
 import radio.ks3ckc.ft8af.flags.FeatureFlag
 import radio.ks3ckc.ft8af.flags.FeatureFlags
@@ -85,8 +87,8 @@ class PropagationAlertWorker(
         }
         if (!PropagationAlertNotifier.canPost(context)) return Result.success()
 
-        val grid = normalizeAdvisorGrid(GeneralVariables.getMyMaidenheadGrid())
-            ?: return Result.success()
+        val grid =
+            withContext(Dispatchers.IO) { loadAlertGrid(context) } ?: return Result.success()
 
         val nowMs = System.currentTimeMillis()
         val conditions = ConditionsClient.fetch(grid, nowMs = nowMs) ?: return Result.success()
@@ -111,3 +113,15 @@ class PropagationAlertWorker(
         return Result.success()
     }
 }
+
+/** Read persisted configuration without starting the Activity or FT8 engine. */
+internal fun loadAlertGrid(context: Context): String? =
+    runCatching {
+        val path = context.getDatabasePath("data.db")
+        if (!path.isFile) return@runCatching null
+        SQLiteDatabase.openDatabase(path.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            db.rawQuery("SELECT Value FROM config WHERE KeyName = ? COLLATE NOCASE", arrayOf("grid")).use { cursor ->
+                if (cursor.moveToFirst()) normalizeAdvisorGrid(cursor.getString(0)) else null
+            }
+        }
+    }.getOrNull()

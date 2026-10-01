@@ -190,3 +190,51 @@ class TestBuildPersonalResult:
         assert result.analytics["maximumDistanceKm"] == 0
         assert result.analytics["medianSnrDb"] is None
         assert result.per_band_performance == {}
+
+
+class TestRegionalRawCache:
+    def test_different_fields_share_fetch_but_not_nearby_statistics(self, settings, fixed_clock):
+        client = FakeClient([
+            _report("K0AAA", "EM28", "G0AAA", "JO01"),
+            _report("VK2AAA", "QF56", "G0BBB", "JN58"),
+        ], fixed_clock.now())
+        service = PskService(settings, fixed_clock, client=client)
+        kansas = service.get_regional_activity("EM28")
+        europe = service.get_regional_activity("JO01")
+        assert client.calls == [None]
+        assert kansas.bands["20m"].nearby_tx_total == 1
+        assert europe.bands["20m"].nearby_tx_total == 0
+        assert europe.fetched_at == kansas.fetched_at
+        # One upstream window must not become two baseline observations.
+        assert len(service._baseline._recent["20m"]) == 1
+
+    def test_raw_cache_expires_and_fetches_new_window(self, settings, fixed_clock):
+        client = FakeClient([_report("K0AAA", "EM28", "G0AAA", "JO01")], fixed_clock.now())
+        service = PskService(settings, fixed_clock, client=client)
+        service.get_regional_activity("EM28")
+        fixed_clock.advance(settings.psk_cache_ttl_s)
+        service.get_regional_activity("JO01")
+        assert client.calls == [None, None]
+
+    def test_concurrent_fields_fetch_only_once(self, settings, fixed_clock):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Event
+
+        started, release = Event(), Event()
+
+        class BlockingClient(FakeClient):
+            def fetch_reports(self, **kwargs):
+                started.set()
+                assert release.wait(3)
+                return super().fetch_reports(**kwargs)
+
+        client = BlockingClient([_report("K0AAA", "EM28", "G0AAA", "JO01")], fixed_clock.now())
+        service = PskService(settings, fixed_clock, client=client)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(service.get_regional_activity, "EM28")
+            assert started.wait(1)
+            second = pool.submit(service.get_regional_activity, "JO01")
+            release.set()
+            assert first.result().bands
+            assert second.result().bands
+        assert client.calls == [None]

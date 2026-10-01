@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.R
 import radio.ks3ckc.ft8af.bandadvisor.UnavailableReason
+import radio.ks3ckc.ft8af.bandadvisor.model.AdvisorTargetRegion
 import radio.ks3ckc.ft8af.bandadvisor.model.BandRecommendation
 import radio.ks3ckc.ft8af.bandadvisor.model.EvidenceType
 import radio.ks3ckc.ft8af.bandadvisor.model.Freshness
@@ -54,6 +58,17 @@ internal fun goalLabelRes(goal: OperatingGoal): Int = when (goal) {
     OperatingGoal.POTA -> R.string.band_advisor_goal_pota
 }
 
+internal fun targetRegionLabelRes(region: AdvisorTargetRegion): Int =
+    when (region) {
+        AdvisorTargetRegion.EUROPE -> R.string.band_advisor_region_europe
+        AdvisorTargetRegion.NORTH_AMERICA_EAST -> R.string.band_advisor_region_na_east
+        AdvisorTargetRegion.NORTH_AMERICA_WEST -> R.string.band_advisor_region_na_west
+        AdvisorTargetRegion.SOUTH_AMERICA -> R.string.band_advisor_region_south_america
+        AdvisorTargetRegion.AFRICA -> R.string.band_advisor_region_africa
+        AdvisorTargetRegion.ASIA -> R.string.band_advisor_region_asia
+        AdvisorTargetRegion.OCEANIA -> R.string.band_advisor_region_oceania
+    }
+
 /**
  * Band Advisor detail sheet: recommendation + dial + confidence, goal chips,
  * destinations, freshness, expandable evidence ("Why this band"), alternatives
@@ -67,6 +82,8 @@ fun BandAdvisorSheet(
     visible: Boolean,
     state: BandAdvisorUiState,
     goal: OperatingGoal,
+    targetRegion: AdvisorTargetRegion,
+    onSelectTargetRegion: (AdvisorTargetRegion) -> Unit,
     catAvailable: Boolean,
     nowMs: Long,
     /** Null hides the personal section entirely (flag off / no callsign). */
@@ -125,6 +142,26 @@ fun BandAdvisorSheet(
                         modifier = Modifier.weight(1f),
                         onClick = { onSelectGoal(g) },
                     )
+                }
+            }
+
+            if (goal == OperatingGoal.TARGET) {
+                var expanded by remember { mutableStateOf(false) }
+                Box {
+                    TextButton(onClick = { expanded = true }) {
+                        Text(stringResource(targetRegionLabelRes(targetRegion)), color = Accent)
+                    }
+                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        for (region in AdvisorTargetRegion.entries) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(targetRegionLabelRes(region))) },
+                                onClick = {
+                                    expanded = false
+                                    onSelectTargetRegion(region)
+                                },
+                            )
+                        }
+                    }
                 }
             }
 

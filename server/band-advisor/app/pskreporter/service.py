@@ -8,12 +8,14 @@ the caller flags the source unavailable and renormalizes scores.
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from statistics import median
 
 from ..clock import Clock
 from ..config import Settings
+from ..ttl_cache import TTLCache
 from ..geo import grid_distance_km, GridError
 from .aggregator import BandActivity, aggregate_band_activity
 from .baseline import ActivityBaseline
@@ -60,6 +62,11 @@ class PskService:
         client: PskReporterClient | None = None,
         baseline: ActivityBaseline | None = None,
     ) -> None:
+        self._lock = threading.RLock()
+        self._raw_cache = TTLCache(
+            ttl_seconds=max(settings.psk_cache_ttl_s, settings.psk_min_interval_s),
+            time_fn=clock.monotonic,
+        )
         self._settings = settings
         self._clock = clock
         self._client = client or PskReporterClient(settings, clock)
@@ -70,40 +77,50 @@ class PskService:
             time_fn=clock.monotonic,
         )
 
+    # Shared client/backoff and baseline state are protected by the service lock.
     # -- regional --------------------------------------------------------------
 
     def get_regional_activity(
         self, observer_grid: str, mode: str = "FT8"
     ) -> RegionalActivity:
-        window = self._settings.psk_window_s
-        cached = self._cache.get_regional(observer_grid, None, mode, window)
-        if cached is not None:
-            return cached
+        with self._lock:
+            window = self._settings.psk_window_s
+            cached = self._cache.get_regional(observer_grid, None, mode, window)
+            if cached is not None:
+                return cached
 
-        try:
-            fetch: FetchResult = self._client.fetch_reports(mode=mode)
-        except PskReporterBackoff:
-            raise PskReporterError("rate-limited and no cached regional data")
+            raw_key = (mode, window)
+            fetch = self._raw_cache.get(raw_key)
+            if fetch is None:
+                try:
+                    fetch = self._client.fetch_reports(mode=mode)
+                except PskReporterBackoff:
+                    raise PskReporterError("rate-limited and no cached regional data")
+                self._raw_cache.set(raw_key, fetch)
+                # Counts are global; train the baseline once per upstream window,
+                # regardless of how many observer fields use that window.
+                global_bands = aggregate_band_activity(fetch.reports, observer_grid)
+                for band, activity in global_bands.items():
+                    self._baseline.update(band, fetch.fetched_at.hour, activity.observation_count)
 
-        bands = aggregate_band_activity(list(fetch.reports), observer_grid)
-        utc_hour = fetch.fetched_at.hour
-        ratios: dict[str, float] = {}
-        trends: dict[str, float] = {}
-        for band, activity in bands.items():
-            self._baseline.update(band, utc_hour, activity.observation_count)
-            ratios[band] = self._baseline.activity_ratio(
-                band, utc_hour, activity.observation_count
+            bands = aggregate_band_activity(list(fetch.reports), observer_grid)
+            utc_hour = fetch.fetched_at.hour
+            ratios: dict[str, float] = {}
+            trends: dict[str, float] = {}
+            for band, activity in bands.items():
+                ratios[band] = self._baseline.activity_ratio(
+                    band, utc_hour, activity.observation_count
+                )
+                trends[band] = self._baseline.activity_trend(band)
+
+            result = RegionalActivity(
+                bands=bands,
+                activity_ratio=ratios,
+                activity_trend=trends,
+                fetched_at=fetch.fetched_at,
             )
-            trends[band] = self._baseline.activity_trend(band)
-
-        result = RegionalActivity(
-            bands=bands,
-            activity_ratio=ratios,
-            activity_trend=trends,
-            fetched_at=fetch.fetched_at,
-        )
-        self._cache.set_regional(observer_grid, None, mode, window, result)
-        return result
+            self._cache.set_regional(observer_grid, None, mode, window, result)
+            return result
 
     # -- personal ----------------------------------------------------------------
 
@@ -115,21 +132,22 @@ class PskService:
         regional: RegionalActivity | None = None,
     ) -> PersonalResult:
         """Per-callsign TX analytics (10-min cache; same rate limits)."""
-        window = self._settings.psk_window_s
-        cached = self._cache.get_personal(callsign, mode, window)
-        if cached is not None:
-            return cached
+        with self._lock:
+            window = self._settings.psk_window_s
+            cached = self._cache.get_personal(callsign, mode, window)
+            if cached is not None:
+                return cached
 
-        try:
-            fetch = self._client.fetch_reports(mode=mode, sender_callsign=callsign)
-        except PskReporterBackoff:
-            raise PskReporterError("rate-limited and no cached personal data")
+            try:
+                fetch = self._client.fetch_reports(mode=mode, sender_callsign=callsign)
+            except PskReporterBackoff:
+                raise PskReporterError("rate-limited and no cached personal data")
 
-        result = build_personal_result(
-            fetch, callsign=callsign, regional=regional, fetched_at=fetch.fetched_at
-        )
-        self._cache.set_personal(callsign, mode, window, result)
-        return result
+            result = build_personal_result(
+                fetch, callsign=callsign, regional=regional, fetched_at=fetch.fetched_at
+            )
+            self._cache.set_personal(callsign, mode, window, result)
+            return result
 
 
 def build_personal_result(
