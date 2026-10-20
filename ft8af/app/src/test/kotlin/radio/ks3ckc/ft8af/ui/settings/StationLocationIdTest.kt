@@ -7,7 +7,6 @@ import org.junit.Test
 
 /** Unit tests for the Cloudlog/Wavelog Station Location ID input helpers (#926). */
 class StationLocationIdTest {
-
     @Test
     fun `digits and blank are valid`() {
         assertThat(isValidStationLocationId("")).isTrue()
