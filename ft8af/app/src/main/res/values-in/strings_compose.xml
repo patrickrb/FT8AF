@@ -240,6 +240,7 @@
     <string name="log_sync_enable_services">Aktifkan Cloudlog/Wavelog/Nextlog, QRZ, atau World Radio League di Setelan, lalu coba lagi.</string>
     <string name="log_sync_progress_count">%1$d dari %2$d QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d diterima</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d sudah ada di logbook</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d diterima</string>
     <string name="log_sync_nothing_to_upload">Belum ada QSO di buku log untuk diunggah.</string>
     <string name="log_sync_working">Memproses…</string>

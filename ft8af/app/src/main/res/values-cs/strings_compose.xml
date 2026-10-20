@@ -240,6 +240,7 @@
     <string name="log_sync_enable_services">Povolte Cloudlog/Wavelog/Nextlog, QRZ nebo World Radio League v Nastavení a zkuste to znovu.</string>
     <string name="log_sync_progress_count">%1$d z %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d přijato</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d již v deníku</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d přijato</string>
     <string name="log_sync_nothing_to_upload">V deníku zatím nejsou žádná QSOs k nahrání.</string>
     <string name="log_sync_working">Pracuji…</string>

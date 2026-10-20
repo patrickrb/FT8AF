@@ -197,6 +197,7 @@
     <string name="log_sync_enable_services">請在設定中啟用 Cloudlog/Wavelog/Nextlog、QRZ 或 World Radio League，然後再試一次。</string>
     <string name="log_sync_progress_count">%2$d 筆 QSOs 中的第 %1$d 筆</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog：已接受 %1$d 筆</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog：%1$d 筆已在日誌中</string>
     <string name="log_sync_qrz_accepted">QRZ：已接受 %1$d 筆</string>
     <string name="log_sync_nothing_to_upload">日誌中尚無可上傳的 QSOs。</string>
     <string name="log_sync_working">處理中…</string>

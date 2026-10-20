@@ -229,6 +229,7 @@
     <string name="log_sync_enable_services">Ayarlar\'da Cloudlog/Wavelog/Nextlog, QRZ veya World Radio League\'i etkinleştirip yeniden deneyin.</string>
     <string name="log_sync_progress_count">%2$d QSO\'dan %1$d</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d kabul edildi</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d zaten kayıt defterinde</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d kabul edildi</string>
     <string name="log_sync_nothing_to_upload">Günlükte henüz yüklenecek QSO yok.</string>
     <string name="log_sync_working">İşleniyor…</string>

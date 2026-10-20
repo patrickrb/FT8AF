@@ -65,7 +65,12 @@ internal class QsoSyncGate(private val minIntervalMs: Long = 15_000L) {
  * (no Android types) so it is unit-testable.
  */
 internal fun summarize(result: ThirdPartyService.SyncResult): String {
-    val sb = StringBuilder("cloudlog=${result.cloudlogOk} qrz=${result.qrzOk}")
+    val sb = StringBuilder("cloudlog=${result.cloudlogOk}")
+    // Rows Wavelog already had (issue #936): skipped, not uploaded.
+    if (result.cloudlogAlreadyPresent > 0) {
+        sb.append(" cloudlogExisting=").append(result.cloudlogAlreadyPresent)
+    }
+    sb.append(" qrz=").append(result.qrzOk)
     // Only when WRL took part, so the line is unchanged for Cloudlog/QRZ-only users.
     if (result.wrlAttempted) sb.append(" wrl=").append(result.wrlOk)
     sb.append(" of ").append(result.total)

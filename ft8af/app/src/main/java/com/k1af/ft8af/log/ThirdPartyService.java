@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 
 enum ServiceType{
     Cloudlog,
@@ -343,7 +344,7 @@ public class ThirdPartyService {
             // Cloudlog's documented endpoint is /api/qso (no trailing slash). Wavelog and
             // Nextlog both 308-redirect when the trailing slash is present, which
             // HttpURLConnection won't follow on a POST.
-            String clRes = cloudlogPost(base, "api/qso", result, failureOut);
+            String clRes = cloudlogApi.post(base, "api/qso", result, failureOut);
             Log.d(TAG, "Cloudlog upload " + (clRes != null ? "succeeded" : "failed"));
             return clRes != null;
         }catch (Exception k){
@@ -570,6 +571,12 @@ public class ThirdPartyService {
         public final boolean wrlAttempted;
         /** Same, for World Radio League. */
         public final String wrlError;
+        /**
+         * Rows not uploaded to Cloudlog/Wavelog because the logbook already had them (issue
+         * #936), either found in the pre-sync download or rejected by the server as a
+         * duplicate. They are marked synced, like an accepted upload.
+         */
+        public final int cloudlogAlreadyPresent;
 
         public SyncResult(int total, int cloudlogOk, int qrzOk,
                           boolean cloudlogAttempted, boolean qrzAttempted) {
@@ -586,6 +593,14 @@ public class ThirdPartyService {
         public SyncResult(int total, int cloudlogOk, int qrzOk, int wrlOk,
                           boolean cloudlogAttempted, boolean qrzAttempted, boolean wrlAttempted,
                           String cloudlogError, String qrzError, String wrlError) {
+            this(total, cloudlogOk, qrzOk, wrlOk, cloudlogAttempted, qrzAttempted, wrlAttempted,
+                    cloudlogError, qrzError, wrlError, 0);
+        }
+
+        public SyncResult(int total, int cloudlogOk, int qrzOk, int wrlOk,
+                          boolean cloudlogAttempted, boolean qrzAttempted, boolean wrlAttempted,
+                          String cloudlogError, String qrzError, String wrlError,
+                          int cloudlogAlreadyPresent) {
             this.total = total;
             this.cloudlogOk = cloudlogOk;
             this.qrzOk = qrzOk;
@@ -596,6 +611,7 @@ public class ThirdPartyService {
             this.cloudlogError = cloudlogError;
             this.qrzError = qrzError;
             this.wrlError = wrlError;
+            this.cloudlogAlreadyPresent = cloudlogAlreadyPresent;
         }
     }
 
@@ -640,8 +656,14 @@ public class ThirdPartyService {
     }
 
     /**
-     * Re-upload every QSO in QSLTable to whichever third-party services the user has
-     * enabled. Services dedupe by callsign+date+time+mode so repeated calls are safe.
+     * Upload every not-yet-synced QSO in QSLTable to whichever third-party services the
+     * user has enabled.
+     *
+     * <p>Cloudlog/Wavelog rows are first checked against the QSOs the logbook already has
+     * ({@link #fetchCloudlogRemoteLog}); a row found there is marked synced and not sent.
+     * Without that, connecting an existing Wavelog logbook re-uploaded every QSO in it
+     * (issue #936). A row the server rejects as a duplicate is marked synced too, so it is
+     * not retried on every sync.
      *
      * Blocks the calling thread — invoke from a background thread/coroutine.
      */
@@ -653,6 +675,7 @@ public class ThirdPartyService {
         int cloudlogOk = 0;
         int qrzOk = 0;
         int wrlOk = 0;
+        int cloudlogAlreadyPresent = 0;
         String cloudlogError = null;
         String qrzError = null;
         String wrlError = null;
@@ -676,6 +699,11 @@ public class ThirdPartyService {
             // key, no logbook, daily quota, offline): a 113-row backlog must not turn into 113
             // identical rejections against a rate-limited API.
             boolean wrlLive = wrl;
+            // Downloaded on the first row that needs Cloudlog, so a pass with nothing to
+            // upload there costs no extra request. Null when the server can't list its
+            // QSOs (plain Cloudlog has no get_contacts_adif); uploads then go ahead as before.
+            boolean remoteFetched = false;
+            CloudlogRemoteLog remote = null;
             int done = 0;
             while (cursor.moveToNext()) {
                 long rowId = idCol >= 0 ? cursor.getLong(idCol) : -1;
@@ -683,13 +711,28 @@ public class ThirdPartyService {
                 boolean alreadyQrz = syncedQrzCol >= 0 && cursor.getInt(syncedQrzCol) == 1;
                 boolean alreadyWrl = syncedWrlCol >= 0 && cursor.getInt(syncedWrlCol) == 1;
                 if (cl && !alreadyCl) {
-                    String adif = buildAdifFromCursor(cursor, ServiceType.Cloudlog);
-                    StringBuilder why = cloudlogError == null ? new StringBuilder() : null;
-                    if (uploadAdifToCloudlog(adif, why)) {
-                        cloudlogOk++;
+                    if (!remoteFetched) {
+                        remoteFetched = true;
+                        remote = fetchCloudlogRemoteLog();
+                    }
+                    if (remote != null && remote.contains(colStr(cursor, "call"),
+                            colStr(cursor, "qso_date"), colStr(cursor, "time_on"),
+                            colStr(cursor, "band"), colStr(cursor, "mode"),
+                            colStr(cursor, "station_callsign"))) {
+                        cloudlogAlreadyPresent++;
                         if (rowId >= 0) markRowSynced(db, rowId, "synced_cloudlog");
-                    } else if (why != null && why.length() > 0) {
-                        cloudlogError = why.toString();
+                    } else {
+                        String adif = buildAdifFromCursor(cursor, ServiceType.Cloudlog);
+                        StringBuilder why = new StringBuilder();
+                        if (uploadAdifToCloudlog(adif, why)) {
+                            cloudlogOk++;
+                            if (rowId >= 0) markRowSynced(db, rowId, "synced_cloudlog");
+                        } else if (isDuplicateRejection(why.toString())) {
+                            cloudlogAlreadyPresent++;
+                            if (rowId >= 0) markRowSynced(db, rowId, "synced_cloudlog");
+                        } else if (cloudlogError == null && why.length() > 0) {
+                            cloudlogError = why.toString();
+                        }
                     }
                 }
                 if (qrz && !alreadyQrz) {
@@ -722,7 +765,87 @@ public class ThirdPartyService {
             if (cursor != null) cursor.close();
         }
         return new SyncResult(total, cloudlogOk, qrzOk, wrlOk, cl, qrz, wrl,
-                cloudlogError, qrzError, wrlError);
+                cloudlogError, qrzError, wrlError, cloudlogAlreadyPresent);
+    }
+
+    /** QSOs requested per {@code get_contacts_adif} page. */
+    private static final int REMOTE_PAGE_SIZE = 5000;
+    /** Page cap per station location, so a server that never advances its cursor can't loop. */
+    private static final int REMOTE_MAX_PAGES = 200;
+
+    /**
+     * Downloads the QSOs already in the user's Wavelog logbook, across all of the API key's
+     * station locations (a QSO logged under another location is still the same QSO).
+     * Returns null when nothing could be read: no API key, or a server without
+     * {@code api/get_contacts_adif} (plain Cloudlog). A partial download is still returned,
+     * since every QSO in it really is on the server. Blocks; call from a background thread.
+     */
+    static CloudlogRemoteLog fetchCloudlogRemoteLog() {
+        String base = CloudlogEndpoint.normalizeBase(GeneralVariables.getCloudlogServerAddress());
+        String key = GeneralVariables.getCloudlogServerApiKey();
+        if (base == null || key == null || key.trim().isEmpty()) return null;
+        key = key.trim();
+
+        List<String> stationIds = parseStationIds(cloudlogApi.get(base, "api/station_info/" + key));
+        if (stationIds.isEmpty()) {
+            String configured = GeneralVariables.getCloudlogStationID();
+            if (configured != null && !configured.trim().isEmpty()) {
+                stationIds.add(configured.trim());
+            }
+        }
+
+        CloudlogRemoteLog remote = new CloudlogRemoteLog();
+        boolean anyRead = false;
+        for (String stationId : stationIds) {
+            long cursor = 0;
+            for (int page = 0; page < REMOTE_MAX_PAGES; page++) {
+                StringBuilder why = new StringBuilder();
+                String body = cloudlogApi.post(base, "api/get_contacts_adif",
+                        CloudlogRemoteLog.pageRequestJson(key, stationId, cursor, REMOTE_PAGE_SIZE),
+                        why);
+                if (body == null) {
+                    GeneralVariables.fileLog("Cloudlog: can't list QSOs for station "
+                            + stationId + ": " + why);
+                    break;
+                }
+                anyRead = true;
+                long next = remote.addPage(body);
+                if (next <= cursor) break;
+                cursor = next;
+            }
+        }
+        if (!anyRead) return null;
+        GeneralVariables.fileLog("Cloudlog: " + remote.size()
+                + " QSOs already in the logbook across " + stationIds.size() + " station(s)");
+        return remote;
+    }
+
+    /** Station ids from an {@code api/station_info} reply; empty on null or bad JSON. */
+    static List<String> parseStationIds(String json) {
+        List<String> ids = new ArrayList<>();
+        if (json == null || json.isEmpty()) return ids;
+        try {
+            JSONArray arr = new JSONArray(json);
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject obj = arr.optJSONObject(i);
+                String id = obj == null ? "" : obj.optString("station_id", "").trim();
+                if (!id.isEmpty() && !ids.contains(id)) ids.add(id);
+            }
+        } catch (Exception e) {
+            Log.d(TAG, "station_info parse error: " + e.getClass().getSimpleName());
+        }
+        return ids;
+    }
+
+    /**
+     * Whether a failed Cloudlog upload was Wavelog refusing a QSO it already has. Wavelog
+     * answers HTTP 400 with "... Duplicate for &lt;station&gt;" in its messages. That text is
+     * translated into the Wavelog user's language, so this only catches English; the
+     * pre-sync download is the main defence.
+     */
+    static boolean isDuplicateRejection(String failure) {
+        return failure != null && failure.startsWith("HTTP 400")
+                && failure.toLowerCase(Locale.US).contains("duplicate for");
     }
 
     /**
@@ -1106,6 +1229,28 @@ public class ThirdPartyService {
         return cloudlogRequest("POST", base, path, failureOut,
                 (url, status, why) -> sendPostRequest(url, json, why, status));
     }
+
+    /**
+     * The Cloudlog/Wavelog calls the catch-up sync makes, behind a swappable seam so
+     * {@link #syncAllQSOs} can be tested against a fake server.
+     */
+    interface CloudlogApi {
+        String get(String base, String path);
+
+        String post(String base, String path, String json, StringBuilder failureOut);
+    }
+
+    static CloudlogApi cloudlogApi = new CloudlogApi() {
+        @Override
+        public String get(String base, String path) {
+            return cloudlogGet(base, path, null);
+        }
+
+        @Override
+        public String post(String base, String path, String json, StringBuilder failureOut) {
+            return cloudlogPost(base, path, json, failureOut);
+        }
+    };
 
     /**
      * One HTTP attempt against a single candidate URL. Returns the body on success or

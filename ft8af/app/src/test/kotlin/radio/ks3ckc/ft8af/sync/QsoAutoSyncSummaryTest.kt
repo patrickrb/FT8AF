@@ -90,4 +90,19 @@ class QsoAutoSyncSummaryTest {
         // The legacy constructor leaves wrl out, so the Cloudlog/QRZ-only line is unchanged.
         assertThat(summarize(result(5, 5, 5))).doesNotContain("wrl")
     }
+
+    @Test
+    fun `rows the logbook already had are reported next to the cloudlog count`() {
+        val withExisting =
+            ThirdPartyService.SyncResult(
+                113, 2, 0, 0,
+                true, false, false,
+                null, null, null,
+                111,
+            )
+
+        assertThat(summarize(withExisting)).isEqualTo("cloudlog=2 cloudlogExisting=111 qrz=0 of 113")
+        // Zero is left out, so the usual line is unchanged.
+        assertThat(summarize(result(5, 5, 5))).doesNotContain("cloudlogExisting")
+    }
 }

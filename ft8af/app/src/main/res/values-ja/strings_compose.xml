@@ -197,6 +197,7 @@
     <string name="log_sync_enable_services">設定で Cloudlog/Wavelog/Nextlog、QRZ、または World Radio League を有効にして、もう一度お試しください。</string>
     <string name="log_sync_progress_count">%2$d 件中 %1$d 件の QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d 件受理</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d 件は登録済み</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d 件受理</string>
     <string name="log_sync_nothing_to_upload">アップロードする QSO がログブックにまだありません。</string>
     <string name="log_sync_working">処理中…</string>
