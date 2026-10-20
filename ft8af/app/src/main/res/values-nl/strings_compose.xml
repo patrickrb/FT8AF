@@ -558,6 +558,7 @@
     <string name="settings_username_hint">Je QRZ.com-gebruikersnaam</string>
     <string name="settings_password">Wachtwoord</string>
     <string name="settings_enabled_bands_dialog_desc">Verborgen banden verschijnen niet in de frequentiekiezers.</string>
+    <string name="settings_enabled_bands_keep_one">Er moet minstens één band ingeschakeld blijven.</string>
     <string name="settings_select_serial_port">Seriële poort selecteren</string>
     <string name="settings_tx_volume_advice">Pas live aan — je volgende TX gebruikt dit niveau. Houd de ALC van je radio in de gaten en draai terug tot deze net de lijn raakt.</string>
     <string name="settings_input_volume">Ingangsvolume</string>

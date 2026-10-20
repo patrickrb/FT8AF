@@ -574,6 +574,7 @@
     <string name="settings_username_hint">اسم مستخدم QRZ.com الخاص بك</string>
     <string name="settings_password">كلمة المرور</string>
     <string name="settings_enabled_bands_dialog_desc">لن تظهر النطاقات المخفية في منتقيات التردد.</string>
+    <string name="settings_enabled_bands_keep_one">يجب أن يبقى نطاق واحد على الأقل مفعّلاً.</string>
     <string name="settings_select_serial_port">اختر المنفذ التسلسلي</string>
     <string name="settings_tx_volume_advice">عدِّل مباشرة — يستخدم TX التالي هذا المستوى. راقب ALC في راديوك وخفِّضه حتى يلامس الخط بالكاد.</string>
     <string name="settings_input_volume">مستوى صوت الإدخال</string>

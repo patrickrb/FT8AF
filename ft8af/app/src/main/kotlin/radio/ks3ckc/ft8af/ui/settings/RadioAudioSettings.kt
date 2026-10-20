@@ -2,6 +2,7 @@ package radio.ks3ckc.ft8af.ui.settings
 
 import android.content.Context
 import android.media.AudioManager
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -409,10 +410,14 @@ fun RadioAudioSettings(
             excludedBands = excludedBands,
             onDismiss = { showEnabledBands = false },
             onToggle = { waveLength, enabled ->
-                val updated = excludedBands.toMutableSet()
-                if (enabled) updated.remove(waveLength) else updated.add(waveLength)
                 // Never let the user hide every band; at least one must remain.
-                if (updated.size >= OperationBand.getAllWaveLengths().size) return@BandToggleDialog
+                val updated = OperationBand.toggleExcludedBand(
+                    OperationBand.getAllWaveLengths(), excludedBands, waveLength, enabled,
+                )
+                if (updated == null) {
+                    Toast.makeText(context, R.string.settings_enabled_bands_keep_one, Toast.LENGTH_SHORT).show()
+                    return@BandToggleDialog
+                }
                 excludedBands = updated
                 GeneralVariables.excludedBands = java.util.HashSet(updated)
                 mainViewModel.databaseOpr.writeConfig(
@@ -630,12 +635,12 @@ fun RadioAudioSettings(
                     )
                     SectionDivider()
                     run {
-                        val total = OperationBand.getAllWaveLengths().size
+                        val waveLengths = OperationBand.getAllWaveLengths()
                         SettingsRow(
                             label = stringResource(R.string.settings_enabled_bands),
                             value = stringResource(
                                 R.string.settings_bands_enabled_format,
-                                total - excludedBands.size, total,
+                                OperationBand.countEnabledBands(waveLengths, excludedBands), waveLengths.size,
                             ),
                             showChevron = true,
                             onClick = { showEnabledBands = true },
@@ -876,7 +881,8 @@ fun RadioAudioSettings(
 }
 
 /**
- * Per-band visibility toggles. Lists every distinct band name from bands.txt;
+ * Per-band visibility toggles. Lists every distinct band name in the band plan
+ * (bands.txt plus custom dials), lowest frequency first;
  * a band that's switched off is hidden from both band pickers.
  */
 @Composable

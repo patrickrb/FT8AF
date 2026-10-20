@@ -554,6 +554,7 @@
     <string name="settings_username_hint">Nama pengguna QRZ.com Anda</string>
     <string name="settings_password">Kata Sandi</string>
     <string name="settings_enabled_bands_dialog_desc">Band yang disembunyikan tidak akan muncul di pemilih frekuensi.</string>
+    <string name="settings_enabled_bands_keep_one">Setidaknya satu band harus tetap aktif.</string>
     <string name="settings_select_serial_port">Pilih Port Serial</string>
     <string name="settings_tx_volume_advice">Sesuaikan langsung — TX berikutnya menggunakan tingkat ini. Perhatikan ALC radio Anda dan turunkan sampai hanya menyentuh garis.</string>
     <string name="settings_input_volume">Volume Masukan</string>

@@ -1005,6 +1005,7 @@
     <string name="settings_username_hint">Your QRZ.com username</string>
     <string name="settings_password">Password</string>
     <string name="settings_enabled_bands_dialog_desc">Hidden bands won\'t appear in the frequency pickers.</string>
+    <string name="settings_enabled_bands_keep_one">At least one band must stay enabled.</string>
     <string name="settings_select_serial_port">Select Serial Port</string>
     <string name="serial_port_label_port_of">Port %1$d of %2$d</string>
     <string name="serial_port_picker_dual_port_hint">Dual-port chip: Yaesu rigs use the Enhanced port for CAT, Kenwood TS-890S/TS-990S use the Standard port. The other port is for RTS/DTR keying.</string>

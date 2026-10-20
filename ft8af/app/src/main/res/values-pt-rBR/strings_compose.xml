@@ -644,6 +644,7 @@
     <string name="settings_username_hint">Seu nome de usuário no QRZ.com</string>
     <string name="settings_password">Senha</string>
     <string name="settings_enabled_bands_dialog_desc">Bandas ocultas não aparecerão nos seletores de frequência.</string>
+    <string name="settings_enabled_bands_keep_one">Pelo menos uma banda deve permanecer ativada.</string>
     <string name="settings_select_serial_port">Selecionar Porta Serial</string>
     <string name="settings_tx_volume_advice">Ajuste ao vivo — seu próximo TX usará este nível. Observe o ALC do seu rádio e reduza até que ele quase não toque a linha.</string>
     <string name="settings_input_volume">Volume de Entrada</string>

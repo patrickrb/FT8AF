@@ -566,6 +566,7 @@
     <string name="settings_username_hint">Vaše uživatelské jméno QRZ.com</string>
     <string name="settings_password">Heslo</string>
     <string name="settings_enabled_bands_dialog_desc">Skrytá pásma se neobjeví ve výběru frekvencí.</string>
+    <string name="settings_enabled_bands_keep_one">Alespoň jedno pásmo musí zůstat povolené.</string>
     <string name="settings_select_serial_port">Vyberte sériový port</string>
     <string name="settings_tx_volume_advice">Upravujte naživo — vaše příští TX použije tuto úroveň. Sledujte ALC svého rádia a stahujte, dokud se právě nedotýká čáry.</string>
     <string name="settings_input_volume">Vstupní hlasitost</string>

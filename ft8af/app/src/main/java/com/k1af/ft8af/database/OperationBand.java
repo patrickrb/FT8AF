@@ -89,7 +89,9 @@ public class OperationBand {
             }
         }
         if (result==-1){
-            bandList.add(new Band(freq, BaseRigOperation.getMeterFromFreq(freq)));
+            Band b = new Band(freq, BaseRigOperation.getMeterFromFreq(freq));
+            b.adHoc = true;
+            bandList.add(b);
             result=bandList.size()-1;
         }
         return result;
@@ -391,15 +393,55 @@ public class OperationBand {
     }
 
     /**
-     * Distinct band names (e.g. "160m","6m") in file order. Drives the
-     * Enabled Bands toggle list in Settings.
+     * Distinct band names (e.g. "160m","6m") ordered by frequency, lowest first.
+     * Drives the Enabled Bands toggle list in Settings. Ad-hoc entries that
+     * {@link #getIndexByFreq} appended for a rig-reported off-plan frequency are
+     * left out: they come and go with whatever the radio was tuned to, so listing
+     * them made the dialog's contents and the "N of M" total drift (issue #929).
      */
     public static java.util.List<String> getAllWaveLengths(){
-        java.util.LinkedHashSet<String> s = new java.util.LinkedHashSet<>();
+        java.util.LinkedHashMap<String, Long> lowest = new java.util.LinkedHashMap<>();
         for (Band b : bandList) {
-            s.add(b.waveLength);
+            if (b.adHoc) continue;
+            Long cur = lowest.get(b.waveLength);
+            if (cur == null || b.band < cur) lowest.put(b.waveLength, b.band);
         }
-        return new java.util.ArrayList<>(s);
+        java.util.ArrayList<String> out = new java.util.ArrayList<>(lowest.keySet());
+        java.util.Collections.sort(out, (a, c) -> Long.compare(lowest.get(a), lowest.get(c)));
+        return out;
+    }
+
+    /**
+     * How many of {@code waveLengths} are not in {@code excluded}. Counts against
+     * the listed bands rather than {@code total - excluded.size()}, because the
+     * persisted exclusion set can hold names that are no longer listed (e.g. an
+     * ad-hoc band hidden in an earlier session) — that made the label read
+     * "1 of 20 enabled" with six bands switched on (issue #929).
+     */
+    public static int countEnabledBands(java.util.List<String> waveLengths, java.util.Set<String> excluded){
+        int n = 0;
+        for (String w : waveLengths) {
+            if (!excluded.contains(w)) n++;
+        }
+        return n;
+    }
+
+    /**
+     * The exclusion set after switching {@code waveLength} on or off, pruned to
+     * names in {@code waveLengths} so stale entries stop skewing the count.
+     * Returns null when the change would leave no listed band enabled — the
+     * caller keeps the old set and tells the user at least one must stay on.
+     */
+    public static java.util.Set<String> toggleExcludedBand(java.util.List<String> waveLengths,
+                                                          java.util.Set<String> excluded,
+                                                          String waveLength, boolean enabled){
+        java.util.HashSet<String> updated = new java.util.HashSet<>();
+        for (String w : excluded) {
+            if (waveLengths.contains(w)) updated.add(w);
+        }
+        if (enabled) updated.remove(waveLength); else updated.add(waveLength);
+        if (countEnabledBands(waveLengths, updated) == 0) return null;
+        return updated;
     }
 
     public static long getBandFreq(int index){
@@ -441,6 +483,8 @@ public class OperationBand {
         public int mode = com.k1af.ft8af.FT8Common.FT8_MODE;//FT8 unless tagged otherwise in bands.txt
         //True for operator-defined dials (issue #470); built-in bands.txt entries are false.
         public boolean custom=false;
+        //True for entries getIndexByFreq() appended for a rig-reported frequency not in the plan.
+        public boolean adHoc=false;
 
         public Band(long band, String waveLength) {
             this.band = band;

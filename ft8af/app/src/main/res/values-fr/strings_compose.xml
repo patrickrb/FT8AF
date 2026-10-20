@@ -484,6 +484,7 @@
     <string name="settings_username_hint">Votre nom d\'utilisateur QRZ.com</string>
     <string name="settings_password">Mot de passe</string>
     <string name="settings_enabled_bands_dialog_desc">Les bandes masquées n\'apparaîtront pas dans les sélecteurs de fréquence.</string>
+    <string name="settings_enabled_bands_keep_one">Au moins une bande doit rester activée.</string>
     <string name="settings_select_serial_port">Sélectionner le port série</string>
     <string name="settings_tx_volume_advice">Ajustez en direct — votre prochain TX utilise ce niveau. Surveillez l\'ALC de votre radio et réduisez jusqu\'à ce qu\'il effleure tout juste la ligne.</string>
     <string name="settings_input_volume">Volume d\'entrée</string>

@@ -555,6 +555,7 @@
     <string name="settings_username_hint">Twoja nazwa użytkownika QRZ.com</string>
     <string name="settings_password">Hasło</string>
     <string name="settings_enabled_bands_dialog_desc">Ukryte pasma nie pojawią się w wyborze częstotliwości.</string>
+    <string name="settings_enabled_bands_keep_one">Co najmniej jedno pasmo musi pozostać włączone.</string>
     <string name="settings_select_serial_port">Wybierz port szeregowy</string>
     <string name="settings_tx_volume_advice">Dostosuj na żywo — następne TX użyje tego poziomu. Obserwuj ALC radia i zmniejszaj, aż ledwo dotyka linii.</string>
     <string name="settings_input_volume">Głośność wejścia</string>

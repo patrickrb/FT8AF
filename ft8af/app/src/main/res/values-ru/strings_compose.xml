@@ -488,6 +488,7 @@
     <string name="settings_username_hint">Ваше имя пользователя QRZ.com</string>
     <string name="settings_password">Пароль</string>
     <string name="settings_enabled_bands_dialog_desc">Скрытые диапазоны не появятся в выборе частоты.</string>
+    <string name="settings_enabled_bands_keep_one">Хотя бы один диапазон должен оставаться включённым.</string>
     <string name="settings_select_serial_port">Выберите последовательный порт</string>
     <string name="settings_tx_volume_advice">Регулируйте вживую — следующая передача использует этот уровень. Следите за ALC трансивера и убавляйте, пока он лишь слегка касается линии.</string>
     <string name="settings_input_volume">Громкость входа</string>

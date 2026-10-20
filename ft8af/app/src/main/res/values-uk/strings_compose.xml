@@ -555,6 +555,7 @@
     <string name="settings_username_hint">Ваше ім’я користувача QRZ.com</string>
     <string name="settings_password">Пароль</string>
     <string name="settings_enabled_bands_dialog_desc">Приховані діапазони не з’являтимуться у виборі частоти.</string>
+    <string name="settings_enabled_bands_keep_one">Принаймні один діапазон має залишатися увімкненим.</string>
     <string name="settings_select_serial_port">Виберіть послідовний порт</string>
     <string name="settings_tx_volume_advice">Регулюйте наживо — ваш наступний TX використає цей рівень. Стежте за ALC радіо й зменшуйте, доки воно лише торкається лінії.</string>
     <string name="settings_input_volume">Гучність входу</string>

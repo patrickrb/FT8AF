@@ -476,6 +476,7 @@
     <string name="settings_username_hint">您的 QRZ.com 用户名</string>
     <string name="settings_password">密码</string>
     <string name="settings_enabled_bands_dialog_desc">隐藏的波段不会出现在频率选择器中。</string>
+    <string name="settings_enabled_bands_keep_one">至少需要保留一个已启用的波段。</string>
     <string name="settings_select_serial_port">选择串口</string>
     <string name="settings_tx_volume_advice">实时调整 — 您的下一次 TX 将使用此电平。注意您电台的 ALC，逐渐调低直到刚好触及临界线。</string>
     <string name="settings_input_volume">输入音量</string>

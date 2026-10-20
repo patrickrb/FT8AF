@@ -476,6 +476,7 @@
     <string name="settings_username_hint">あなたの QRZ.com ユーザー名</string>
     <string name="settings_password">パスワード</string>
     <string name="settings_enabled_bands_dialog_desc">非表示のバンドは周波数ピッカーに表示されません。</string>
+    <string name="settings_enabled_bands_keep_one">少なくとも1つのバンドを有効にしておく必要があります。</string>
     <string name="settings_select_serial_port">シリアルポートを選択</string>
     <string name="settings_tx_volume_advice">ライブで調整してください — 次の TX でこのレベルが使われます。無線機の ALC を見ながら、ラインに軽く触れる程度まで下げてください。</string>
     <string name="settings_input_volume">入力音量</string>

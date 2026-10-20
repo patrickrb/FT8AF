@@ -547,6 +547,7 @@
     <string name="settings_username_hint">QRZ.com kullanıcı adınız</string>
     <string name="settings_password">Parola</string>
     <string name="settings_enabled_bands_dialog_desc">Gizli bantlar frekans seçicilerde görünmez.</string>
+    <string name="settings_enabled_bands_keep_one">En az bir bant etkin kalmalıdır.</string>
     <string name="settings_select_serial_port">Seri Port Seç</string>
     <string name="settings_tx_volume_advice">Canlı ayarlayın — bir sonraki TX\'iniz bu düzeyi kullanır. Radyonuzun ALC\'sini izleyin ve çizgiye değecek kadar düşürün.</string>
     <string name="settings_input_volume">Giriş Ses Düzeyi</string>
