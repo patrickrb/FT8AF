@@ -54,6 +54,7 @@ import com.k1af.ft8af.timer.UtcTimer;
 import java.io.IOException;
 
 import radio.ks3ckc.ft8af.UsbPermissionIntentsKt;
+import radio.ks3ckc.ft8af.ui.settings.LoggingSettingsKt;
 
 /**
  * A simple {@link Fragment} subclass.
@@ -234,6 +235,12 @@ public class ConfigFragment extends Fragment {
 
         @Override
         public void afterTextChanged(Editable editable) {
+            // Station Location ID is a number (#926); strip pasted non-digits, which re-fires this.
+            String digits = LoggingSettingsKt.filterStationLocationId(editable.toString());
+            if (!digits.contentEquals(editable)) {
+                editable.replace(0, editable.length(), digits);
+                return;
+            }
             GeneralVariables.cloudlogStationID = editable.toString();
             writeConfig("cloudlogStationID", GeneralVariables.getCloudlogStationID());
         }
