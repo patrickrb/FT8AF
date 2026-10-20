@@ -745,9 +745,15 @@ internal fun filterStationLocationId(input: String): String = input.filter { it 
 internal fun shouldClearStationLocationId(previous: String, edited: String): Boolean =
     edited != previous && !isValidStationLocationId(previous) && !isValidStationLocationId(edited)
 
-/** [filterStationLocationId] for one edit, clearing an invalid saved value instead of salvaging its digits. */
-internal fun cleanStationLocationIdEdit(previous: String, edited: String): String =
-    if (shouldClearStationLocationId(previous, edited)) "" else filterStationLocationId(edited)
+/**
+ * [filterStationLocationId] for one edit, clearing an invalid saved value instead of salvaging its
+ * digits. Unchanged text (e.g. a restored view firing its watcher) is left alone, never stripped.
+ */
+internal fun cleanStationLocationIdEdit(previous: String, edited: String): String = when {
+    edited == previous -> edited
+    shouldClearStationLocationId(previous, edited) -> ""
+    else -> filterStationLocationId(edited)
+}
 
 /**
  * [cleanStationLocationIdEdit] for the manual-entry field, keeping the cursor after the same

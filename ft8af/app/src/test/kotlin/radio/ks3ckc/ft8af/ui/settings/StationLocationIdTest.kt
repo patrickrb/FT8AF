@@ -83,4 +83,10 @@ class StationLocationIdTest {
         // The legacy screen's watcher re-fires with the cleared text before the old value is replaced.
         assertThat(cleanStationLocationIdEdit("LB5AK", "")).isEmpty()
     }
+
+    @Test
+    fun `unchanged old value is left alone, not stripped to its digits`() {
+        // The legacy screen's watcher fires with the saved text when Android restores the view.
+        assertThat(cleanStationLocationIdEdit("K1AF", "K1AF")).isEqualTo("K1AF")
+    }
 }
