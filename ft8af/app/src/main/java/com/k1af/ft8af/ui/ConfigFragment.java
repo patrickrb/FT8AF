@@ -235,8 +235,11 @@ public class ConfigFragment extends Fragment {
 
         @Override
         public void afterTextChanged(Editable editable) {
-            // Station Location ID is a number (#926); strip pasted non-digits, which re-fires this.
-            String digits = LoggingSettingsKt.filterStationLocationId(editable.toString());
+            // Station Location ID is a number (#926); strip pasted non-digits, or clear an old
+            // callsign value on its first edit. The replace re-fires this with the clean text.
+            String saved = GeneralVariables.getCloudlogStationID();
+            String digits = LoggingSettingsKt.cleanStationLocationIdEdit(
+                    saved == null ? "" : saved, editable.toString());
             if (!digits.contentEquals(editable)) {
                 editable.replace(0, editable.length(), digits);
                 return;

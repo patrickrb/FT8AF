@@ -579,7 +579,7 @@ private fun CloudlogSettingsDialog(
                 // Manual entry mode
                 OutlinedTextField(
                     value = stationIdInput,
-                    onValueChange = { stationIdInput = filterStationLocationIdInput(it) },
+                    onValueChange = { stationIdInput = filterStationLocationIdInput(stationIdInput, it) },
                     label = { Text(stringResource(R.string.settings_station_id)) },
                     placeholder = { Text(stringResource(R.string.settings_station_id_hint), color = TextFaint) },
                     isError = !stationIdValid,
@@ -739,10 +739,23 @@ internal fun isValidStationLocationId(id: String): Boolean = id.trim().all { it 
 internal fun filterStationLocationId(input: String): String = input.filter { it in '0'..'9' }
 
 /**
- * [filterStationLocationId] for the manual-entry field, keeping the cursor after the same
+ * True when an edit to an invalid saved value (e.g. a callsign stored before #926) should clear
+ * the field. Stripping "K1AF" to "1" would quietly point uploads at another station location.
+ */
+internal fun shouldClearStationLocationId(previous: String, edited: String): Boolean =
+    edited != previous && !isValidStationLocationId(previous) && !isValidStationLocationId(edited)
+
+/** [filterStationLocationId] for one edit, clearing an invalid saved value instead of salvaging its digits. */
+internal fun cleanStationLocationIdEdit(previous: String, edited: String): String =
+    if (shouldClearStationLocationId(previous, edited)) "" else filterStationLocationId(edited)
+
+/**
+ * [cleanStationLocationIdEdit] for the manual-entry field, keeping the cursor after the same
  * digit it followed, so a paste like "ID 12" lands as "12" with the cursor at the end.
  */
-internal fun filterStationLocationIdInput(value: TextFieldValue): TextFieldValue {
+internal fun filterStationLocationIdInput(previous: TextFieldValue, value: TextFieldValue): TextFieldValue {
+    if (value.text == previous.text) return value
+    if (shouldClearStationLocationId(previous.text, value.text)) return TextFieldValue("")
     val digits = filterStationLocationId(value.text)
     if (digits == value.text) return value
     val cursor = filterStationLocationId(value.text.take(value.selection.end)).length
