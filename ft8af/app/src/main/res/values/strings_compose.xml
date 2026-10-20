@@ -994,12 +994,13 @@
     <string name="settings_api_key">API Key</string>
     <string name="settings_api_key_hint">Your Cloudlog API key</string>
     <string name="settings_loading_stations">Loading stations...</string>
-    <string name="settings_station_id">Station ID</string>
-    <string name="settings_station_id_hint">e.g. 1</string>
+    <string name="settings_station_id">Station Location ID</string>
+    <string name="settings_station_id_hint">Number from Wavelog/Cloudlog, e.g. 1</string>
+    <string name="settings_station_id_invalid">Digits only: the Station Location ID number from Wavelog/Cloudlog, not a callsign or name.</string>
     <string name="settings_select_a_station">Select a station</string>
     <string name="settings_enter_manually">Enter manually</string>
     <string name="settings_choose_from_server">Choose from server</string>
-    <string name="settings_station_profile">Station Profile</string>
+    <string name="settings_station_profile">Station Location</string>
     <string name="settings_qrz_creds_desc">Used to fetch profile photos for decoded callsigns via the QRZ XML API. Requires a QRZ XML subscription.</string>
     <string name="settings_username">Username</string>
     <string name="settings_username_hint">Your QRZ.com username</string>

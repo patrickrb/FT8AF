@@ -423,6 +423,8 @@ private fun CloudlogSettingsDialog(
     var addressInput by remember { mutableStateOf(TextFieldValue(initialAddress)) }
     var apiKeyInput by remember { mutableStateOf(TextFieldValue(initialApiKey)) }
     var stationIdInput by remember { mutableStateOf(TextFieldValue(initialStationId)) }
+    // A value saved before #926 may be a callsign or name; flag it and block Save until fixed.
+    val stationIdValid = isValidStationLocationId(stationIdInput.text)
 
     // Test connection state: null = idle, true = pass, false = fail
     var testResult by remember { mutableStateOf<Boolean?>(null) }
@@ -557,6 +559,14 @@ private fun CloudlogSettingsDialog(
                             .clickable { showStationPicker = true }
                             .padding(12.dp),
                     )
+                    if (!stationIdValid) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.settings_station_id_invalid),
+                            color = StatusBad,
+                            fontSize = 12.sp,
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.settings_enter_manually),
@@ -569,10 +579,17 @@ private fun CloudlogSettingsDialog(
                 // Manual entry mode
                 OutlinedTextField(
                     value = stationIdInput,
-                    onValueChange = { stationIdInput = it },
+                    onValueChange = { stationIdInput = filterStationLocationIdInput(it) },
                     label = { Text(stringResource(R.string.settings_station_id)) },
                     placeholder = { Text(stringResource(R.string.settings_station_id_hint), color = TextFaint) },
+                    isError = !stationIdValid,
+                    supportingText = if (stationIdValid) {
+                        null
+                    } else {
+                        { Text(stringResource(R.string.settings_station_id_invalid)) }
+                    },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     colors = fieldColors,
                     textStyle = TextStyle(fontSize = 14.sp),
                     modifier = Modifier.fillMaxWidth(),
@@ -683,8 +700,13 @@ private fun CloudlogSettingsDialog(
                             stationIdInput.text.trim(),
                         )
                     },
+                    enabled = stationIdValid,
                 ) {
-                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.action_save),
+                        color = if (stationIdValid) Accent else TextFaint,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }
@@ -705,6 +727,26 @@ private fun CloudlogSettingsDialog(
             },
         )
     }
+}
+
+/**
+ * Cloudlog/Wavelog Station Location ID (`station_profile_id`): a whole number >= 0, or blank
+ * while not set yet. A callsign or station name here makes every upload fail ("0 accepted", #926).
+ */
+internal fun isValidStationLocationId(id: String): Boolean = id.trim().all { it in '0'..'9' }
+
+/** Strips everything but ASCII digits; `Char.isDigit` would also let through non-ASCII digits. */
+internal fun filterStationLocationId(input: String): String = input.filter { it in '0'..'9' }
+
+/**
+ * [filterStationLocationId] for the manual-entry field, keeping the cursor after the same
+ * digit it followed, so a paste like "ID 12" lands as "12" with the cursor at the end.
+ */
+internal fun filterStationLocationIdInput(value: TextFieldValue): TextFieldValue {
+    val digits = filterStationLocationId(value.text)
+    if (digits == value.text) return value
+    val cursor = filterStationLocationId(value.text.take(value.selection.end)).length
+    return TextFieldValue(digits, TextRange(cursor))
 }
 
 /** Label for the chosen WRL logbook. A blank id is the account default; an id no longer listed shows raw. */
