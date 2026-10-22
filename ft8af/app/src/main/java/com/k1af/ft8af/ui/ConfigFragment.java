@@ -244,7 +244,9 @@ public class ConfigFragment extends Fragment {
                 editable.replace(0, editable.length(), digits);
                 return;
             }
-            binding.cloudlogStationIdEdit.setError(null);
+            // Unchanged text (a restored view) can still be an old callsign; keep it flagged.
+            binding.cloudlogStationIdEdit.setError(LoggingSettingsKt.isValidStationLocationId(
+                    editable.toString()) ? null : getString(R.string.settings_station_id_invalid));
             GeneralVariables.cloudlogStationID = editable.toString();
             writeConfig("cloudlogStationID", GeneralVariables.getCloudlogStationID());
         }
