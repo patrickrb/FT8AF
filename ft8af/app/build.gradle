@@ -109,6 +109,15 @@ android {
         debug{
             versionNameSuffix '-dev'
             buildConfigField("String", "apkBuildTime", "\"${currentTime}\"")
+            // Band Advisor rollout flags (radio.ks3ckc.ft8af.flags): build-time
+            // defaults, overridable per-developer from the debug flag screen and
+            // by the cached remote feature configuration. Debug ships enabled so
+            // the feature is exercised during development; release ships disabled
+            // until intentionally rolled out. These are rollout controls, not
+            // access control — see FeatureFlag.kt.
+            buildConfigField "boolean", "FEATURE_BAND_ADVISOR_DEFAULT", "true"
+            buildConfigField "boolean", "FEATURE_PERSONAL_PSK_ANALYTICS_DEFAULT", "true"
+            buildConfigField "boolean", "FEATURE_PROPAGATION_ALERTS_DEFAULT", "true"
         }
         release {
             if (project.hasProperty('RELEASE_STORE_FILE')) {
@@ -123,6 +132,11 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             buildConfigField("String", "apkBuildTime", "\"${currentTime}\"")
+            // Off in release until each feature is intentionally rolled out via
+            // the remote feature configuration (see FeatureFlag.kt).
+            buildConfigField "boolean", "FEATURE_BAND_ADVISOR_DEFAULT", "false"
+            buildConfigField "boolean", "FEATURE_PERSONAL_PSK_ANALYTICS_DEFAULT", "false"
+            buildConfigField "boolean", "FEATURE_PROPAGATION_ALERTS_DEFAULT", "false"
 
         }
     }
@@ -264,6 +278,12 @@ dependencies {
     // process death + app updates).
     implementation 'androidx.datastore:datastore-preferences:1.1.7'
 
+    // WorkManager schedules the opt-in Band Advisor propagation-alert checks
+    // (periodic, network-constrained, cancellable when the flag/preference is
+    // off). The app had no periodic-background mechanism before this; nothing
+    // else may piggyback on it without the same opt-in rigor.
+    implementation 'androidx.work:work-runtime-ktx:2.9.1'
+
     // --- JVM unit + Robolectric tests ---
     testImplementation 'junit:junit:4.13.2'
     // 4.14.1 ships android-all for SDK 35; older versions fail with
@@ -273,6 +293,8 @@ dependencies {
     testImplementation 'androidx.test.ext:junit:1.1.5'
     testImplementation 'com.google.truth:truth:1.4.2'
     testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
+    // Synchronous WorkManager harness for the propagation-alert scheduler tests.
+    testImplementation 'androidx.work:work-testing:2.9.1'
     testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
     testImplementation 'androidx.compose.ui:ui-test-junit4'
 

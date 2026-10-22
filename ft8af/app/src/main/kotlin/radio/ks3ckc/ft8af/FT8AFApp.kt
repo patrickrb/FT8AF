@@ -72,6 +72,13 @@ import radio.ks3ckc.ft8af.ui.components.OperateStatusRow
 import radio.ks3ckc.ft8af.ui.components.OperateDrawerPeekHeight
 import radio.ks3ckc.ft8af.ui.components.VoiceCommandButton
 import radio.ks3ckc.ft8af.ui.components.selectBandIndex
+import radio.ks3ckc.ft8af.flags.FeatureFlag
+import radio.ks3ckc.ft8af.flags.FeatureFlags
+import radio.ks3ckc.ft8af.ui.bandadvisor.BandAdvisorCard
+import radio.ks3ckc.ft8af.ui.bandadvisor.BandAdvisorSheet
+import radio.ks3ckc.ft8af.ui.bandadvisor.BandAdvisorStateHolder
+import radio.ks3ckc.ft8af.ui.bandadvisor.BandAdvisorTelemetry
+import radio.ks3ckc.ft8af.ui.bandadvisor.tuneToAdvisorFrequency
 import radio.ks3ckc.ft8af.ui.decode.DecodeScreen
 import radio.ks3ckc.ft8af.ui.logbook.LogbookScreen
 import radio.ks3ckc.ft8af.ui.map.MapScreen
@@ -248,6 +255,33 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     // Daytime hint for the band sheet's "Best now · …" copy (local wall-clock).
     val isDaytimeHint = remember {
         java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) in 8..17
+    }
+
+    // Band Advisor (feature-flagged): compact card inside the Band & Mode
+    // sheet, detail overlay below. The flag is evaluated per composition of
+    // the sheet, so a debug-screen flip takes effect on next open. When off,
+    // no advisor UI exists and no recommendation/personal requests are made.
+    val bandAdvisorScope = androidx.compose.runtime.rememberCoroutineScope()
+    val bandAdvisor = remember { BandAdvisorStateHolder(context.applicationContext) }
+    var showBandAdvisor by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(showBandModeSheet, showBandAdvisor) {
+        if (showBandModeSheet || showBandAdvisor) {
+            bandAdvisor.load(bandAdvisorScope, force = false)
+        }
+        if (showBandAdvisor) {
+            BandAdvisorTelemetry.event("opened", null)
+            bandAdvisor.loadPersonal(bandAdvisorScope)
+        }
+    }
+    // A tapped propagation-alert notification opens the advisor detail sheet
+    // (ComposeMainActivity posts the request from the notification intent).
+    val advisorOpenRequest by radio.ks3ckc.ft8af.bandadvisor.alerts.PropagationAlertNotifier
+        .openAdvisorRequest.observeAsState()
+    LaunchedEffect(advisorOpenRequest) {
+        if (advisorOpenRequest != null && FeatureFlags.isEnabled(FeatureFlag.BAND_ADVISOR)) {
+            BandAdvisorTelemetry.event("alert_opened", null)
+            showBandAdvisor = true
+        }
     }
 
     // A tapped Needed-DX notification asks us to jump to the Decode tab (DecodeScreen
@@ -751,7 +785,50 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 showBandModeSheet = false
                 showFrequencyPicker = true
             },
+            advisorCard = if (FeatureFlags.isEnabled(FeatureFlag.BAND_ADVISOR)) {
+                {
+                    BandAdvisorCard(
+                        state = bandAdvisor.state,
+                        catAvailable = catState == CatConnectionState.CONNECTED,
+                        onOpenDetails = {
+                            showBandModeSheet = false
+                            showBandAdvisor = true
+                        },
+                        onTune = { freqHz ->
+                            if (tuneToAdvisorFrequency(mainViewModel, context, freqHz)) {
+                                showBandModeSheet = false
+                            }
+                        },
+                    )
+                }
+            } else {
+                null
+            },
         )
+
+        // Band Advisor detail — recommendation, goal, evidence, alternatives,
+        // and the personal PSK Reporter panel. Sibling overlay like the other
+        // sheets. Never composed while the flag is off.
+        if (FeatureFlags.isEnabled(FeatureFlag.BAND_ADVISOR)) {
+            BandAdvisorSheet(
+                visible = showBandAdvisor,
+                state = bandAdvisor.state,
+                goal = bandAdvisor.goal,
+                targetRegion = bandAdvisor.targetRegion,
+                onSelectTargetRegion = { bandAdvisor.setTargetRegion(bandAdvisorScope, it) },
+                catAvailable = catState == CatConnectionState.CONNECTED,
+                nowMs = System.currentTimeMillis(),
+                personalPanel = bandAdvisor.personalPanel,
+                onDismiss = { showBandAdvisor = false },
+                onSelectGoal = { goal -> bandAdvisor.setGoal(bandAdvisorScope, goal) },
+                onRefresh = { bandAdvisor.load(bandAdvisorScope, force = true) },
+                onTune = { freqHz ->
+                    if (tuneToAdvisorFrequency(mainViewModel, context, freqHz)) {
+                        showBandAdvisor = false
+                    }
+                },
+            )
+        }
 
         // DXpedition Hound setup — collects the Fox call + call frequency, then
         // starts calling (disabling Hunt, which is mutually exclusive).

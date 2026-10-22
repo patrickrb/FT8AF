@@ -176,6 +176,13 @@ fun AdvancedSettings(
     var showLanguagePicker by remember { mutableStateOf(false) }
     var showThemePicker by remember { mutableStateOf(false) }
 
+    // Debug-only feature-flag screen (rendered instead of this screen while open).
+    var showFeatureFlags by remember { mutableStateOf(false) }
+    if (com.k1af.ft8af.BuildConfig.DEBUG && showFeatureFlags) {
+        FeatureFlagScreen(onBack = { showFeatureFlags = false })
+        return
+    }
+
     // FFT display developer knobs (issue #428)
     var fftWindow by remember { mutableIntStateOf(GeneralVariables.getFftWindowType()) }
     var fftAveraging by remember { mutableIntStateOf(GeneralVariables.getFftAveragingMode()) }
@@ -688,6 +695,21 @@ fun AdvancedSettings(
                         },
                     )
                 }
+            }
+        }
+
+        // =====================================================================
+        // DEVELOPER (debug builds only — never composed in release, and the
+        // flag repository additionally ignores overrides there)
+        // =====================================================================
+        if (com.k1af.ft8af.BuildConfig.DEBUG) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                SettingsRow(
+                    label = stringResource(R.string.settings_developer_flags),
+                    description = stringResource(R.string.settings_developer_flags_desc),
+                    showChevron = true,
+                    onClick = { showFeatureFlags = true },
+                )
             }
         }
     }

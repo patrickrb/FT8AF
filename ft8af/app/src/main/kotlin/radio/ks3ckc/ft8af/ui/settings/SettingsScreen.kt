@@ -70,6 +70,7 @@ private enum class SettingsCategory {
     DECODE_FILTERS,
     VOICE,
     LOGGING,
+    BAND_ADVISOR,
     ADVANCED,
     USB_DIAGNOSTICS,
     ABOUT,
@@ -145,6 +146,8 @@ fun SettingsScreen(
                 VoiceSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.LOGGING ->
                 LoggingSettings(mainViewModel, onBack = { currentCategory = null })
+            SettingsCategory.BAND_ADVISOR ->
+                BandAdvisorSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.ADVANCED ->
                 AdvancedSettings(mainViewModel, onBack = { currentCategory = null })
             SettingsCategory.USB_DIAGNOSTICS ->
@@ -332,6 +335,20 @@ private fun SettingsLanding(
                         showChevron = true,
                         onClick = { onOpenCategory(SettingsCategory.LOGGING) },
                     )
+                    // Band Advisor settings exist only while its rollout flag is
+                    // on — no entry point, no alert settings otherwise.
+                    if (radio.ks3ckc.ft8af.flags.FeatureFlags.isEnabled(
+                            radio.ks3ckc.ft8af.flags.FeatureFlag.BAND_ADVISOR,
+                        )
+                    ) {
+                        SectionDivider()
+                        SettingsRow(
+                            label = stringResource(R.string.settings_cat_band_advisor),
+                            description = stringResource(R.string.settings_cat_band_advisor_desc),
+                            showChevron = true,
+                            onClick = { onOpenCategory(SettingsCategory.BAND_ADVISOR) },
+                        )
+                    }
                     SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_cat_advanced),
