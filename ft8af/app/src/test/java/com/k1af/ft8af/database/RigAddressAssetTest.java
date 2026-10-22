@@ -161,17 +161,19 @@ public class RigAddressAssetTest {
     }
 
     @Test
-    public void qmx_isListedWithQdxDefaults() {
-        // The QMX speaks the same TS-480-style CAT subset as the QDX
-        // (KENWOOD_TS590 instruction set); baud is moot over USB CDC.
+    public void qmx_isListedWithItsOwnInstructionSetAndQdxBaud() {
+        // The QMX speaks the same TS-480-style CAT subset as the QDX, but has
+        // its own instruction set so it is put in digital mode (MD6;) rather
+        // than the TS-590's MD2; (USB voice on SSB-capable QMX firmware).
+        // Baud matches the QDX; it is moot over USB CDC anyway.
         RigNameList list = load();
         RigNameList.RigName qmx = findByName(list, "QRP Labs QMX");
         RigNameList.RigName qdx = findByName(list, "Qrp Labs QDX");
         assertThat(qmx).isNotNull();
-        assertThat(qmx.instructionSet).isEqualTo(InstructionSet.KENWOOD_TS590);
+        assertThat(qmx.instructionSet).isEqualTo(InstructionSet.QRPLABS_QMX);
         assertThat(qmx.bauRate).isEqualTo(9600);
-        assertThat(qmx.instructionSet).isEqualTo(qdx.instructionSet);
         assertThat(qmx.bauRate).isEqualTo(qdx.bauRate);
+        assertThat(qdx.instructionSet).isEqualTo(InstructionSet.KENWOOD_TS590);
     }
 
     @Test
