@@ -235,7 +235,7 @@ public class ConfigFragment extends Fragment {
 
         @Override
         public void afterTextChanged(Editable editable) {
-            // Station Location ID is a number (#926); strip pasted non-digits, or clear an old
+            // Station Location ID is a number (#926); strip pasted non-digits, or drop an old
             // callsign value on its first edit. The replace re-fires this with the clean text.
             String saved = GeneralVariables.getCloudlogStationID();
             String digits = LoggingSettingsKt.cleanStationLocationIdEdit(
@@ -244,6 +244,7 @@ public class ConfigFragment extends Fragment {
                 editable.replace(0, editable.length(), digits);
                 return;
             }
+            binding.cloudlogStationIdEdit.setError(null);
             GeneralVariables.cloudlogStationID = editable.toString();
             writeConfig("cloudlogStationID", GeneralVariables.getCloudlogStationID());
         }
@@ -510,6 +511,11 @@ public class ConfigFragment extends Fragment {
 
         binding.cloudlogStationIdEdit.removeTextChangedListener(onCloudlogStationIDChanged);
         binding.cloudlogStationIdEdit.setText(GeneralVariables.getCloudlogStationID());
+        // Flag a value saved before #926 (a callsign or name), as the Compose dialog does.
+        String savedStationId = GeneralVariables.getCloudlogStationID();
+        binding.cloudlogStationIdEdit.setError(LoggingSettingsKt.isValidStationLocationId(
+                savedStationId == null ? "" : savedStationId)
+                ? null : getString(R.string.settings_station_id_invalid));
         binding.cloudlogStationIdEdit.addTextChangedListener(onCloudlogStationIDChanged);
 
         // QRZ configuration

@@ -739,19 +739,36 @@ internal fun isValidStationLocationId(id: String): Boolean = id.trim().all { it 
 internal fun filterStationLocationId(input: String): String = input.filter { it in '0'..'9' }
 
 /**
- * True when an edit to an invalid saved value (e.g. a callsign stored before #926) should clear
- * the field. Stripping "K1AF" to "1" would quietly point uploads at another station location.
+ * True when an edit to an invalid saved value (e.g. a callsign stored before #926) should drop the
+ * old text. Stripping "K1AF" to "1" would quietly point uploads at another station location.
  */
 internal fun shouldClearStationLocationId(previous: String, edited: String): Boolean =
     edited != previous && !isValidStationLocationId(previous) && !isValidStationLocationId(edited)
 
 /**
- * [filterStationLocationId] for one edit, clearing an invalid saved value instead of salvaging its
- * digits. Unchanged text (e.g. a restored view firing its watcher) is left alone, never stripped.
+ * The text an edit put in, found by trimming what [previous] and [edited] share at both ends:
+ * "3" for "K1AF" -> "K1AF3", the whole paste for a select-all paste, "" for a backspace.
+ */
+internal fun insertedText(previous: String, edited: String): String {
+    var start = 0
+    while (start < previous.length && start < edited.length && previous[start] == edited[start]) start++
+    var end = 0
+    while (end < previous.length - start && end < edited.length - start &&
+        previous[previous.length - 1 - end] == edited[edited.length - 1 - end]
+    ) {
+        end++
+    }
+    return edited.substring(start, edited.length - end)
+}
+
+/**
+ * [filterStationLocationId] for one edit. An invalid saved value is dropped instead of salvaged,
+ * but digits the user just typed or pasted are kept, the same as in an empty field. Unchanged text
+ * (e.g. a restored view firing its watcher) is left alone, never stripped.
  */
 internal fun cleanStationLocationIdEdit(previous: String, edited: String): String = when {
     edited == previous -> edited
-    shouldClearStationLocationId(previous, edited) -> ""
+    shouldClearStationLocationId(previous, edited) -> filterStationLocationId(insertedText(previous, edited))
     else -> filterStationLocationId(edited)
 }
 
@@ -761,11 +778,14 @@ internal fun cleanStationLocationIdEdit(previous: String, edited: String): Strin
  */
 internal fun filterStationLocationIdInput(previous: TextFieldValue, value: TextFieldValue): TextFieldValue {
     if (value.text == previous.text) return value
-    if (shouldClearStationLocationId(previous.text, value.text)) return TextFieldValue("")
-    val digits = filterStationLocationId(value.text)
-    if (digits == value.text) return value
-    val cursor = filterStationLocationId(value.text.take(value.selection.end)).length
-    return TextFieldValue(digits, TextRange(cursor))
+    val cleaned = cleanStationLocationIdEdit(previous.text, value.text)
+    if (cleaned == value.text) return value
+    val cursor = if (shouldClearStationLocationId(previous.text, value.text)) {
+        cleaned.length
+    } else {
+        filterStationLocationId(value.text.take(value.selection.end)).length
+    }
+    return TextFieldValue(cleaned, TextRange(cursor))
 }
 
 /** Label for the chosen WRL logbook. A blank id is the account default; an id no longer listed shows raw. */

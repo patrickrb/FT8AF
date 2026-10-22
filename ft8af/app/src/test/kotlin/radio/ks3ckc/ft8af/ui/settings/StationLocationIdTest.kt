@@ -66,7 +66,33 @@ class StationLocationIdTest {
         val result = filterStationLocationIdInput(TextFieldValue("K1AF"), TextFieldValue("K1A", TextRange(3)))
         assertThat(result.text).isEmpty()
         assertThat(cleanStationLocationIdEdit("LB5AK", "LB5A")).isEmpty()
-        assertThat(cleanStationLocationIdEdit("LB5AK", "LB5AK7")).isEmpty()
+    }
+
+    @Test
+    fun `a digit typed onto an old callsign value is kept, the old value dropped`() {
+        assertThat(cleanStationLocationIdEdit("LB5AK", "LB5AK7")).isEqualTo("7")
+        assertThat(cleanStationLocationIdEdit("K1AF", "K11AF")).isEqualTo("1")
+        val result = filterStationLocationIdInput(TextFieldValue("K1AF"), TextFieldValue("K1AF3", TextRange(5)))
+        assertThat(result.text).isEqualTo("3")
+        assertThat(result.selection).isEqualTo(TextRange(1))
+    }
+
+    @Test
+    fun `pasting over an old callsign value keeps the pasted digits, as in an empty field`() {
+        val result = filterStationLocationIdInput(TextFieldValue("K1AF"), TextFieldValue("ID 12", TextRange(5)))
+        assertThat(result.text).isEqualTo("12")
+        assertThat(result.selection).isEqualTo(TextRange(2))
+        assertThat(cleanStationLocationIdEdit("K1AF", "ID 12")).isEqualTo("12")
+    }
+
+    @Test
+    fun `insertedText is what an edit added between the shared ends`() {
+        assertThat(insertedText("K1AF", "K1AF3")).isEqualTo("3")
+        assertThat(insertedText("K1AF", "K1A")).isEmpty()
+        assertThat(insertedText("K1AF", "ID 12")).isEqualTo("ID 12")
+        assertThat(insertedText("K1AF", "K19AF")).isEqualTo("9")
+        assertThat(insertedText("AA", "AAA")).isEqualTo("A")
+        assertThat(insertedText("", "12")).isEqualTo("12")
     }
 
     @Test
