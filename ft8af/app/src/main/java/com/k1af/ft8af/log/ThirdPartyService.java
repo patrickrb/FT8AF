@@ -21,9 +21,12 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 enum ServiceType{
     Cloudlog,
@@ -74,12 +77,21 @@ public class ThirdPartyService {
         if (base == null || apiKey == null || apiKey.trim().isEmpty()) {
             return stations;
         }
+        return parseStationProfiles(cloudlogGet(base, "api/station_info/" + apiKey.trim(), null));
+    }
+
+    /**
+     * Station profiles from an {@code api/station_info} reply. Entries that aren't JSON
+     * objects are skipped; null, empty or bad JSON gives an empty list, never null.
+     */
+    static List<StationProfile> parseStationProfiles(String json) {
+        List<StationProfile> stations = new ArrayList<>();
+        if (json == null || json.isEmpty()) return stations;
         try {
-            String result = cloudlogGet(base, "api/station_info/" + apiKey.trim(), null);
-            if (result == null || result.isEmpty()) return stations;
-            JSONArray arr = new JSONArray(result);
+            JSONArray arr = new JSONArray(json);
             for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.getJSONObject(i);
+                JSONObject obj = arr.optJSONObject(i);
+                if (obj == null) continue;
                 stations.add(new StationProfile(
                         obj.optString("station_id", ""),
                         obj.optString("station_profile_name", ""),
@@ -88,7 +100,7 @@ public class ThirdPartyService {
                 ));
             }
         } catch (Exception e) {
-            Log.d(TAG, "FetchCloudlogStations error: " + e.getClass().getSimpleName());
+            Log.d(TAG, "station_info parse error: " + e.getClass().getSimpleName());
         }
         return stations;
     }
@@ -660,7 +672,7 @@ public class ThirdPartyService {
      * user has enabled.
      *
      * <p>Cloudlog/Wavelog rows are first checked against the QSOs the logbook already has
-     * ({@link #fetchCloudlogRemoteLog}); a row found there is marked synced and not sent.
+     * ({@link #findRowsAlreadyInCloudlog}); a row found there is marked synced and not sent.
      * Without that, connecting an existing Wavelog logbook re-uploaded every QSO in it
      * (issue #936). A row the server rejects as a duplicate is marked synced too, so it is
      * not retried on every sync.
@@ -699,11 +711,10 @@ public class ThirdPartyService {
             // key, no logbook, daily quota, offline): a 113-row backlog must not turn into 113
             // identical rejections against a rate-limited API.
             boolean wrlLive = wrl;
-            // Downloaded on the first row that needs Cloudlog, so a pass with nothing to
-            // upload there costs no extra request. Null when the server can't list its
-            // QSOs (plain Cloudlog has no get_contacts_adif); uploads then go ahead as before.
-            boolean remoteFetched = false;
-            CloudlogRemoteLog remote = null;
+            // Cursor positions of the rows the Cloudlog/Wavelog logbook already has (#936).
+            Set<Integer> cloudlogPresent = cl
+                    ? findRowsAlreadyInCloudlog(cursor, syncedClCol)
+                    : Collections.<Integer>emptySet();
             int done = 0;
             while (cursor.moveToNext()) {
                 long rowId = idCol >= 0 ? cursor.getLong(idCol) : -1;
@@ -711,14 +722,7 @@ public class ThirdPartyService {
                 boolean alreadyQrz = syncedQrzCol >= 0 && cursor.getInt(syncedQrzCol) == 1;
                 boolean alreadyWrl = syncedWrlCol >= 0 && cursor.getInt(syncedWrlCol) == 1;
                 if (cl && !alreadyCl) {
-                    if (!remoteFetched) {
-                        remoteFetched = true;
-                        remote = fetchCloudlogRemoteLog();
-                    }
-                    if (remote != null && remote.contains(colStr(cursor, "call"),
-                            colStr(cursor, "qso_date"), colStr(cursor, "time_on"),
-                            colStr(cursor, "band"), colStr(cursor, "mode"),
-                            colStr(cursor, "station_callsign"))) {
+                    if (cloudlogPresent.contains(cursor.getPosition())) {
                         cloudlogAlreadyPresent++;
                         if (rowId >= 0) markRowSynced(db, rowId, "synced_cloudlog");
                     } else {
@@ -768,6 +772,35 @@ public class ThirdPartyService {
                 cloudlogError, qrzError, wrlError, cloudlogAlreadyPresent);
     }
 
+    /**
+     * Cursor positions of the rows not yet synced to Cloudlog/Wavelog that the logbook
+     * already has. Downloads the remote log only when there is such a row, so a pass with
+     * nothing to upload there costs no extra request. Empty when the server can't list its
+     * QSOs (plain Cloudlog has no get_contacts_adif); uploads then go ahead as before.
+     * All pending rows are matched together, so one remote QSO accounts for one row
+     * ({@link CloudlogRemoteLog#matchPresent}). Leaves the cursor before the first row.
+     */
+    private static Set<Integer> findRowsAlreadyInCloudlog(Cursor cursor, int syncedClCol) {
+        List<CloudlogRemoteLog.Local> pending = new ArrayList<>();
+        List<Integer> positions = new ArrayList<>();
+        cursor.moveToPosition(-1);
+        while (cursor.moveToNext()) {
+            if (syncedClCol >= 0 && cursor.getInt(syncedClCol) == 1) continue;
+            pending.add(new CloudlogRemoteLog.Local(colStr(cursor, "call"),
+                    colStr(cursor, "qso_date"), colStr(cursor, "time_on"),
+                    colStr(cursor, "band"), colStr(cursor, "mode"),
+                    colStr(cursor, "station_callsign")));
+            positions.add(cursor.getPosition());
+        }
+        cursor.moveToPosition(-1);
+        Set<Integer> present = new HashSet<>();
+        if (pending.isEmpty()) return present;
+        CloudlogRemoteLog remote = fetchCloudlogRemoteLog();
+        if (remote == null) return present;
+        for (int i : remote.matchPresent(pending)) present.add(positions.get(i));
+        return present;
+    }
+
     /** QSOs requested per {@code get_contacts_adif} page. */
     private static final int REMOTE_PAGE_SIZE = 5000;
     /** Page cap per station location, so a server that never advances its cursor can't loop. */
@@ -786,15 +819,18 @@ public class ThirdPartyService {
         if (base == null || key == null || key.trim().isEmpty()) return null;
         key = key.trim();
 
-        List<String> stationIds = parseStationIds(cloudlogApi.get(base, "api/station_info/" + key));
-        if (stationIds.isEmpty()) {
-            String configured = GeneralVariables.getCloudlogStationID();
-            if (configured != null && !configured.trim().isEmpty()) {
-                stationIds.add(configured.trim());
-            }
+        List<StationProfile> profiles =
+                parseStationProfiles(cloudlogApi.get(base, "api/station_info/" + key));
+        List<String> stationIds = stationIdsOf(profiles);
+        String configured = GeneralVariables.getCloudlogStationID();
+        if (stationIds.isEmpty() && configured != null && !configured.trim().isEmpty()) {
+            stationIds.add(configured.trim());
         }
 
         CloudlogRemoteLog remote = new CloudlogRemoteLog();
+        // A row without a station callsign is uploaded to the configured location, so it
+        // is only "already there" if that location's callsign logged it.
+        remote.setDefaultStationCallsign(stationCallsignOf(profiles, configured));
         boolean anyRead = false;
         for (String stationId : stationIds) {
             long cursor = 0;
@@ -822,19 +858,29 @@ public class ThirdPartyService {
 
     /** Station ids from an {@code api/station_info} reply; empty on null or bad JSON. */
     static List<String> parseStationIds(String json) {
+        return stationIdsOf(parseStationProfiles(json));
+    }
+
+    /** The non-blank station ids of {@code profiles}, in order, without repeats. */
+    static List<String> stationIdsOf(List<StationProfile> profiles) {
         List<String> ids = new ArrayList<>();
-        if (json == null || json.isEmpty()) return ids;
-        try {
-            JSONArray arr = new JSONArray(json);
-            for (int i = 0; i < arr.length(); i++) {
-                JSONObject obj = arr.optJSONObject(i);
-                String id = obj == null ? "" : obj.optString("station_id", "").trim();
-                if (!id.isEmpty() && !ids.contains(id)) ids.add(id);
-            }
-        } catch (Exception e) {
-            Log.d(TAG, "station_info parse error: " + e.getClass().getSimpleName());
+        for (StationProfile p : profiles) {
+            String id = p.stationId == null ? "" : p.stationId.trim();
+            if (!id.isEmpty() && !ids.contains(id)) ids.add(id);
         }
         return ids;
+    }
+
+    /** Callsign of the station profile with id {@code stationId}, or "" when not listed. */
+    static String stationCallsignOf(List<StationProfile> profiles, String stationId) {
+        if (stationId == null) return "";
+        String want = stationId.trim();
+        for (StationProfile p : profiles) {
+            if (p.stationId != null && p.stationId.trim().equals(want)) {
+                return p.callsign == null ? "" : p.callsign;
+            }
+        }
+        return "";
     }
 
     /**

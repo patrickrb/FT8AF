@@ -85,6 +85,51 @@ class CloudlogRemoteLogTest {
             .isTrue()
     }
 
+    private fun local(time: String, station: String? = "K1AF", call: String = "W1AW") =
+        CloudlogRemoteLog.Local(call, "20260805", time, "20m", "FT8", station)
+
+    @Test
+    fun `one remote qso accounts for only one local row`() {
+        // W1AW worked twice ten minutes apart; Wavelog has only the first.
+        val remote = log(row(time = "143500"))
+
+        assertThat(remote.matchPresent(listOf(local("143500"), local("144500")))).containsExactly(0)
+    }
+
+    @Test
+    fun `the remote qso goes to the closest local row, not the first one`() {
+        val remote = log(row(time = "144400"))
+
+        assertThat(remote.matchPresent(listOf(local("143500"), local("144500")))).containsExactly(1)
+    }
+
+    @Test
+    fun `two remote qsos cover two local rows`() {
+        val remote = log(row(time = "143500"), row(time = "144500"))
+
+        assertThat(remote.matchPresent(listOf(local("143500"), local("144500")))).containsExactly(0, 1)
+    }
+
+    @Test
+    fun `matchPresent leaves the remote log unchanged between calls`() {
+        val remote = log(row())
+
+        assertThat(remote.matchPresent(listOf(local("143500")))).containsExactly(0)
+        assertThat(remote.matchPresent(listOf(local("143500")))).containsExactly(0)
+    }
+
+    @Test
+    fun `a local row without a station callsign uses the upload station's callsign`() {
+        val remote = log(row(station = "W1XYZ"))
+
+        // Unknown upload station: matches any station, as before.
+        assertThat(remote.contains("W1AW", "20260805", "143500", "20m", "FT8", "")).isTrue()
+        remote.setDefaultStationCallsign("k1af")
+        assertThat(remote.contains("W1AW", "20260805", "143500", "20m", "FT8", "")).isFalse()
+        assertThat(log(row(station = "K1AF")).apply { setDefaultStationCallsign("K1AF") }
+            .contains("W1AW", "20260805", "143500", "20m", "FT8", null)).isTrue()
+    }
+
     @Test
     fun `rows without a call or with a bad date are ignored on both sides`() {
         val remote = log(row(call = ""), row(date = "2026-08-05"), row(time = "14"))

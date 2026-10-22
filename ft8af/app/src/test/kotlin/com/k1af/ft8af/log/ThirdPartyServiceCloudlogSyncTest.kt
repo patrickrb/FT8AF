@@ -114,15 +114,20 @@ class ThirdPartyServiceCloudlogSyncTest {
 
     private val emptyPage = """{"status":"successful","lastfetchedid":0,"exported_qsos":0,"adif":null}"""
 
-    private fun insertQso(call: String, syncedCloudlog: Int = 0) {
+    private fun insertQso(
+        call: String,
+        syncedCloudlog: Int = 0,
+        timeOn: String = "143500",
+        stationCallsign: String = "K1AF",
+    ) {
         val v = ContentValues()
         v.put("call", call)
         v.put("mode", "FT8")
         v.put("qso_date", "20260805")
-        v.put("time_on", "143500")
+        v.put("time_on", timeOn)
         v.put("band", "20m")
         v.put("freq", "14.074")
-        v.put("station_callsign", "K1AF")
+        v.put("station_callsign", stationCallsign)
         v.put("synced_cloudlog", syncedCloudlog)
         db.insert("QSLTable", null, v)
     }
@@ -153,6 +158,64 @@ class ThirdPartyServiceCloudlogSyncTest {
         assertThat(result.cloudlogError).isNull()
         assertThat(syncedCalls()).containsExactly("W1AW", "K2XX", "N3ZZ")
         assertThat(ThirdPartyService.countUnsyncedQSOs(db)).isEqualTo(0)
+    }
+
+    @Test
+    fun `a station worked twice is uploaded once more when wavelog has only one`() {
+        insertQso("W1AW", timeOn = "143500")
+        insertQso("W1AW", timeOn = "144500")
+        remotePages["1"] = mutableListOf(page(10, "W1AW"), emptyPage)
+        remotePages["2"] = mutableListOf(emptyPage)
+
+        val result = ThirdPartyService.syncAllQSOs(db, null)
+
+        assertThat(result.cloudlogAlreadyPresent).isEqualTo(1)
+        assertThat(uploads).hasSize(1)
+        assertThat(uploads[0]).contains("<time_on:6>144500")
+        assertThat(ThirdPartyService.countUnsyncedQSOs(db)).isEqualTo(0)
+    }
+
+    @Test
+    fun `a row without a station callsign only matches the upload station's callsign`() {
+        stationInfo = """[{"station_id":"1","station_callsign":"K1AF"},""" +
+            """{"station_id":"2","station_callsign":"W1XYZ"}]"""
+        insertQso("W1AW", stationCallsign = "")
+        // Wavelog has W1AW, but logged by the club call under station 2.
+        remotePages["1"] = mutableListOf(emptyPage)
+        remotePages["2"] = mutableListOf(
+            """{"status":"successful","lastfetchedid":20,"qsos":[{"CALL":"W1AW","QSO_DATE":"20260805",""" +
+                """"TIME_ON":"143500","BAND":"20m","MODE":"FT8","STATION_CALLSIGN":"W1XYZ"}]}""",
+            emptyPage,
+        )
+
+        val result = ThirdPartyService.syncAllQSOs(db, null)
+
+        assertThat(result.cloudlogAlreadyPresent).isEqualTo(0)
+        assertThat(uploads).hasSize(1)
+    }
+
+    @Test
+    fun `paging stops when the server does not advance the cursor`() {
+        insertQso("N3ZZ")
+        remotePages["1"] = mutableListOf(page(10, "W1AW"), page(10, "W1AW"), page(11, "K2XX"))
+        remotePages["2"] = mutableListOf(emptyPage)
+
+        ThirdPartyService.syncAllQSOs(db, null)
+
+        assertThat(pageRequests.map { it.getString("station_id") + "@" + it.getLong("fetchfromid") })
+            .containsExactly("1@0", "1@10", "2@0").inOrder()
+    }
+
+    @Test
+    fun `paging is capped per station`() {
+        insertQso("N3ZZ")
+        remotePages["1"] = (1..300).map { page(it.toLong(), "W1AW") }.toMutableList()
+        remotePages["2"] = mutableListOf(emptyPage)
+
+        ThirdPartyService.syncAllQSOs(db, null)
+
+        assertThat(pageRequests.count { it.getString("station_id") == "1" }).isEqualTo(200)
+        assertThat(uploads).hasSize(1)
     }
 
     @Test
@@ -253,6 +316,22 @@ class ThirdPartyServiceCloudlogSyncTest {
         assertThat(ThirdPartyService.isDuplicateRejection("HTTP 400: wrong station id")).isFalse()
         assertThat(ThirdPartyService.isDuplicateRejection("HTTP 500: Duplicate for K1AF")).isFalse()
         assertThat(ThirdPartyService.isDuplicateRejection(null)).isFalse()
+    }
+
+    @Test
+    fun `station profiles parse leniently and give the configured station's callsign`() {
+        val profiles = ThirdPartyService.parseStationProfiles(
+            """[{"station_id":"1","station_profile_name":"Home","station_callsign":"K1AF"},""" +
+                """"junk",{"station_id":"2","station_callsign":"W1XYZ"}]""",
+        )
+
+        assertThat(profiles.map { it.stationId }).containsExactly("1", "2").inOrder()
+        assertThat(profiles[0].profileName).isEqualTo("Home")
+        assertThat(ThirdPartyService.stationCallsignOf(profiles, " 2 ")).isEqualTo("W1XYZ")
+        assertThat(ThirdPartyService.stationCallsignOf(profiles, "9")).isEmpty()
+        assertThat(ThirdPartyService.stationCallsignOf(profiles, null)).isEmpty()
+        assertThat(ThirdPartyService.parseStationProfiles("not json")).isEmpty()
+        assertThat(ThirdPartyService.parseStationProfiles(null)).isEmpty()
     }
 
     @Test

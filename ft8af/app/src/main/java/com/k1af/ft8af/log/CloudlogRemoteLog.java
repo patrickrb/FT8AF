@@ -4,10 +4,13 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The QSOs already in the user's Wavelog logbook, read back through
@@ -23,8 +26,10 @@ import java.util.Map;
  * <p>A local row counts as already present when a remote QSO has the same call, band
  * and mode, and its start time is within {@link #MATCH_WINDOW_MINUTES}. That window is
  * the one Wavelog itself uses to match QSOs (its {@code import_check}). It absorbs a
- * logger that records time_on at the end of the exchange rather than the start. Station
- * callsigns are compared only when both sides have one.
+ * logger that records time_on at the end of the exchange rather than the start. Each
+ * remote QSO accounts for at most one local row ({@link #matchPresent}). Station
+ * callsigns are compared when both sides have one; a local row without one is compared
+ * against the station location uploads go to, when that is known.
  *
  * <p>Pure (no network, no Android types besides org.json) so it is unit-testable.
  */
@@ -50,6 +55,7 @@ final class CloudlogRemoteLog {
 
     private final Map<String, List<Entry>> byCallBandMode = new HashMap<>();
     private int size;
+    private String defaultStationCallsign = "";
 
     /** Number of remote QSOs recorded. */
     int size() {
@@ -71,22 +77,93 @@ final class CloudlogRemoteLog {
         size++;
     }
 
-    /** Whether a local QSO (stored FT8AF mode, e.g. {@code FT4}) is already in the remote log. */
+    /**
+     * The callsign of the station location uploads go to, used for a local row that has no
+     * station callsign of its own (Wavelog then logs it under that location's callsign).
+     * Empty when unknown, in which case such a row matches any station.
+     */
+    void setDefaultStationCallsign(String stationCallsign) {
+        defaultStationCallsign = normalizeCall(stationCallsign);
+    }
+
+    /** One local QSO to look up; {@code mode} is the stored FT8AF mode, e.g. {@code FT4}. */
+    static final class Local {
+        final String call;
+        final String qsoDate;
+        final String timeOn;
+        final String band;
+        final String mode;
+        final String stationCallsign;
+
+        Local(String call, String qsoDate, String timeOn, String band, String mode,
+              String stationCallsign) {
+            this.call = call;
+            this.qsoDate = qsoDate;
+            this.timeOn = timeOn;
+            this.band = band;
+            this.mode = mode;
+            this.stationCallsign = stationCallsign;
+        }
+    }
+
+    /** Whether a single local QSO is already in the remote log. */
     boolean contains(String call, String qsoDate, String timeOn, String band, String mode,
                      String stationCallsign) {
-        long minute = epochMinute(qsoDate, timeOn);
-        String key = key(call, band, mode);
-        if (key == null || minute == Long.MIN_VALUE) return false;
-        List<Entry> list = byCallBandMode.get(key);
-        if (list == null) return false;
-        String station = normalizeCall(stationCallsign);
-        for (Entry e : list) {
-            if (Math.abs(e.minute - minute) > MATCH_WINDOW_MINUTES) continue;
-            if (!station.isEmpty() && !e.stationCallsign.isEmpty()
-                    && !station.equals(e.stationCallsign)) continue;
-            return true;
+        List<Local> one = new ArrayList<>();
+        one.add(new Local(call, qsoDate, timeOn, band, mode, stationCallsign));
+        return !matchPresent(one).isEmpty();
+    }
+
+    /**
+     * Indexes of the local QSOs that are already in the remote log.
+     *
+     * <p>Each remote QSO accounts for at most one local QSO, so two local QSOs with the
+     * same call, band and mode inside the window (a QSO worked twice, a busted one redone)
+     * are not both skipped because Wavelog has one of them. Pairs are taken closest start
+     * time first, so the remote QSO goes to the local row it most likely is. Does not change
+     * the remote log; each call starts from the full set.
+     */
+    Set<Integer> matchPresent(List<Local> locals) {
+        List<Candidate> candidates = new ArrayList<>();
+        for (int i = 0; i < locals.size(); i++) {
+            Local l = locals.get(i);
+            long minute = epochMinute(l.qsoDate, l.timeOn);
+            String key = key(l.call, l.band, l.mode);
+            if (key == null || minute == Long.MIN_VALUE) continue;
+            List<Entry> list = byCallBandMode.get(key);
+            if (list == null) continue;
+            String station = normalizeCall(l.stationCallsign);
+            if (station.isEmpty()) station = defaultStationCallsign;
+            for (Entry e : list) {
+                long dt = Math.abs(e.minute - minute);
+                if (dt > MATCH_WINDOW_MINUTES) continue;
+                if (!station.isEmpty() && !e.stationCallsign.isEmpty()
+                        && !station.equals(e.stationCallsign)) continue;
+                candidates.add(new Candidate(dt, i, e));
+            }
         }
-        return false;
+        Collections.sort(candidates, (a, b) -> a.dt != b.dt
+                ? Long.compare(a.dt, b.dt) : Integer.compare(a.local, b.local));
+        Set<Integer> present = new HashSet<>();
+        Set<Entry> used = new HashSet<>();
+        for (Candidate c : candidates) {
+            if (present.contains(c.local) || used.contains(c.entry)) continue;
+            present.add(c.local);
+            used.add(c.entry);
+        }
+        return present;
+    }
+
+    private static final class Candidate {
+        final long dt;
+        final int local;
+        final Entry entry;
+
+        Candidate(long dt, int local, Entry entry) {
+            this.dt = dt;
+            this.local = local;
+            this.entry = entry;
+        }
     }
 
     /**
