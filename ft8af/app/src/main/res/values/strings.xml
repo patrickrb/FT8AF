@@ -549,7 +549,7 @@
     <string name="cloudlog_addr">Server address</string>
     <string name="cloudlog_api_key">Apikey</string>
     <string name="test_cloudlog_config">TEST</string>
-    <string name="cloudlog_station_id">Station ID</string>
+    <string name="cloudlog_station_id">Station Location ID</string>
     <string name="cloudlog_help">cloudlog_en.txt</string>
     <string name="pass">Pass!</string>
     <string name="fail">Fail!</string>

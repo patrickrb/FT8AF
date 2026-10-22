@@ -722,7 +722,7 @@
                             android:layout_marginTop="4dp"
                             android:background="@drawable/editor_style"
                             android:ems="10"
-                            android:inputType="text|textUri"
+                            android:inputType="number"
 
                             android:minHeight="15dp"
                             android:textColor="@color/text_view_color"
