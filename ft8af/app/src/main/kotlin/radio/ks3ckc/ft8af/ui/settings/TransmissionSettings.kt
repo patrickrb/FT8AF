@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import com.k1af.ft8af.ft8transmit.ClearFrequencyFinder
 import com.k1af.ft8af.ft8transmit.MeterProtectionController
 import com.k1af.ft8af.ft8transmit.TuneController
 import com.k1af.ft8af.ft8transmit.TuneMethod
@@ -82,6 +83,19 @@ internal fun clampAlcHigh(desired: Int, low: Int): Int {
     return desired.coerceIn(lower, ALC_HIGH_MAX)
 }
 
+// Slider step for the lowest auto-clear offset (issue #938).
+private const val AUTO_TX_MIN_FREQ_STEP = 50
+
+/**
+ * Snap a slider position for the lowest auto-clear TX offset (issue #938) to the
+ * nearest [AUTO_TX_MIN_FREQ_STEP] Hz, then clamp it to the range
+ * [ClearFrequencyFinder] accepts.
+ */
+internal fun snapAutoTxMinFreq(hz: Int): Int {
+    val snapped = Math.round(hz / AUTO_TX_MIN_FREQ_STEP.toFloat()) * AUTO_TX_MIN_FREQ_STEP
+    return ClearFrequencyFinder.clampUserMinOffsetHz(snapped)
+}
+
 /**
  * Transmission settings: TX/RX split, watchdog, stop-after, TX protection
  * (auto-volume ALC + SWR halt), and auto-sequencing.
@@ -113,6 +127,7 @@ fun TransmissionSettings(
 
     // Auto-sequence state
     var autoClearTxFreq by remember { mutableStateOf(GeneralVariables.autoClearTxFreq) }
+    var autoClearTxMinFreq by remember { mutableIntStateOf(GeneralVariables.autoClearTxMinFreq) }
     var autoFollowCQ by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
     var huntCallsCQ by remember { mutableStateOf(GeneralVariables.huntCallsCQ) }
     var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
@@ -652,6 +667,40 @@ fun TransmissionSettings(
                             )
                         },
                     )
+                    if (autoClearTxFreq) {
+                        SectionDivider()
+                        SettingsRow(
+                            label = stringResource(R.string.settings_auto_clear_tx_min),
+                            description = stringResource(R.string.settings_auto_clear_tx_min_desc),
+                            value = stringResource(R.string.settings_hz_format, autoClearTxMinFreq),
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .padding(bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IntSlider(
+                                value = autoClearTxMinFreq,
+                                onValueChange = { v ->
+                                    val snapped = snapAutoTxMinFreq(v)
+                                    autoClearTxMinFreq = snapped
+                                    GeneralVariables.autoClearTxMinFreq = snapped
+                                },
+                                onValueChangeFinished = {
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "autoClearTxMinFreq", autoClearTxMinFreq.toString(), null,
+                                    )
+                                },
+                                valueRange = ClearFrequencyFinder.DEFAULT_MIN_OFFSET_HZ..
+                                    ClearFrequencyFinder.MAX_USER_MIN_OFFSET_HZ,
+                                modifier = Modifier.weight(1f),
+                                thumbColor = Accent,
+                                activeTrackColor = Accent,
+                            )
+                        }
+                    }
                     SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_hunt),

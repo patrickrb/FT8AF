@@ -545,6 +545,8 @@
     <string name="cq_offset_moved">Desplazamiento de CQ movido a un hueco libre: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Offset de TX libre automático</string>
     <string name="settings_auto_clear_tx_desc">Al llamar CQ, elige un hueco libre según la actividad reciente de la banda y se aparta si se ocupa</string>
+    <string name="settings_auto_clear_tx_min">Offset automático mínimo</string>
+    <string name="settings_auto_clear_tx_min_desc">La selección automática nunca elige un offset por debajo de este. Súbelo para dejar los armónicos de audio fuera de la banda de paso</string>
     <string name="tune_content_description">Tune: inicia el sintonizador del equipo o transmite una portadora continua para ajustar la antena</string>
     <string name="tune_stopped_timeout">Tune detenido tras %1$d s</string>
     <string name="tune_blocked_tx">Detén el CQ/QSO antes de usar Tune</string>

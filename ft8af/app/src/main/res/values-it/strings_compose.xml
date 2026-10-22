@@ -577,6 +577,8 @@
     <string name="cq_offset_moved">Offset CQ spostato in uno spazio libero: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Offset TX libero automatico</string>
     <string name="settings_auto_clear_tx_desc">Chiamando CQ, sceglie uno spazio libero dall\'attività recente della banda e si sposta se viene occupato</string>
+    <string name="settings_auto_clear_tx_min">Offset automatico minimo</string>
+    <string name="settings_auto_clear_tx_min_desc">La scelta automatica non va mai sotto questo offset. Alzalo per tenere le armoniche audio fuori dalla banda passante</string>
     <string name="tune_content_description">Tune: avvia l\'accordatore della radio o trasmette una portante continua per l\'accordo dell\'antenna</string>
     <string name="tune_stopped_timeout">Tune fermato dopo %1$d s</string>
     <string name="tune_blocked_tx">Ferma il CQ/QSO prima di usare Tune</string>

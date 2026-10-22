@@ -42,7 +42,12 @@ tunables below are constructor parameters with the defaults shown.
 3. **Candidates.** A grid from `minOffset` to `maxOffset` (default
    **200–2800 Hz**, inside every rig's SSB passband and the decoder range) in
    `stepHz` (default **10 Hz**) increments. A candidate's own 50 Hz interval
-   must fit inside the range.
+   must fit inside the range. The operator can raise `minOffset` up to
+   **2000 Hz** with the "Lowest auto offset" setting (issue #938). The TX
+   audio is not a pure sine, so a low offset puts its 2nd and 3rd harmonics
+   inside the SSB passband, where they waste RF power as spurs. A higher floor
+   pushes them above the rig's filter. The setting only limits automatic picks;
+   an offset the operator chose by hand is left alone.
 4. **Scoring.** For each candidate: `clearance` = distance from the candidate's
    50 Hz interval to the nearest occupied interval in the window (0 when they
    intersect = occupied). Rank by:

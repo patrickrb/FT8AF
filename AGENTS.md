@@ -68,6 +68,67 @@ Remove the worktree when the branch is merged: `git worktree remove <path>`.
 When nothing else is in flight in your checkout, a feature branch in place is
 fine, but a worktree per task is still the recommended default.
 
+### Branch names
+
+`<type>/<short-slug>`, where `<type>` is `feat`, `fix`, `chore`, or `docs`
+(e.g. `fix/civ-address-hex`). When the work comes from a tracked task, put its
+id first in the slug, e.g. `fix/bur-12-cq-button-stuck`.
+
+### Pull requests
+
+- **Agents never merge.** Open the PR against `dev`, then stop. The maintainer
+  merges. They test on a phone only for `needs-device-test` PRs (see "Device
+  testing" below); for everything else they merge on the CI, code review, and
+  QA evidence.
+- **Fill in every section of the PR template**
+  (`.github/pull_request_template.md`): the debug APK link, a 3-6 step
+  manual test checklist with expected results, what changed, risks, and what was
+  tested automatically.
+- **The debug APK comes from CI.** For any PR that touches `ft8af/**`,
+  `.github/workflows/pr-debug-apk.yml` builds `FT8AF-pr<N>-<sha>-debug.apk`
+  and posts (or updates) one "Debug APK" comment on the PR with the download
+  link. Before you hand off, wait for that comment and link it in the
+  description. If the job fails, the PR isn't ready. PRs that don't touch
+  `ft8af/**` get no debug APK; write "n/a" in that section. On fork PRs the
+  job builds the APK but can't comment (read-only token), so link the
+  artifact from the run's summary page instead.
+- **CI must be green.** That means `android-gate` (unit tests and the release
+  build) plus, on PRs that touch `ft8af/**`, `Debug APK for manual testing`.
+- **Get a code review before QA.** Once CI is green, request a Copilot review
+  first. If Copilot doesn't respond (it can run out of credits), run Claude's
+  `code-review` skill on the PR instead. Address or answer every finding before
+  handing off to QA, and fill in the "Code review" section of the template
+  with the reviewer you used.
+- **Label PRs that come from Discord feedback** with `from-discord`, and link
+  the Discord message or the tracking task in "What changed".
+- **QA attaches evidence.** After code review, QA installs the debug APK on an
+  emulator, runs the PR's manual test checklist, and posts screenshots or a
+  short screen recording to the PR. A PR without that evidence isn't ready
+  for the maintainer.
+
+### Device testing
+
+The maintainer doesn't install every PR's APK. Device testing happens once per
+release batch, on the Play internal build that `staging` produces, which holds
+every PR merged into `dev` since the last batch. Per-PR device testing is only
+for changes an emulator can't check. Label those PRs `needs-device-test`:
+
+- transmit, PTT, or anything that keys the radio
+- CAT / rig control (CI-V, Hamlib, FlexRadio, etc.)
+- USB audio or USB serial
+- audio routing, input/output device selection, or sample-rate handling
+- runtime permissions, or what's declared in `AndroidManifest.xml`
+- signing, build types, `versionCode`, or other release config
+
+The author applies the label and says why in the template's "Device test"
+section. QA checks the label against the diff and adds it if it's missing.
+When in doubt, add it. Everything else (UI, decode/display logic, settings,
+CI, docs) merges on CI + code review + QA evidence.
+
+`from-discord` fixes are confirmed by the reporter: once the fix reaches a Play
+testing track, `discord-play-track-watch` posts to Discord and the reporter
+checks it on their own setup.
+
 ## Testing
 
 **Every new code path requires a new test.** Any branch, helper, or behavior
@@ -108,6 +169,27 @@ export JAVA_HOME=<jdk17-home>
 # or a single class:
 ./gradlew testDebugUnitTest --tests <fully.qualified.ClassName>
 ```
+
+### Android emulator flows
+
+`ft8af/app/src/androidTest/kotlin/com/k1af/ft8af/flows/` holds scripted UI
+flows that run the real app on the CI emulator (the `Instrumented tests
+(emulator)` job): launch, band change, decoding a recorded FT8 WAV from
+`src/main/cpp/ft8af_glue/testdata/ft8`, and a setting surviving an activity
+restart. Each flow saves a screenshot of the screen it ended on; the job uploads
+them as the `emulator-flows` artifact (plus `logcat.txt` when it fails), so a
+PR's UI can be checked without a phone. When you change a screen one of these
+flows walks through, update the flow in the same PR.
+
+Run them locally against an **emulator only** from the `ft8af` dir with
+`./gradlew connectedDebugAndroidTest` (Windows:
+`cmd.exe /c "gradlew.bat connectedDebugAndroidTest"`). Don't run it with your
+own phone attached: the task uninstalls the app at the end (wiping its logbook
+and settings), and the flows drive live state (band, operator identity, and a
+recorded slot through the real decode pipeline, which can spot to PSKReporter
+or start the auto-sequencer). On a physical device the flows skip themselves,
+but the uninstall still happens. The screenshots land on the device in
+`/data/local/tmp/ft8af-flows/`.
 
 ### iOS (`ios/`, macOS only)
 

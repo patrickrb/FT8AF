@@ -6,13 +6,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -24,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.GeneralVariables
@@ -113,7 +118,7 @@ fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) 
     }
 }
 
-private data class BandGroup(
+internal data class BandGroup(
     val waveLength: String,
     val primaryIndex: Int,
     val primaryFreqHz: Long,
@@ -162,65 +167,85 @@ fun FrequencyPickerSheet(
 ) {
     FT8AFBottomSheet(visible = visible, onDismiss = onDismiss) {
         val groups = remember(GeneralVariables.excludedBands.toSet(), GeneralVariables.operatingMode) { buildBandGroups() }
-        var showAlternates by remember { mutableStateOf(false) }
+        FrequencyPickerContent(
+            groups = groups,
+            currentBandIndex = currentBandIndex,
+            onSelect = onSelect,
+        )
+    }
+}
 
-        Column(
+/**
+ * The picker's body: band tiles, the show/hide-alternates toggle, and the
+ * alternates list. Scrolls vertically, because with alternates shown (and
+ * wrapping onto extra lines on narrow screens, #930) it can be taller than a
+ * short or landscape screen, and the sheet itself doesn't scroll.
+ */
+@Composable
+internal fun FrequencyPickerContent(
+    groups: List<BandGroup>,
+    currentBandIndex: Int,
+    onSelect: (Int) -> Unit,
+) {
+    var showAlternates by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp, bottom = 24.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.freq_select_title),
+            color = TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = GeistMonoFamily,
+            letterSpacing = 0.06.sp,
+            modifier = Modifier.padding(bottom = 12.dp),
+        )
+
+        BandTileGrid(
+            groups = groups,
+            currentBandIndex = currentBandIndex,
+            onTileClick = onSelect,
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Show / hide alternates toggle
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(top = 8.dp, bottom = 24.dp),
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { showAlternates = !showAlternates }
+                .padding(vertical = 10.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = stringResource(R.string.freq_select_title),
-                color = TextPrimary,
-                fontSize = 13.sp,
+                text = if (showAlternates) stringResource(R.string.freq_hide_alternates) else stringResource(R.string.freq_show_alternates),
+                color = TextMuted,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = GeistMonoFamily,
-                letterSpacing = 0.06.sp,
-                modifier = Modifier.padding(bottom = 12.dp),
+                letterSpacing = 0.08.sp,
             )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = if (showAlternates) "△" else "▽",
+                color = TextFaint,
+                fontSize = 11.sp,
+            )
+        }
 
-            BandTileGrid(
+        if (showAlternates) {
+            Spacer(modifier = Modifier.height(4.dp))
+            AlternatesList(
                 groups = groups,
                 currentBandIndex = currentBandIndex,
-                onTileClick = onSelect,
+                onChipClick = onSelect,
             )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Show / hide alternates toggle
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { showAlternates = !showAlternates }
-                    .padding(vertical = 10.dp, horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = if (showAlternates) stringResource(R.string.freq_hide_alternates) else stringResource(R.string.freq_show_alternates),
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.08.sp,
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = if (showAlternates) "△" else "▽",
-                    color = TextFaint,
-                    fontSize = 11.sp,
-                )
-            }
-
-            if (showAlternates) {
-                Spacer(modifier = Modifier.height(4.dp))
-                AlternatesList(
-                    groups = groups,
-                    currentBandIndex = currentBandIndex,
-                    onChipClick = onSelect,
-                )
-            }
         }
     }
 }
@@ -315,8 +340,9 @@ private fun BandTile(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun AlternatesList(
+internal fun AlternatesList(
     groups: List<BandGroup>,
     currentBandIndex: Int,
     onChipClick: (Int) -> Unit,
@@ -331,9 +357,19 @@ private fun AlternatesList(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = GeistMonoFamily,
-                    modifier = Modifier.width(44.dp),
+                    maxLines = 1,
+                    // Grow past 44.dp rather than wrap "160m" per character at
+                    // large font scales (same defect as the chips, #930).
+                    modifier = Modifier.widthIn(min = 44.dp),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // FlowRow so a band with more alternates than fit on a narrow
+                // screen wraps whole chips onto the next line instead of
+                // squeezing the last chip until its label wraps per character (#930).
+                FlowRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     for (alt in g.alternates) {
                         AlternateChip(
                             label = formatMhz(alt.second),
@@ -368,6 +404,8 @@ private fun AlternateChip(
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = GeistMonoFamily,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

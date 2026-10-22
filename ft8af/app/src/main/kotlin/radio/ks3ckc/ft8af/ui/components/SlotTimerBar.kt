@@ -27,7 +27,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.Size
-import androidx.compose.runtime.withFrameMillis
+import androidx.compose.animation.core.withInfiniteAnimationFrameMillis
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.R
 import com.k1af.ft8af.timer.UtcTimer
@@ -50,9 +50,13 @@ fun SlotTimerBar(
 ) {
     var nowMs by remember { mutableLongStateOf(UtcTimer.getSystemTime()) }
 
+    // An infinite per-frame loop, so it goes through the infinite-animation frame
+    // API: identical on a device, but Compose UI tests (which install an
+    // InfiniteAnimationPolicy) cancel it instead of never reaching idle. Without
+    // this every androidTest flow on the main screen hangs until it times out.
     LaunchedEffect(Unit) {
         while (true) {
-            withFrameMillis {
+            withInfiniteAnimationFrameMillis {
                 nowMs = UtcTimer.getSystemTime()
             }
         }

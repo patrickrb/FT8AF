@@ -663,6 +663,8 @@
     <string name="cq_offset_moved">Offset de CQ movido para um espaço livre: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Limpar offset de TX automaticamente</string>
     <string name="settings_auto_clear_tx_desc">Ao chamar CQ, escolhe um espaço livre com base na atividade recente da banda e se afasta se ele ficar ocupado</string>
+    <string name="settings_auto_clear_tx_min">Offset automático mínimo</string>
+    <string name="settings_auto_clear_tx_min_desc">A escolha automática nunca usa um offset abaixo deste. Aumente para manter os harmônicos de áudio fora da banda passante</string>
     <string name="tune_content_description">Tune — inicia o sintonizador do rig ou transmite uma portadora contínua para sintonia de antena</string>
     <string name="tune_stopped_timeout">Tune interrompido após %1$d s</string>
     <string name="tune_blocked_tx">Pare o CQ/QSO antes de sintonizar</string>

@@ -573,6 +573,8 @@
     <string name="cq_offset_moved">CQ ofseti boş bir noktaya taşındı: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Otomatik boş TX ofseti</string>
     <string name="settings_auto_clear_tx_desc">CQ çağrılırken son bant etkinliğine göre boş bir nokta seçer ve doldurulursa başka yere taşınır</string>
+    <string name="settings_auto_clear_tx_min">En düşük otomatik ofset</string>
+    <string name="settings_auto_clear_tx_min_desc">Otomatik seçim bunun altında bir ofset seçmez. Ses harmoniklerini geçiş bandının dışında tutmak için yükseltin</string>
     <string name="tune_content_description">Tune: telsizin tunerini başlatır veya anten ayarı için sürekli taşıyıcı gönderir</string>
     <string name="tune_stopped_timeout">Tune %1$d s sonra durduruldu</string>
     <string name="tune_blocked_tx">Tune kullanmadan önce CQ/QSO\'yu durdurun</string>

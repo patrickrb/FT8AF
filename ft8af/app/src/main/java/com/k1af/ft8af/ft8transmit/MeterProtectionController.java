@@ -82,7 +82,8 @@ public class MeterProtectionController {
         // A user tune carrier is in progress: the meter callback is live whenever PTT is
         // keyed (FT8 over OR tune), so suppress the SWR halt while tuning. See
         // shouldHaltForSwr — halting here would set the lockout and block the retune.
-        boolean tuning = transmitSignal != null && transmitSignal.isTuning();
+        // isTuneSwrExempt also covers the tune's key-up tail and late CAT replies (#943).
+        boolean tuning = transmitSignal != null && transmitSignal.isTuneSwrExempt();
 
         // Diagnostics: when SWR protection is on, record each SWR reading we actually
         // receive so the debug.log shows whether meter data even reaches here during TX, the

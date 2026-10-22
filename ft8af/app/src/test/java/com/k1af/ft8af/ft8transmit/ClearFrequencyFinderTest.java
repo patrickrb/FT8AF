@@ -161,6 +161,83 @@ public class ClearFrequencyFinderTest {
         assertThat(f.selectClearOffset(1500f)).isNull();
     }
 
+    // ---- operator minimum offset (issue #938) -----------------------------------
+
+    @Test
+    public void minOffset_keepsThePickAtOrAboveTheFloor() {
+        // A lone signal sits on the band centre, so the unconstrained pick lands
+        // near 1500. Raise the floor to 1800: the pick must respect it.
+        ClearFrequencyFinder f = finder();
+        occupy(f, 1500f, T0);
+        f.setMinOffsetHz(1800f);
+        Float pick = f.selectClearOffset(1510f);
+        assertThat(pick).isNotNull();
+        assertThat(pick).isAtLeast(1800f);
+        assertThat(f.isOccupied(pick)).isFalse();
+    }
+
+    @Test
+    public void minOffset_skipsAClearGapBelowTheFloor() {
+        // Occupy everything except a wide gap at 300-800 and a narrow one near
+        // 1600. With the default floor the wide low gap wins; with a 1000 Hz
+        // floor the pick must take the narrow gap above it instead.
+        ClearFrequencyFinder f = finder();
+        for (float freq = 200f; freq <= 2800f; freq += 60f) {
+            boolean inLowGap = freq > 300f && freq < 800f;
+            boolean inHighGap = freq > 1550f && freq < 1700f;
+            if (!inLowGap && !inHighGap) {
+                occupy(f, freq, T0);
+            }
+        }
+        Float defaultPick = f.selectClearOffset(2000f);
+        assertThat(defaultPick).isNotNull();
+        assertThat(defaultPick).isLessThan(800f);
+
+        f.setMinOffsetHz(1000f);
+        Float raisedPick = f.selectClearOffset(2000f);
+        assertThat(raisedPick).isNotNull();
+        assertThat(raisedPick).isGreaterThan(1550f);
+        assertThat(raisedPick).isLessThan(1700f);
+    }
+
+    @Test
+    public void minOffset_staysPutWhenNothingAboveTheFloorIsClear() {
+        // Only the low end of the band is clear; with the floor above it there
+        // is nowhere better to go, so no move is suggested.
+        ClearFrequencyFinder f = finder();
+        for (float freq = 800f; freq <= 2850f; freq += 40f) {
+            occupy(f, freq, T0);
+        }
+        assertThat(f.selectClearOffset(1500f)).isNotNull(); // default: 200-750 is clear
+        f.setMinOffsetHz(1000f);
+        assertThat(f.selectClearOffset(1500f)).isNull();
+    }
+
+    @Test
+    public void minOffset_isCappedSoOneSignalStillFits() {
+        ClearFrequencyFinder f = finder();
+        f.setMinOffsetHz(5000f);
+        assertThat(f.minOffsetHz()).isEqualTo(
+                ClearFrequencyFinder.DEFAULT_MAX_OFFSET_HZ
+                        - ClearFrequencyFinder.SIGNAL_BANDWIDTH_HZ);
+        occupy(f, 1500f, T0);
+        assertThat(f.selectClearOffset(1500f)).isEqualTo(
+                ClearFrequencyFinder.DEFAULT_MAX_OFFSET_HZ
+                        - ClearFrequencyFinder.SIGNAL_BANDWIDTH_HZ);
+    }
+
+    @Test
+    public void clampUserMinOffset_boundsTheSetting() {
+        assertThat(ClearFrequencyFinder.clampUserMinOffsetHz(1200)).isEqualTo(1200);
+        // Below the default (0, negative, bad import): no extra floor.
+        assertThat(ClearFrequencyFinder.clampUserMinOffsetHz(0)).isEqualTo(200);
+        assertThat(ClearFrequencyFinder.clampUserMinOffsetHz(-50)).isEqualTo(200);
+        assertThat(ClearFrequencyFinder.clampUserMinOffsetHz(150)).isEqualTo(200);
+        // Above the cap.
+        assertThat(ClearFrequencyFinder.clampUserMinOffsetHz(2500)).isEqualTo(2000);
+        assertThat(ClearFrequencyFinder.clampUserMinOffsetHz(Integer.MAX_VALUE)).isEqualTo(2000);
+    }
+
     // ---- retry / hold-down ------------------------------------------------------
 
     @Test

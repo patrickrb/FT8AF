@@ -1073,6 +1073,8 @@
     <string name="cq_offset_moved">CQ offset moved to a clear spot: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Auto clear TX offset</string>
     <string name="settings_auto_clear_tx_desc">When calling CQ, pick a clear spot from recent band activity and move away if it becomes occupied</string>
+    <string name="settings_auto_clear_tx_min">Lowest auto offset</string>
+    <string name="settings_auto_clear_tx_min_desc">Auto clear never picks an offset below this. Raise it to keep audio harmonics out of the passband</string>
     <string name="tune_button" translatable="false">TUNE</string>
     <string name="tune_content_description">Tune — start the rig\'s tuner or transmit a steady carrier for antenna tuning</string>
     <string name="tune_stopped_timeout">Tune stopped after %1$d s</string>

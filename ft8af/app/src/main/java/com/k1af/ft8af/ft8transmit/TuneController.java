@@ -45,6 +45,35 @@ public final class TuneController {
     private long deadlineMs;
     private String stopReason = null;
 
+    /**
+     * How long after PTT drops a tune still exempts SWR readings from the halt.
+     * CAT meter replies lag the carrier, so a high reading taken at the end of
+     * the tune can land after key-up (issue #943). Safe to be generous: an FT8
+     * over revokes the exemption the moment it keys (see
+     * {@link #revokeSwrExemption()} and {@link #suppressesSwrHalt(boolean)}).
+     */
+    public static final long SWR_SETTLE_MS = 3000;
+
+    /**
+     * Upper bound on how long a stopped tune may stay "keyed" for SWR purposes.
+     * The real ramp-out and key-up take well under a second; if teardown hangs
+     * (a CAT write blocked on a dropped link), the exemption lapses here rather
+     * than leaving SWR protection off for as long as the worker is stuck.
+     */
+    public static final long KEYUP_TAIL_MAX_MS = 5000;
+
+    // PTT state, tracked apart from {@link #active}: active drops the instant
+    // the operator taps stop (or the timeout fires), but the carrier keeps
+    // going while the tone ramps out, the track stops, and PTT is released.
+    // A count, not a flag: a quick stop-then-tune can start a new worker while
+    // the previous one is still in its teardown, and the old worker's key-up
+    // must not end the new one's exemption.
+    private int keyedWorkers = 0;
+    private long stoppedAtMs = Long.MIN_VALUE;
+    private long unkeyedAtMs = Long.MIN_VALUE;
+    // Set when an FT8 over keys; cleared by the next tryStart.
+    private boolean swrExemptionRevoked = false;
+
     public TuneController(Clock clock) {
         this.clock = clock;
     }
@@ -68,6 +97,7 @@ public final class TuneController {
         startedAtMs = clock.nowMs();
         deadlineMs = startedAtMs + clampMaxOnSeconds(maxOnSeconds) * 1000L;
         stopReason = null;
+        swrExemptionRevoked = false;
         active = true;
         return true;
     }
@@ -100,6 +130,7 @@ public final class TuneController {
 
     private void stopInternal(String reason) {
         active = false;
+        stoppedAtMs = clock.nowMs();
         if (stopReason == null) {
             stopReason = reason;
         }
@@ -107,6 +138,55 @@ public final class TuneController {
 
     public synchronized boolean isActive() {
         return active;
+    }
+
+    /** The audio worker is about to key PTT for the tune carrier. */
+    public synchronized void markKeyed() {
+        keyedWorkers++;
+    }
+
+    /** The audio worker has released PTT for the tune carrier. */
+    public synchronized void markUnkeyed() {
+        if (keyedWorkers > 0) {
+            keyedWorkers--;
+            if (keyedWorkers == 0) {
+                unkeyedAtMs = clock.nowMs();
+            }
+        }
+    }
+
+    /**
+     * An FT8 over is keying: from here on every SWR reading belongs to it, so
+     * the tune's tail and settle window no longer exempt anything. Lasts until
+     * the next {@link #tryStart}.
+     */
+    public synchronized void revokeSwrExemption() {
+        swrExemptionRevoked = true;
+    }
+
+    /**
+     * True while an SWR reading should be treated as coming from the tune carrier,
+     * not a fault: the session is active, PTT is still keyed for the tune (at most
+     * {@link #KEYUP_TAIL_MAX_MS} after the stop), or PTT dropped less than
+     * {@link #SWR_SETTLE_MS} ago. High SWR is expected while tuning, and halting
+     * would set the lockout and block the next tune.
+     *
+     * <p>Never true while an FT8 over is in progress ({@code ft8TxInProgress}) or
+     * after one keyed ({@link #revokeSwrExemption()}): a real over's high SWR must
+     * always halt, even if it follows a tune within the windows above.
+     */
+    public synchronized boolean suppressesSwrHalt(boolean ft8TxInProgress) {
+        if (ft8TxInProgress || swrExemptionRevoked) {
+            return false;
+        }
+        if (active) {
+            return true;
+        }
+        long now = clock.nowMs();
+        if (keyedWorkers > 0) {
+            return stoppedAtMs != Long.MIN_VALUE && now - stoppedAtMs < KEYUP_TAIL_MAX_MS;
+        }
+        return unkeyedAtMs != Long.MIN_VALUE && now - unkeyedAtMs < SWR_SETTLE_MS;
     }
 
     /** Why the last session ended, or null if none ended yet. */

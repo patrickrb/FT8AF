@@ -208,7 +208,9 @@ $ratExit = $LASTEXITCODE
 # FT8SignalListener + ft8_decode_jni.cpp) and scores against WSJT-X jt9 truth
 # sidecars. Fails if any corpus file matches fewer truth messages than its
 # committed floor (testdata/ft8/floors.txt) — the floors ratchet up as decoder
-# improvements land. See decode_bench.c's header for flags and output format.
+# improvements land. Also fails if the matched decodes' ft8_snr() drifts from
+# jt9's SNR beyond testdata/ft8/snr_bounds.txt (issue #937). See
+# decode_bench.c's header for flags and output format.
 # ---------------------------------------------------------------------------
 $benchSrcs = @(
     "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
@@ -232,8 +234,9 @@ $benchSelfExit = $LASTEXITCODE
 
 $corpus = Join-Path $here "testdata\ft8"
 $floors = Join-Path $corpus "floors.txt"
+$snrBounds = Join-Path $corpus "snr_bounds.txt"
 $wavs = Get-ChildItem (Join-Path $corpus "*.wav") | ForEach-Object { $_.FullName }
-& $outBench --assert-floor $floors @wavs
+& $outBench --assert-floor $floors --assert-snr $snrBounds @wavs
 $benchExit = $LASTEXITCODE
 
 # ---------------------------------------------------------------------------

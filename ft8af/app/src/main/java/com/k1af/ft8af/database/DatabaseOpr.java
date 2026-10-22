@@ -2984,6 +2984,18 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("autoClearTxFreq")) {//Auto-select clear CQ offset (issue #418)
                     GeneralVariables.autoClearTxFreq = "1".equals(result);
                 }
+                if (name.equalsIgnoreCase("autoClearTxMinFreq")) {//Lowest auto-clear offset (issue #938)
+                    //Defensive parse: settings import (#382) can feed anything here.
+                    //Null/non-numeric keeps the default; ClearFrequencyFinder clamps the range.
+                    if (result != null) {
+                        try {
+                            GeneralVariables.autoClearTxMinFreq =
+                                    com.k1af.ft8af.ft8transmit.ClearFrequencyFinder.clampUserMinOffsetHz(
+                                            Integer.parseInt(result.trim()));
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+                }
                 if (name.equalsIgnoreCase("tuneMaxOnSeconds")) {//Tune carrier hard cap (issue #408)
                     //Defensive parse: settings import (#382) can feed anything here.
                     //Null/non-numeric keeps the default; TuneController clamps the range.

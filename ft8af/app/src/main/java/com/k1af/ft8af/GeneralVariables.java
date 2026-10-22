@@ -176,6 +176,11 @@ public class GeneralVariables {
     //volatile: written from the config-load thread + Settings toggle, read from
     //the decode-delivery thread inside recordBandActivity.
     public static volatile boolean autoClearTxFreq = false;
+    //Lowest audio offset (Hz) the auto-clear pick may choose (issue #938). A low
+    //offset puts audio harmonics inside the SSB passband. Clamped by
+    //ClearFrequencyFinder.clampUserMinOffsetHz; the default keeps the old behavior.
+    public static volatile int autoClearTxMinFreq =
+            (int) com.k1af.ft8af.ft8transmit.ClearFrequencyFinder.DEFAULT_MIN_OFFSET_HZ;
 
     //Tune button (issue #408): hard cap on a single tune carrier in seconds
     //(clamped by TuneController), whether the tune level is independent of the

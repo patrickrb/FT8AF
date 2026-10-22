@@ -168,7 +168,9 @@ rat_out="$tmp/ft8_rational_test"
 # FT8SignalListener + ft8_decode_jni.cpp) and scores against WSJT-X jt9 truth
 # sidecars. Fails if any corpus file matches fewer truth messages than its
 # committed floor (testdata/ft8/floors.txt) — the floors ratchet up as decoder
-# improvements land. See decode_bench.c's header for flags and output format.
+# improvements land. Also fails if the matched decodes' ft8_snr() drifts from
+# jt9's SNR beyond testdata/ft8/snr_bounds.txt (issue #937). See
+# decode_bench.c's header for flags and output format.
 bench_srcs=(
     "$here/decode_bench.c"
     "$here/gfsk.c"
@@ -196,7 +198,8 @@ bench_out="$tmp/ft8_decode_bench"
     -I "$ft8" "${bench_srcs[@]}" -lm -o "$bench_out"
 
 "$bench_out" --self-test
-"$bench_out" --assert-floor "$here/testdata/ft8/floors.txt" "$here"/testdata/ft8/*.wav
+"$bench_out" --assert-floor "$here/testdata/ft8/floors.txt" \
+    --assert-snr "$here/testdata/ft8/snr_bounds.txt" "$here"/testdata/ft8/*.wav
 
 # Subtraction unit tests: waterfall-domain (tone replacement) and coherent
 # time-domain deep-decode subtraction properties (removal, neighbor

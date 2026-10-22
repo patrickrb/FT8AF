@@ -1,0 +1,174 @@
+name: PR debug APK
+
+# Builds an installable debug APK for every Android PR so it can be tested by
+# hand on a phone. The PR build in android.yml is an UNSIGNED release APK, which
+# Android refuses to install. This one is signed with .github/debug.keystore and
+# installs on any device that allows sideloading. It is uploaded as an artifact,
+# and a single sticky PR comment, updated on each push, links to the newest one.
+#
+# Tests and the release build still run in android.yml, whose `android-gate` is
+# the required status check. Don't make this job required: it is path-filtered
+# at the trigger, so on PRs that don't touch Android it never reports a status,
+# and a required check would sit pending forever.
+
+on:
+  pull_request:
+    branches: [main, staging, dev]
+    paths:
+      - 'ft8af/**'
+      - '.github/workflows/pr-debug-apk.yml'
+      - '.github/debug.keystore'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# A new push to the PR makes the previous APK stale, so cancel its build.
+concurrency:
+  group: pr-debug-apk-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  debug-apk:
+    name: Debug APK for manual testing
+    runs-on: ubuntu-latest
+
+    steps:
+      # Build the PR head commit itself, not the merge with dev, so the APK
+      # matches the SHA it is named after.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          # The build runs the PR's own code; don't leave the job token in
+          # .git/config for it to read.
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('ft8af/**/*.gradle*', 'ft8af/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x ft8af/gradlew
+
+      # Same retry as android.yml; keep NDK_VERSION in sync with it.
+      - name: Pre-install NDK (retry around flaky SDK downloads)
+        run: |
+          set -euo pipefail
+          NDK_VERSION=25.1.8937393
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          MARKER="$ANDROID_HOME/ndk/$NDK_VERSION/source.properties"
+          for attempt in 1 2 3; do
+            echo "::group::NDK install attempt $attempt"
+            rm -rf "$ANDROID_HOME/ndk/$NDK_VERSION" "$HOME/.android/cache"
+            yes | "$SDKMANAGER" --install "ndk;$NDK_VERSION" || true
+            echo "::endgroup::"
+            if [[ -f "$MARKER" ]]; then
+              echo "NDK $NDK_VERSION ready at $ANDROID_HOME/ndk/$NDK_VERSION"
+              exit 0
+            fi
+            echo "Attempt $attempt failed; retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::Failed to install NDK $NDK_VERSION after 3 attempts"
+          exit 1
+
+      # Sign with the shared .github/debug.keystore. Otherwise every runner makes
+      # its own debug key and each new APK refuses to install over the last one.
+      # The key is public on purpose: it only signs test builds, never releases.
+      #
+      # Maven Central rate-limits GitHub runner IPs (HTTP 429); retry like
+      # android.yml does.
+      - name: Build debug APK
+        working-directory: ft8af
+        run: |
+          set -euo pipefail
+          signing=(
+            -Pandroid.injected.signing.store.file="$GITHUB_WORKSPACE/.github/debug.keystore"
+            -Pandroid.injected.signing.store.password=android
+            -Pandroid.injected.signing.key.alias=androiddebugkey
+            -Pandroid.injected.signing.key.password=android
+          )
+          for attempt in 1 2 3; do
+            if ./gradlew assembleDebug "${signing[@]}" --stacktrace; then
+              exit 0
+            fi
+            echo "::warning::Gradle assemble failed (attempt ${attempt}/3) — retrying after backoff"
+            sleep $((attempt * 30))
+          done
+          echo "::error::Gradle assemble failed after 3 attempts (likely Maven Central 429)"
+          exit 1
+
+      - name: Name the APK after the PR and commit
+        id: apk
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          name="FT8AF-pr${PR_NUMBER}-${HEAD_SHA:0:7}-debug"
+          mv ft8af/app/build/outputs/apk/debug/app-debug.apk "ft8af/app/build/outputs/apk/debug/${name}.apk"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload debug APK artifact
+        id: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.apk.outputs.name }}
+          path: ft8af/app/build/outputs/apk/debug/${{ steps.apk.outputs.name }}.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Link the APK in the run summary
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_NAME: ${{ steps.apk.outputs.name }}
+        run: |
+          echo "Debug APK: [${APK_NAME}.zip](${ARTIFACT_URL})" >> "$GITHUB_STEP_SUMMARY"
+
+      # Fork PRs get a read-only token, so they can't comment. Their APK is
+      # still on the run page, through the summary link above.
+      - name: Post or update the APK comment on the PR
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/github-script@v7
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          APK_NAME: ${{ steps.apk.outputs.name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const marker = '<!-- ft8af-debug-apk -->';
+            const { ARTIFACT_URL, APK_NAME, HEAD_SHA, RUN_URL } = process.env;
+            const body = [
+              marker,
+              '### Debug APK',
+              '',
+              `**[Download ${APK_NAME}.zip](${ARTIFACT_URL})** (built from ${HEAD_SHA.slice(0, 7)}, [run](${RUN_URL}))`,
+              '',
+              'Unzip it and install the `.apk` on the phone. The download needs a signed-in GitHub account, and the link expires after 30 days.',
+              'This build is signed with the shared debug key, so it installs over any earlier PR debug APK. Android will not install it over the Play Store build (or a debug build made on your own machine), because those are signed with a different key; you have to uninstall that one first.',
+              '',
+              '**Uninstalling deletes all of the app data: the QSO log, settings, and saved logbook and rig configuration.** Export your log as ADIF before you do this on a phone you operate from.',
+            ].join('\n');
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 });
+            const existing = comments.find(c => c.user.type === 'Bot' && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }

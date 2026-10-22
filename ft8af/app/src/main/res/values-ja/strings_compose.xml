@@ -537,6 +537,8 @@
     <string name="cq_offset_moved">CQオフセットを空いている周波数へ移動：%1$d Hz</string>
     <string name="settings_auto_clear_tx">空きTXオフセット自動選択</string>
     <string name="settings_auto_clear_tx_desc">CQ呼び出し時に直近のバンド活動から空き周波数を選び、占有されたら移動します</string>
+    <string name="settings_auto_clear_tx_min">自動オフセットの下限</string>
+    <string name="settings_auto_clear_tx_min_desc">自動選択はこれより低いオフセットを選びません。上げると音声の高調波が通過帯域の外に出ます</string>
     <string name="tune_content_description">Tune：無線機のチューナーを開始、またはアンテナ調整用の連続キャリアを送信します</string>
     <string name="tune_stopped_timeout">Tuneは%1$d秒後に停止しました</string>
     <string name="tune_blocked_tx">Tuneの前にCQ/QSOを停止してください</string>
