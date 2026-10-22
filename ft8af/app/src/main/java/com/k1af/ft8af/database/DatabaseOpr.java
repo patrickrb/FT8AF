@@ -2981,6 +2981,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("perBandOutputLevels")) {//Per-band TX output levels ("20m=60,40m=85")
                     GeneralVariables.perBandOutputLevels = result == null ? "" : result;
                 }
+                if (name.equalsIgnoreCase("perBandInputLevel")) {//Save RX input volume per band (issue #927), defaults off
+                    GeneralVariables.savePerBandInputLevel = "1".equals(result);
+                }
+                if (name.equalsIgnoreCase("perBandInputLevels")) {//Per-band RX input volumes ("20m=100,10m=160")
+                    GeneralVariables.perBandInputLevels = result == null ? "" : result;
+                }
                 if (name.equalsIgnoreCase("autoClearTxFreq")) {//Auto-select clear CQ offset (issue #418)
                     GeneralVariables.autoClearTxFreq = "1".equals(result);
                 }

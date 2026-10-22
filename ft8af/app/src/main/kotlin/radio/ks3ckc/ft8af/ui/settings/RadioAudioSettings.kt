@@ -52,8 +52,12 @@ import com.k1af.ft8af.ui.AudioDeviceSpinnerAdapter
 import com.k1af.ft8af.wave.AudioChannelCapability
 import com.k1af.ft8af.wave.AudioChannelSelect
 import com.k1af.ft8af.wave.UsbAudioDevice
+import radio.ks3ckc.ft8af.PER_BAND_INPUT_LEVEL_KEY
 import radio.ks3ckc.ft8af.PER_BAND_OUTPUT_LEVEL_KEY
+import radio.ks3ckc.ft8af.inputLevelChangedInDialog
+import radio.ks3ckc.ft8af.inputLevelFromGainPercent
 import radio.ks3ckc.ft8af.outputLevelFromVolumePercent
+import radio.ks3ckc.ft8af.saveInputLevelForCurrentBand
 import radio.ks3ckc.ft8af.saveOutputLevelForCurrentBand
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.FT8AFIconButton
@@ -110,7 +114,19 @@ fun RadioAudioSettings(
     // defensive config-load clamp existed) can't start the row/slider invalid.
     var inputVolume by remember {
         mutableIntStateOf(
-            clampVolumePercent((GeneralVariables.inputGainPercent * 100).toInt(), INPUT_VOLUME_MAX),
+            clampVolumePercent(
+                inputLevelFromGainPercent(GeneralVariables.inputGainPercent), INPUT_VOLUME_MAX,
+            ),
+        )
+    }
+    // Level when the Input Volume dialog opened: dismissing without moving the
+    // slider must not overwrite this band's saved per-band level (issue #927).
+    var inputVolumeAtOpen by remember { mutableIntStateOf(inputVolume) }
+    // A band change from this screen's picker may restore a per-band input
+    // volume (issue #927); re-read it so the row shows the restored value.
+    LaunchedEffect(bandIndexLive) {
+        inputVolume = clampVolumePercent(
+            inputLevelFromGainPercent(GeneralVariables.inputGainPercent), INPUT_VOLUME_MAX,
         )
     }
 
@@ -499,6 +515,9 @@ fun RadioAudioSettings(
             onDismiss = {
                 showInputVolume = false
                 mainViewModel.databaseOpr.writeConfig("inputVolume", inputVolume.toString(), null)
+                if (inputLevelChangedInDialog(inputVolumeAtOpen, inputVolume)) {
+                    saveInputLevelForCurrentBand(mainViewModel.databaseOpr, inputVolume)
+                }
             },
         )
     }
@@ -690,7 +709,10 @@ fun RadioAudioSettings(
                         description = stringResource(R.string.settings_input_volume_desc),
                         value = stringResource(R.string.settings_percent_format, inputVolume),
                         showChevron = true,
-                        onClick = { showInputVolume = true },
+                        onClick = {
+                            inputVolumeAtOpen = inputVolume
+                            showInputVolume = true
+                        },
                     )
                     SectionDivider()
                     run {
@@ -864,6 +886,31 @@ fun RadioAudioSettings(
                                     saveOutputLevelForCurrentBand(
                                         mainViewModel.databaseOpr,
                                         outputLevelFromVolumePercent(GeneralVariables.volumePercent),
+                                    )
+                                }
+                            },
+                        )
+                    }
+                    SectionDivider()
+                    run {
+                        var perBandInput by remember {
+                            mutableStateOf(GeneralVariables.savePerBandInputLevel)
+                        }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_per_band_input_volume),
+                            description = stringResource(R.string.settings_per_band_input_volume_desc),
+                            toggle = perBandInput,
+                            onToggleChange = { enabled ->
+                                perBandInput = enabled
+                                GeneralVariables.savePerBandInputLevel = enabled
+                                mainViewModel.databaseOpr.writeConfig(
+                                    PER_BAND_INPUT_LEVEL_KEY, if (enabled) "1" else "0", null,
+                                )
+                                // Seed the current band, mirroring the output-level toggle.
+                                if (enabled) {
+                                    saveInputLevelForCurrentBand(
+                                        mainViewModel.databaseOpr,
+                                        inputLevelFromGainPercent(GeneralVariables.inputGainPercent),
                                     )
                                 }
                             },

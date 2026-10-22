@@ -714,6 +714,9 @@
     <string name="settings_per_band_volume">Save Output Level per Band</string>
     <string name="settings_per_band_volume_desc">Remember the TX volume separately for each band and restore it on band change</string>
     <string name="per_band_volume_restored">TX volume %1$d%% restored for %2$s</string>
+    <string name="settings_per_band_input_volume">Save Input Volume per Band</string>
+    <string name="settings_per_band_input_volume_desc">Remember the RX input volume separately for each band and restore it on band change</string>
+    <string name="per_band_input_volume_restored">Input volume %1$d%% restored for %2$s</string>
 
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">TX/RX Split</string>

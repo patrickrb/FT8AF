@@ -171,6 +171,11 @@ public class GeneralVariables {
     public static volatile boolean savePerBandOutputLevel = false;
     //Serialized band=level CSV ("20m=60,40m=85"); parsed/updated in PerBandOutputLevel.kt.
     public static volatile String perBandOutputLevels = "";
+    //Save RX input volume per band (issue #927), defaults off. Same volatile
+    //convention; serialized band=percent CSV ("20m=100,10m=160", 0..200),
+    //parsed/updated in PerBandInputLevel.kt.
+    public static volatile boolean savePerBandInputLevel = false;
+    public static volatile String perBandInputLevels = "";
 
     //Auto-select a clear TX offset when calling CQ (issue #418), defaults off.
     //volatile: written from the config-load thread + Settings toggle, read from

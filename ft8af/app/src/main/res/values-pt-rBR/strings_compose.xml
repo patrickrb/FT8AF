@@ -487,6 +487,9 @@
     <string name="settings_per_band_volume">Salvar Nível de Saída por Banda</string>
     <string name="settings_per_band_volume_desc">Memoriza o volume de TX separadamente para cada banda e o restaura ao trocar de banda</string>
     <string name="per_band_volume_restored">Volume de TX %1$d%% restaurado para %2$s</string>
+    <string name="settings_per_band_input_volume">Salvar Volume de Entrada por Banda</string>
+    <string name="settings_per_band_input_volume_desc">Memoriza o volume de entrada (RX) separadamente para cada banda e o restaura ao trocar de banda</string>
+    <string name="per_band_input_volume_restored">Volume de entrada %1$d%% restaurado para %2$s</string>
 
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">Split TX/RX</string>
