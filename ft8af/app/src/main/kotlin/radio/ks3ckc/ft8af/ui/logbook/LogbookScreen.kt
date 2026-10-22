@@ -428,6 +428,7 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                                     cloudlogOk = result?.cloudlogOk ?: 0,
                                     qrzOk = result?.qrzOk ?: 0,
                                     wrlOk = result?.wrlOk ?: 0,
+                                    cloudlogAlreadyPresent = result?.cloudlogAlreadyPresent ?: 0,
                                 )
                                 // Re-query QSLTable so the row chips pick up the
                                 // newly-set synced_cloudlog / synced_qrz / synced_wrl flags.
@@ -577,6 +578,7 @@ private data class SyncDialogState(
     val wrlAttempted: Boolean,
     val finished: Boolean,
     val noServicesEnabled: Boolean,
+    val cloudlogAlreadyPresent: Int = 0,
 )
 
 @Composable
@@ -2438,6 +2440,17 @@ private fun CatchUpSyncDialog(
                         color = TextMuted,
                         fontSize = 12.sp,
                     )
+                    if (state.cloudlogAlreadyPresent > 0) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(
+                                R.string.log_sync_cloudlog_already_present,
+                                state.cloudlogAlreadyPresent,
+                            ),
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                        )
+                    }
                 }
                 if (state.qrzAttempted) {
                     Spacer(modifier = Modifier.height(4.dp))

@@ -240,6 +240,7 @@
     <string name="log_sync_enable_services">فعِّل Cloudlog/Wavelog/Nextlog أو QRZ أو World Radio League في الإعدادات، ثم أعد المحاولة.</string>
     <string name="log_sync_progress_count">%1$d من %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d مقبول</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d موجود بالفعل في السجل</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d مقبول</string>
     <string name="log_sync_nothing_to_upload">لا QSOs في السجل للرفع بعد.</string>
     <string name="log_sync_working">جارٍ العمل…</string>
