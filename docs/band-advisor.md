@@ -155,7 +155,9 @@ just by being busy.
 
 ## Propagation alerts (`bandadvisor/alerts`)
 
-Opt-in, behind `PROPAGATION_ALERTS`, checked ~every 30 minutes by a
+Opt-in, behind `PROPAGATION_ALERTS` **and** `BAND_ADVISOR` (the alerts'
+settings live in the Band Advisor screen, so the advisor flag is also their
+kill switch), checked ~every 30 minutes by a
 WorkManager periodic worker (network-constrained; WorkManager was added for
 this — the app previously had no periodic-background mechanism).
 
@@ -172,9 +174,14 @@ this — the app previously had no periodic-background mechanism).
 - Quiet hours (local, midnight-wrap aware), per-type opt-ins (general
   opening / watched band / watched region / personal improvement / unusual
   opening), watched band + region pickers — all in Settings → Band Advisor.
-- `PropagationAlertScheduler.sync()` reconciles scheduled work on app start
-  and after every settings/flag change: disabling the flag or the preference
-  **cancels** pending work. The worker also re-checks the gates itself.
+- `PropagationAlertScheduler.sync()` reconciles scheduled work on app start,
+  after the remote-config refresh that start kicks off completes, and after
+  every settings or debug-override change: disabling a flag or the preference
+  **cancels** pending work. The worker also re-checks the gates itself, after
+  a bounded (10 s) remote-config refresh so an expired cache doesn't make it
+  cancel itself while the server still enables alerts.
+- A conditions document without a valid `generatedAt` is rejected (unknown
+  data age never passes the freshness gate).
 - Notifications use their own `propagation_alerts` channel; POST_NOTIFICATIONS
   is requested when the master toggle turns on (Android 13+) and re-checked
   before posting. Tapping opens the Band Advisor detail sheet.
@@ -238,7 +245,7 @@ no real network calls):
   `work-testing`.
 
 Server: `cd server/band-advisor && python3 -m venv .venv && .venv/bin/pip
-install -e '.[dev]' && .venv/bin/pytest` (190 tests, no network).
+install -e '.[dev]' && .venv/bin/pytest` (no network).
 
 ## Rollout
 

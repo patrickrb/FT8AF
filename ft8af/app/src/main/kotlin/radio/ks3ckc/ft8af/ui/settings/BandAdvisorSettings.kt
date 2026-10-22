@@ -34,8 +34,6 @@ import radio.ks3ckc.ft8af.bandadvisor.alerts.AlertPreferencesStore
 import radio.ks3ckc.ft8af.bandadvisor.alerts.AlertPrefs
 import radio.ks3ckc.ft8af.bandadvisor.alerts.AlertType
 import radio.ks3ckc.ft8af.bandadvisor.alerts.PropagationAlertScheduler
-import radio.ks3ckc.ft8af.flags.FeatureFlag
-import radio.ks3ckc.ft8af.flags.FeatureFlags
 import radio.ks3ckc.ft8af.theme.Accent
 import radio.ks3ckc.ft8af.theme.BgSurface
 import radio.ks3ckc.ft8af.theme.InterFamily
@@ -80,7 +78,7 @@ fun BandAdvisorSettings(
 ) {
     val context = LocalContext.current
     var prefs by remember { mutableStateOf(AlertPreferencesStore.load(context)) }
-    val alertsFlagOn = FeatureFlags.isEnabled(FeatureFlag.PROPAGATION_ALERTS)
+    val alertsFlagOn = PropagationAlertScheduler.alertsFlagEnabled()
 
     fun update(transform: (AlertPrefs) -> AlertPrefs) {
         prefs = transform(prefs)

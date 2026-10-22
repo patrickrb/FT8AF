@@ -15,6 +15,16 @@ import com.k1af.ft8af.R
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
+
+/**
+ * "HH:mm" of [epochMs] in UTC — the notification labels it "UTC", so it must
+ * not follow the device's local timezone (SimpleDateFormat's default).
+ */
+internal fun formatConditionsTimeUtc(epochMs: Long): String =
+    SimpleDateFormat("HH:mm", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }.format(Date(epochMs))
 
 /**
  * Posts propagation-alert notifications on their own channel (so users can
@@ -61,7 +71,7 @@ object PropagationAlertNotifier {
 
         val title = context.getString(R.string.prop_alerts_notif_opening_title, decision.band)
         val regionText = decision.region ?: context.getString(R.string.band_advisor_goal_dx)
-        val time = SimpleDateFormat("HH:mm", Locale.US).format(Date(decision.conditionsAtMs))
+        val time = formatConditionsTimeUtc(decision.conditionsAtMs)
         val body = context.getString(
             R.string.prop_alerts_notif_opening_text,
             grid,

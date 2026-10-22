@@ -45,12 +45,14 @@ object ConditionsClient {
     /**
      * Parse the conditions document. Malformed entries are dropped; a document
      * that yields nothing valid returns null so callers treat it as a failed
-     * fetch rather than "no openings".
+     * fetch rather than "no openings". A missing or unparseable `generatedAt`
+     * also rejects the whole document: the alert policy's freshness gate
+     * needs a real data age, and unknown age must never pass as fresh.
      */
     internal fun parseConditions(json: String, nowMs: Long): List<BandConditionSnapshot>? {
         return try {
             val root = JSONObject(json)
-            val generatedAtMs = parseIso8601UtcMs(root.optString("generatedAt")) ?: nowMs
+            val generatedAtMs = parseIso8601UtcMs(root.optString("generatedAt")) ?: return null
             val ageMs = (nowMs - generatedAtMs).coerceAtLeast(0)
             val array = root.optJSONArray("bands") ?: return null
             val out = mutableListOf<BandConditionSnapshot>()

@@ -201,8 +201,13 @@ class ComposeMainActivity : AppCompatActivity() {
         // internally rate-limited). Lives here rather than Application.onCreate
         // so process start — including Robolectric test runs — never attempts
         // network. A failure changes nothing: flags keep their cached/default
-        // values.
-        FeatureFlags.refreshRemoteConfigAsync()
+        // values. Once the attempt finishes, alert scheduling is reconciled
+        // again so a freshly fetched config takes effect without waiting for
+        // the next Activity start or settings change.
+        val appContext = applicationContext
+        FeatureFlags.refreshRemoteConfigAsync {
+            PropagationAlertScheduler.sync(appContext)
+        }
 
         // Reconcile the propagation-alert background work with the current
         // flag + preference state: schedules when both are on, and — the

@@ -26,7 +26,11 @@ class ValidationTest {
 
     @Test
     fun `plausible callsigns accepted`() {
-        for (call in listOf("K1AF", "W1AW", "VE3ABC", "9A1AA", "DL1ABC", "G4XYZ/P", "VP2E/K1AF", "kd9xyz")) {
+        val calls = listOf(
+            "K1AF", "W1AW", "VE3ABC", "9A1AA", "DL1ABC", "G4XYZ/P", "VP2E/K1AF", "kd9xyz",
+            "EA8/K1AF", "F/G4XYZ", "VP2E/K1AF/P",
+        )
+        for (call in calls) {
             assertThat(isPlausibleCallsign(call)).isTrue()
         }
     }
@@ -34,6 +38,15 @@ class ValidationTest {
     @Test
     fun `garbage callsigns rejected`() {
         for (call in listOf(null, "", " ", "AB", "NOCALL", "EM28", "1234567", "CQ", "THIRTEENCHARS")) {
+            assertThat(isPlausibleCallsign(call)).isFalse()
+        }
+    }
+
+    @Test
+    fun `malformed portable forms rejected like the backend does`() {
+        // Same cases as server/band-advisor/tests/test_geo.py: the server
+        // fails the whole request on these, so the client must not send them.
+        for (call in listOf("K1AF//P", "/K1AF", "K1AF/", "A/B/C/K1AF", "K1AF/P!", "EA8/NOCALL")) {
             assertThat(isPlausibleCallsign(call)).isFalse()
         }
     }

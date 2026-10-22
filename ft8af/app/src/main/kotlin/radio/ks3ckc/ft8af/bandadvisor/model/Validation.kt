@@ -15,6 +15,8 @@ private val GRID_4 = Regex("^[A-Ra-r]{2}[0-9]{2}$")
 // Intentionally permissive — its job is to reject empty/garbage values like
 // "NOCALL" placeholders' obvious junk, not to police license databases.
 private val CALLSIGN_BODY = Regex("^[A-Z0-9]{1,3}[0-9][A-Z0-9]{0,3}[A-Z]$")
+private val CALLSIGN_PART = Regex("^[A-Z0-9]+$")
+private const val CALLSIGN_MAX_PARTS = 3
 
 /**
  * Normalize any decodable grid to the 4-character square the advisor sends —
@@ -38,7 +40,12 @@ fun isPlausibleCallsign(raw: String?): Boolean {
     val call = raw?.trim()?.uppercase() ?: return false
     if (call.length < 3 || call.length > 12) return false
     // Split off portable prefix/suffix around "/" and validate the longest part
-    // as the body (covers "W1AW/P" and "VP2E/K1AF" alike).
-    val body = call.split('/').maxByOrNull { it.length } ?: return false
+    // as the body (covers "W1AW/P" and "VP2E/K1AF" alike). Every part must be
+    // non-empty alphanumeric, at most three parts: the backend applies the
+    // same rule (server/band-advisor/app/geo.py is_valid_callsign) and rejects
+    // the WHOLE recommendation on a callsign it doesn't accept.
+    val parts = call.split('/')
+    if (parts.size > CALLSIGN_MAX_PARTS || parts.any { !CALLSIGN_PART.matches(it) }) return false
+    val body = parts.maxByOrNull { it.length } ?: return false
     return CALLSIGN_BODY.matches(body)
 }

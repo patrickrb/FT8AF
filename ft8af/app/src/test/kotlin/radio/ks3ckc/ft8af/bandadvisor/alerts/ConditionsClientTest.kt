@@ -49,6 +49,28 @@ class ConditionsClientTest {
     }
 
     @Test
+    fun `missing or malformed generatedAt rejects the document`() {
+        // Unknown data age must not read as age 0 and slip past the
+        // policy's freshness gate.
+        val missing = valid.replace("\"generatedAt\": \"2026-09-27T17:55:00Z\",", "")
+        assertThat(missing).doesNotContain("generatedAt")
+        assertThat(ConditionsClient.parseConditions(missing, now)).isNull()
+
+        val malformed = valid.replace("2026-09-27T17:55:00Z", "yesterday-ish")
+        assertThat(ConditionsClient.parseConditions(malformed, now)).isNull()
+
+        val wrongType = valid.replace("\"2026-09-27T17:55:00Z\"", "12345")
+        assertThat(ConditionsClient.parseConditions(wrongType, now)).isNull()
+    }
+
+    @Test
+    fun `stale document reports its real age`() {
+        val old = valid.replace("2026-09-27T17:55:00Z", "2026-09-27T16:00:00Z")
+        assertThat(ConditionsClient.parseConditions(old, now)!![0].dataAgeMs)
+            .isEqualTo(2 * 60 * 60_000L)
+    }
+
+    @Test
     fun `out-of-range values are clamped`() {
         val weird = valid
             .replace("\"score\": 0.8", "\"score\": 7.0")

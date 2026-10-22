@@ -3,6 +3,7 @@ package radio.ks3ckc.ft8af.flags
 import android.content.Context
 import androidx.annotation.VisibleForTesting
 import com.k1af.ft8af.BuildConfig
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,6 +27,7 @@ object FeatureFlags : FeatureFlagRepository {
     var overrideStore: FlagOverrideStore? = null
         private set
 
+    @Volatile
     private var fetcher: RemoteFlagConfigFetcher? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -55,16 +57,36 @@ object FeatureFlags : FeatureFlagRepository {
     }
 
     /**
-     * Kick a background refresh of the remote configuration if one is due.
-     * Never blocks, never throws into the caller.
+     * Refresh the remote configuration now if one is due (internally
+     * rate-limited). Suspends for the fetch; never throws anything but
+     * cancellation. Used directly by background work that must evaluate
+     * flags against a current config rather than an expired cache.
      */
-    fun refreshRemoteConfigAsync() {
+    suspend fun refreshRemoteConfig() {
         val f = fetcher ?: return
+        try {
+            f.refreshIfDue()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Remote config must never interfere with normal operation.
+        }
+    }
+
+    /**
+     * Kick a background refresh of the remote configuration if one is due.
+     * Never blocks, never throws into the caller. [onComplete] runs on the
+     * background thread after the attempt finishes (whether or not anything
+     * changed), so callers can reconcile state that depends on the refreshed
+     * flags, e.g. propagation-alert scheduling.
+     */
+    fun refreshRemoteConfigAsync(onComplete: () -> Unit = {}) {
         scope.launch {
+            refreshRemoteConfig()
             try {
-                f.refreshIfDue()
+                onComplete()
             } catch (_: Exception) {
-                // Remote config must never interfere with normal operation.
+                // A failing reconcile must not crash the refresh scope.
             }
         }
     }
@@ -79,5 +101,10 @@ object FeatureFlags : FeatureFlagRepository {
     @VisibleForTesting
     internal fun setDelegateForTests(repository: FeatureFlagRepository?) {
         delegate = repository
+    }
+
+    @VisibleForTesting
+    internal fun setFetcherForTests(remoteFetcher: RemoteFlagConfigFetcher?) {
+        fetcher = remoteFetcher
     }
 }

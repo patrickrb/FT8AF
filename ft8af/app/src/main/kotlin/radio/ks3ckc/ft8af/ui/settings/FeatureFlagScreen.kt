@@ -28,10 +28,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.R
 import radio.ks3ckc.ft8af.bandadvisor.BandAdvisor
+import radio.ks3ckc.ft8af.bandadvisor.alerts.PropagationAlertScheduler
 import radio.ks3ckc.ft8af.flags.FeatureFlag
 import radio.ks3ckc.ft8af.flags.FeatureFlags
 import radio.ks3ckc.ft8af.flags.FlagEvaluation
 import radio.ks3ckc.ft8af.flags.FlagOverride
+import radio.ks3ckc.ft8af.flags.FlagOverrideStore
 import radio.ks3ckc.ft8af.flags.FlagValueSource
 import radio.ks3ckc.ft8af.theme.Accent
 import radio.ks3ckc.ft8af.theme.BgSurface
@@ -54,6 +56,22 @@ internal fun effectiveValueLine(evaluation: FlagEvaluation): Pair<Int, Int> {
         FlagValueSource.BUILD_DEFAULT -> R.string.flags_source_default
     }
     return valueRes to sourceRes
+}
+
+/**
+ * Persist a developer override, then [reconcile] state derived from flags.
+ * Flipping PROPAGATION_ALERTS here must schedule/cancel the background work
+ * immediately, not only on the next Activity start or settings change.
+ */
+internal fun applyFlagOverride(
+    store: FlagOverrideStore?,
+    flag: FeatureFlag,
+    override: FlagOverride,
+    reconcile: () -> Unit,
+) {
+    if (store == null) return
+    store.setOverride(flag, override)
+    reconcile()
 }
 
 internal fun overrideOptionLabelRes(override: FlagOverride): Int = when (override) {
@@ -112,6 +130,7 @@ internal fun FeatureFlagScreen(onBack: () -> Unit) {
 
 @Composable
 private fun FlagRow(flag: FeatureFlag, onChanged: () -> Unit) {
+    val context = LocalContext.current
     val evaluation = FeatureFlags.evaluate(flag)
     val store = FeatureFlags.overrideStore
     val current = store?.overrideFor(flag) ?: FlagOverride.DEFAULT
@@ -157,7 +176,9 @@ private fun FlagRow(flag: FeatureFlag, onChanged: () -> Unit) {
                         .clip(RoundedCornerShape(7.dp))
                         .background(if (selected) Accent.copy(alpha = 0.18f) else Color.Transparent)
                         .clickable {
-                            store?.setOverride(flag, option)
+                            applyFlagOverride(store, flag, option) {
+                                PropagationAlertScheduler.sync(context)
+                            }
                             onChanged()
                         },
                     contentAlignment = Alignment.Center,

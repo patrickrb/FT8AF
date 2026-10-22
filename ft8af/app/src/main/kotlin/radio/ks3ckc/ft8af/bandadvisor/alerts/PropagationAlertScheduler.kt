@@ -9,10 +9,13 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import radio.ks3ckc.ft8af.bandadvisor.model.normalizeAdvisorGrid
 import radio.ks3ckc.ft8af.flags.FeatureFlag
+import radio.ks3ckc.ft8af.flags.FeatureFlagRepository
 import radio.ks3ckc.ft8af.flags.FeatureFlags
 import radio.ks3ckc.ft8af.ui.bandadvisor.BandAdvisorTelemetry
 import java.util.Calendar
@@ -30,6 +33,24 @@ object PropagationAlertScheduler {
     /** WorkManager's floor for periodic work is 15 min; 30 keeps wakeups modest. */
     internal const val INTERVAL_MINUTES = 30L
 
+    /**
+     * Upper bound on the worker's pre-check remote-config refresh. The fetcher
+     * also has its own 8 s connect/read timeouts; this keeps a slow endpoint
+     * from holding the worker much longer than that.
+     */
+    internal const val FLAG_REFRESH_TIMEOUT_MS = 10_000L
+
+    /**
+     * Alerts are a Band Advisor companion: they need BAND_ADVISOR as well as
+     * PROPAGATION_ALERTS. Their only on/off UI lives in the Band Advisor
+     * settings screen, which is hidden while BAND_ADVISOR is off, so turning
+     * the advisor off (e.g. a remote kill switch) must stop alerts too rather
+     * than leave background work the user can no longer disable in-app.
+     */
+    fun alertsFlagEnabled(flags: FeatureFlagRepository = FeatureFlags): Boolean =
+        flags.isEnabled(FeatureFlag.BAND_ADVISOR) &&
+            flags.isEnabled(FeatureFlag.PROPAGATION_ALERTS)
+
     /** Pure: alerts run only when the flag AND the user preference agree. */
     fun shouldSchedule(flagEnabled: Boolean, prefs: AlertPrefs): Boolean =
         flagEnabled && prefs.enabled && prefs.enabledTypes.isNotEmpty()
@@ -37,7 +58,7 @@ object PropagationAlertScheduler {
     /** Reconcile scheduled work with the current flag + preferences. */
     fun sync(context: Context) {
         val enabled = shouldSchedule(
-            FeatureFlags.isEnabled(FeatureFlag.PROPAGATION_ALERTS),
+            alertsFlagEnabled(),
             AlertPreferencesStore.load(context),
         )
         val workManager = WorkManager.getInstance(context.applicationContext)
@@ -62,6 +83,28 @@ object PropagationAlertScheduler {
 }
 
 /**
+ * Run [refresh] for at most [timeoutMs] (swallowing its failures), then return
+ * [read]. The worker uses it so a cached remote config that has expired since
+ * the app was last opened is re-fetched before the flag gate is evaluated;
+ * otherwise an enabled rollout would silently fall back to the build default
+ * and the worker would cancel itself while the server still enables alerts.
+ */
+internal suspend fun <T> readAfterBoundedRefresh(
+    timeoutMs: Long,
+    refresh: suspend () -> Unit,
+    read: () -> T,
+): T {
+    try {
+        withTimeoutOrNull(timeoutMs) { refresh() }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        // Refresh is best effort; fall through to whatever is cached.
+    }
+    return read()
+}
+
+/**
  * The periodic check: re-verify the gates (they may have flipped since
  * scheduling), fetch pre-aggregated conditions from the backend, run the pure
  * alert policy, notify, and record deliveries for dedup. Always returns
@@ -78,10 +121,13 @@ class PropagationAlertWorker(
         // Gates may have changed since scheduling; a disabled state also
         // un-schedules so this worker stops running entirely.
         val prefs = AlertPreferencesStore.load(context)
-        if (!PropagationAlertScheduler.shouldSchedule(
-                FeatureFlags.isEnabled(FeatureFlag.PROPAGATION_ALERTS), prefs,
-            )
-        ) {
+        // Only pay for a refresh when the user actually wants alerts.
+        val flagEnabled = prefs.enabled && readAfterBoundedRefresh(
+            PropagationAlertScheduler.FLAG_REFRESH_TIMEOUT_MS,
+            refresh = { FeatureFlags.refreshRemoteConfig() },
+            read = { PropagationAlertScheduler.alertsFlagEnabled() },
+        )
+        if (!PropagationAlertScheduler.shouldSchedule(flagEnabled, prefs)) {
             PropagationAlertScheduler.sync(context)
             return Result.success()
         }
@@ -91,7 +137,11 @@ class PropagationAlertWorker(
             withContext(Dispatchers.IO) { loadAlertGrid(context) } ?: return Result.success()
 
         val nowMs = System.currentTimeMillis()
-        val conditions = ConditionsClient.fetch(grid, nowMs = nowMs) ?: return Result.success()
+        // Blocking HttpURLConnection: keep it off CoroutineWorker's default
+        // (CPU) dispatcher.
+        val conditions = withContext(Dispatchers.IO) {
+            ConditionsClient.fetch(grid, nowMs = nowMs)
+        } ?: return Result.success()
 
         val decisions = evaluateAlerts(
             grid = grid,
