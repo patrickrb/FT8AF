@@ -4,11 +4,10 @@
 # https://github.com/jawatson/voacapl) from source. It is invoked by the app
 # as an EXTERNAL binary via subprocess — never linked or vendored.
 #
-# NOTE(scaffold): the voacapl build follows the project's autotools + gfortran
-# conventions (./configure && make && make install, then `make makeitshfbc`
-# to install the itshfbc data tree). Verify against the repo README when
-# first building this image; pin VOACAPL_REF to a release tag for
-# reproducibility.
+# The voacapl build follows the project's autotools + gfortran conventions
+# (./configure && make && make install), then runs the installed
+# `makeitshfbc` script to create the itshfbc data tree under $HOME. Pin
+# VOACAPL_REF to a release tag (e.g. v0.7.7) for reproducibility.
 
 # ----------------------------------------------------------------- stage 1
 FROM debian:bookworm-slim AS voacapl-build
@@ -24,10 +23,18 @@ RUN git clone --depth 1 --branch "${VOACAPL_REF}" \
         https://github.com/jawatson/voacapl.git
 
 WORKDIR /build/voacapl
-# voacapl ships an autotools build; makeitshfbc installs the itshfbc data
-# directory (ionospheric coefficients, antenna files) into $HOME/itshfbc.
+# voacapl ships an autotools build. `makeitshfbc` is an installed shell
+# script, not a make target (the Makefile ships a file of that name, so
+# `make makeitshfbc` is a silent no-op). It copies the writable parts of the
+# data tree (run, antennas, areadata, ...) into $HOME/itshfbc and creates
+# ABSOLUTE symlinks for the read-only parts (coeffs, geo*, several database
+# files) pointing into /usr/local/share/voacapl, so the runtime stage must
+# carry that share tree at the same path.
 RUN ./configure && make && make install \
-    && HOME=/build make makeitshfbc
+    && HOME=/build makeitshfbc \
+    && test -d /build/itshfbc/run \
+    && test -e /build/itshfbc/coeffs \
+    && test -f /build/itshfbc/antennas/samples/sample.23
 
 # ----------------------------------------------------------------- stage 2
 FROM python:3.12-slim AS runtime
@@ -41,6 +48,8 @@ RUN useradd --create-home --uid 10001 advisor
 
 COPY --from=voacapl-build /usr/local/bin/voacapl /usr/local/bin/voacapl
 COPY --from=voacapl-build /build/itshfbc /opt/itshfbc
+# Targets of the absolute symlinks makeitshfbc created inside /opt/itshfbc.
+COPY --from=voacapl-build /usr/local/share/voacapl /usr/local/share/voacapl
 
 WORKDIR /srv/band-advisor
 COPY pyproject.toml README.md ./
@@ -62,4 +71,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -fsS http://127.0.0.1:8000/healthz || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --no-access-log: uvicorn's access logger records the full request target,
+# query string included (callsign, grid). The app's own JSON middleware logs
+# path-only lines instead.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

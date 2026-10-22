@@ -51,6 +51,39 @@ class TestTTLCache:
         c2 = TTLCache(60, time, disk_path=path)
         assert c2.get(("a", 1)) == {"x": 2}
 
+    def _persisted(self, tmp_path, wall_at_save, wall_at_load, ttl=60):
+        path = tmp_path / "cache.json"
+        wall = FakeTime()
+        wall.t = wall_at_save
+        c1 = TTLCache(ttl, FakeTime(), disk_path=path, wall_time_fn=wall)
+        c1.set(("a",), 1)
+        # new process: monotonic clock restarts from an unrelated value
+        mono2 = FakeTime()
+        mono2.t = 5.0
+        wall.t = wall_at_load
+        return TTLCache(ttl, mono2, disk_path=path, wall_time_fn=wall), mono2
+
+    def test_disk_reload_subtracts_downtime(self, tmp_path):
+        c2, mono2 = self._persisted(tmp_path, 1_000_000.0, 1_000_040.0)
+        assert c2.get(("a",)) == 1  # 20 s of the 60 s TTL left
+        mono2.t += 21
+        assert c2.get(("a",)) is None
+
+    def test_disk_entry_expired_during_downtime_is_dropped(self, tmp_path):
+        c2, _ = self._persisted(tmp_path, 1_000_000.0, 1_000_000.0 + 86_400)
+        assert c2.get(("a",)) is None
+        assert len(c2) == 0
+
+    def test_wall_clock_backwards_never_extends_ttl(self, tmp_path):
+        c2, mono2 = self._persisted(tmp_path, 1_000_000.0, 999_000.0)
+        mono2.t += 61
+        assert c2.get(("a",)) is None
+
+    def test_legacy_relative_format_ignored(self, tmp_path):
+        path = tmp_path / "cache.json"
+        path.write_text('[{"key": ["a"], "ttl_remaining": 60, "value": 1}]')
+        assert TTLCache(60, FakeTime(), disk_path=path).get(("a",)) is None
+
 
 class TestVoacapKey:
     def test_exact_key_shape(self):
@@ -75,10 +108,15 @@ class TestVoacapKey:
 
 
 class TestPskKeys:
-    def test_field_granularity(self):
-        # nearby users in the same 2-char field share a cache entry
-        assert regional_cache_key("EM28", None, "FT8", 900) == regional_cache_key(
+    def test_square_granularity(self):
+        # aggregates are observer-relative: a different square in the same
+        # 2-char field must NOT reuse them (the raw upstream fetch is shared
+        # separately by PskService)
+        assert regional_cache_key("EM28", None, "FT8", 900) != regional_cache_key(
             "EM19", None, "FT8", 900
+        )
+        assert regional_cache_key("em28xx", None, "FT8", 900) == regional_cache_key(
+            "EM28", None, "FT8", 900
         )
         assert regional_cache_key("EM28", None, "FT8", 900) != regional_cache_key(
             "FN31", None, "FT8", 900

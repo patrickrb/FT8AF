@@ -76,10 +76,44 @@ class TestDistanceAzimuth:
 
 
 class TestCallsign:
-    @pytest.mark.parametrize("call", ["K1AF", "KS3CKC", "W1AW", "VE3XYZ", "2E0ABC"])
+    @pytest.mark.parametrize(
+        "call",
+        [
+            "K1AF",
+            "KS3CKC",
+            "W1AW",
+            "VE3XYZ",
+            "2E0ABC",
+            "G4XYZ/P",
+            "K1AF/QRP",
+            # portable PREFIX forms the Android client accepts and sends
+            "EA8/K1AF",
+            "F/G4XYZ",
+            "VP2E/K1AF",
+            "VP2E/K1AF/P",
+            " ea8/k1af ",
+        ],
+    )
     def test_valid(self, call):
         assert is_valid_callsign(call)
 
-    @pytest.mark.parametrize("call", ["", "K", "123", "K1AF!!", "THIS-IS-NOT"])
+    @pytest.mark.parametrize(
+        "call",
+        [
+            "",
+            "K",
+            "123",
+            "K1AF!!",
+            "THIS-IS-NOT",
+            "K1AF//P",  # empty part
+            "/K1AF",
+            "K1AF/",
+            "A/B/C/K1AF",  # too many parts
+            "EA8/K1AF/P/QRP",
+            "VP2E/K1AF/QRPP",  # 14 chars
+            "EA8/NOCALL",  # longest part is not a callsign body
+            "K1AF/P!",
+        ],
+    )
     def test_invalid(self, call):
         assert not is_valid_callsign(call)

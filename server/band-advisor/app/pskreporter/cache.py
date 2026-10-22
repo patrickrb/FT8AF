@@ -1,10 +1,15 @@
 """TTL caches for PSK Reporter data.
 
-Regional cache keying: the observer's 4-char grid is reduced to its 2-char
-FIELD so that nearby users share cache entries (one upstream fetch serves
-everyone in, say, EM** for the whole window).  Key shape::
+Regional cache keying: the cached values are aggregates computed RELATIVE
+to the observer's grid (the 500 km nearby-transmitter cutoff, the
+directional octants), so they are keyed by the observer's 4-char SQUARE.  A
+2-char field spans 20 deg x 10 deg; sharing one aggregate across it would
+hand a caller statistics computed for whoever populated the entry first.
+Upstream fetch sharing does not depend on this key: PskService keeps the raw
+PSK Reporter window in its own cache, so every square in the world still
+costs one upstream fetch per window.  Key shape::
 
-    (observer_field_2char, band_or_ALL, mode, window_seconds)
+    (observer_square_4char, band_or_ALL, mode, window_seconds)
 
 TTL 5 minutes — matching retrieve.pskreporter.info's minimum polling
 guidance, so the cache itself enforces the etiquette.
@@ -25,9 +30,9 @@ from ..ttl_cache import TTLCache
 def regional_cache_key(
     observer_grid: str, band: str | None, mode: str, window_s: int
 ) -> tuple:
-    """Canonical regional key — observer grid collapses to its 2-char field."""
-    field = normalize_grid4(observer_grid)[:2]
-    return (field, band or "ALL", mode.upper(), int(window_s))
+    """Canonical regional key — the observer's normalized 4-char square."""
+    square = normalize_grid4(observer_grid)
+    return (square, band or "ALL", mode.upper(), int(window_s))
 
 
 def personal_cache_key(callsign: str, mode: str, window_s: int) -> tuple:

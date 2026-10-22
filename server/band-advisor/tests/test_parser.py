@@ -1,7 +1,51 @@
+from pathlib import Path
+
 import pytest
 
 from app.bands import BAND_ORDER
 from app.voacap.parser import parse_output
+
+UPSTREAM_FIXTURE = Path(__file__).parent / "fixtures" / "voacapl_upstream_method30.out"
+
+
+class TestUpstreamNativeOutput:
+    """Real voacapl output: one printer-control column before every row."""
+
+    @pytest.fixture
+    def text(self) -> str:
+        return UPSTREAM_FIXTURE.read_text()
+
+    def test_hours_and_ssn(self, text):
+        result = parse_output(text)
+        assert set(result.hours) == {1, 2}
+        assert result.ssn == 13.0
+
+    def test_hour1_40m_from_7mhz_column(self, text):
+        pred = parse_output(text).hours[1]["40m"]
+        assert pred is not None
+        assert pred.freq_mhz == pytest.approx(7.0)
+        assert pred.rel == pytest.approx(1.0)
+        assert pred.mode == "2F2"
+        assert pred.mufday == pytest.approx(1.0)
+        assert pred.snr_dbhz == pytest.approx(67.0)
+        assert pred.snrxx_dbhz == pytest.approx(54.0)
+
+    def test_hour2_values_follow_their_own_block(self, text):
+        bands = parse_output(text).hours[2]
+        pred = bands["40m"]
+        assert pred.mode == "3F2"
+        assert pred.rel == pytest.approx(1.00)
+        assert pred.snr_dbhz == pytest.approx(54.0)
+        assert pred.snrxx_dbhz == pytest.approx(41.0)
+        # 2-10 MHz test frequencies only line up with the 40m FT8 dial.
+        assert bands["80m"] is None
+        assert bands["20m"] is None
+
+    def test_prefix_less_copy_parses_identically(self, text):
+        # Stripping exactly one leading column from every row must not change
+        # the result: the parser derives the offset per FREQ block.
+        stripped = "\n".join(l[1:] if l.startswith(" ") else l for l in text.splitlines())
+        assert parse_output(stripped).hours == parse_output(text).hours
 
 
 class TestParseFixture:

@@ -17,7 +17,15 @@ GRID4_RE = re.compile(r"^[A-R]{2}[0-9]{2}$")
 GRID6_RE = re.compile(r"^[A-R]{2}[0-9]{2}[A-X]{2}$")
 FIELD_RE = re.compile(r"^[A-R]{2}$")
 
-CALLSIGN_RE = re.compile(r"^[A-Z0-9]{1,3}[0-9][A-Z0-9]{0,3}[A-Z](/[A-Z0-9]{1,4})?$")
+# Callsign shape, kept in step with the Android client's isPlausibleCallsign
+# (bandadvisor/model/Validation.kt): up to three "/"-separated alphanumeric
+# parts, total length 3..12, and the LONGEST part must look like a callsign
+# body. Covers "K1AF", "G4XYZ/P", "EA8/K1AF", "F/G4XYZ", "VP2E/K1AF/QRP".
+CALLSIGN_BODY_RE = re.compile(r"^[A-Z0-9]{1,3}[0-9][A-Z0-9]{0,3}[A-Z]$")
+CALLSIGN_PART_RE = re.compile(r"^[A-Z0-9]+$")
+CALLSIGN_MIN_LEN = 3
+CALLSIGN_MAX_LEN = 12
+CALLSIGN_MAX_PARTS = 3
 
 
 class GridError(ValueError):
@@ -123,5 +131,18 @@ def grid_azimuth_deg(grid1: str, grid2: str) -> float:
 
 
 def is_valid_callsign(callsign: str) -> bool:
-    """Loose amateur callsign shape check (uppercased before matching)."""
-    return bool(CALLSIGN_RE.match(callsign.strip().upper()))
+    """Loose amateur callsign shape check (uppercased before matching).
+
+    Accepts portable prefixes and suffixes in either position; the longest
+    "/"-separated part is validated as the callsign body.
+    """
+    call = callsign.strip().upper()
+    if not CALLSIGN_MIN_LEN <= len(call) <= CALLSIGN_MAX_LEN:
+        return False
+    parts = call.split("/")
+    if len(parts) > CALLSIGN_MAX_PARTS:
+        return False
+    if not all(CALLSIGN_PART_RE.match(part) for part in parts):
+        return False
+    body = max(parts, key=len)  # first longest, same tie-break as the client
+    return bool(CALLSIGN_BODY_RE.match(body))

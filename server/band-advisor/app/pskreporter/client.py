@@ -212,6 +212,7 @@ class PskReporterClient:
             )
 
         self._last_fetch_mono[key] = now_mono
+        self._prune_fetch_times(now_mono)
         reports = parse_reception_reports(response.content)
         log.info(
             "pskreporter fetch ok: %d valid reports (mode=%s personal=%s)",
@@ -220,3 +221,15 @@ class PskReporterClient:
             bool(sender_callsign),
         )
         return FetchResult(reports=tuple(reports), fetched_at=self._clock.now())
+
+    def _prune_fetch_times(self, now_mono: float) -> None:
+        """Forget parameter sets whose min-interval has passed.
+
+        Personal queries key this dict by callsign, so without pruning every
+        distinct callsign ever requested would stay in memory for the life of
+        the process.
+        """
+        horizon = self._settings.psk_min_interval_s
+        stale = [k for k, t in self._last_fetch_mono.items() if now_mono - t >= horizon]
+        for k in stale:
+            del self._last_fetch_mono[k]

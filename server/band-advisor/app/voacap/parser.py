@@ -7,6 +7,13 @@ frequency from the FREQUENCY card (unused slots print ``0.0``).  Each
 following row carries one quantity per frequency column with its label at
 the end of the line (``MODE``, ``MUFday``, ``SNR``, ``REL``, ``SNRxx`` ...).
 
+Real voacapl output prefixes every row with one Fortran printer-control
+column (a space) before the 5-character fields, so the FREQ row reads
+``   1.0 13.0  2.0 ...`` rather than ``  1.0 13.0  2.0 ...``.  The parser
+derives that leading offset from each FREQ row (the numeric area is always
+``offset + 5 * n`` columns wide) and applies it to every row of the block,
+so both the native layout and prefix-less text parse identically.
+
 This parser is deliberately defensive: unknown rows are ignored, unparsable
 cells become ``None``, and FT8 bands whose frequency column is absent from
 the output are reported as ``None`` entries rather than raising.
@@ -59,10 +66,21 @@ class VoacapPrediction:
     hours: dict[int, dict[str, BandPrediction | None]] = field(default_factory=dict)
 
 
-def _chunks(line: str) -> list[str]:
+def _chunks(line: str, offset: int = 0) -> list[str]:
     return [
-        line[i : i + _COL_WIDTH] for i in range(0, len(line), _COL_WIDTH)
+        line[i : i + _COL_WIDTH] for i in range(offset, len(line), _COL_WIDTH)
     ]
+
+
+def _freq_row_offset(line: str) -> int:
+    """Leading columns before the first 5-char field of a FREQ row.
+
+    The numeric area (everything before the trailing ``FREQ`` label) is
+    ``offset + 5 * n`` characters wide, so its length mod 5 is the offset:
+    1 for native voacapl output (printer-control column), 0 without it.
+    """
+    numeric = line[: line.rstrip().rfind("FREQ")].rstrip()
+    return len(numeric) % _COL_WIDTH
 
 
 def _try_float(cell: str) -> float | None:
@@ -89,19 +107,21 @@ def parse_output(text: str) -> VoacapPrediction:
     current_hour: int | None = None
     current_cols: list[tuple[int, str]] = []  # (column index, band name)
     n_value_cols = 0
+    offset = 0
 
     for raw_line in text.splitlines():
         line = raw_line.rstrip("\n")
         stripped = line.strip()
 
         if stripped.endswith("FREQ"):
-            hour, cols = _parse_freq_line(line)
+            offset = _freq_row_offset(line)
+            hour, cols = _parse_freq_line(line, offset)
             if hour is None:
                 current_hour = None
                 continue
             current_hour = hour
             current_cols = cols
-            n_value_cols = _count_numeric_cols(line)
+            n_value_cols = _count_numeric_cols(line, offset)
             result.hours[hour] = {
                 band: BandPrediction(band=band, freq_mhz=freq)
                 for _, band, freq in _named(cols)
@@ -112,11 +132,11 @@ def parse_output(text: str) -> VoacapPrediction:
         if current_hour is None or not stripped:
             continue
 
-        label = line[n_value_cols * _COL_WIDTH :].strip()
+        label = line[offset + n_value_cols * _COL_WIDTH :].strip()
         attr = _ROW_LABELS.get(label)
         if attr is None:
             continue
-        cells = _chunks(line)
+        cells = _chunks(line, offset)
         hour_bands = result.hours[current_hour]
         for col_idx, band, _freq in _named(current_cols):
             pred = hour_bands.get(band)
@@ -134,9 +154,11 @@ def parse_output(text: str) -> VoacapPrediction:
     return result
 
 
-def _parse_freq_line(line: str) -> tuple[int | None, list[tuple[int, str]]]:
+def _parse_freq_line(
+    line: str, offset: int = 0
+) -> tuple[int | None, list[tuple[int, str]]]:
     """Return (utc_hour, [(column_index, band, freq_mhz), ...]) for a FREQ row."""
-    cells = _chunks(line)
+    cells = _chunks(line, offset)
     values: list[float | None] = [_try_float(c) for c in cells]
     if len(values) < 3 or values[0] is None:
         return None, []
@@ -155,9 +177,9 @@ def _parse_freq_line(line: str) -> tuple[int | None, list[tuple[int, str]]]:
     return utc_hour, cols  # type: ignore[return-value]
 
 
-def _count_numeric_cols(freq_line: str) -> int:
+def _count_numeric_cols(freq_line: str, offset: int = 0) -> int:
     """Number of 5-char value columns before the trailing FREQ label."""
-    cells = _chunks(freq_line)
+    cells = _chunks(freq_line, offset)
     n = 0
     for cell in cells:
         if _try_float(cell) is not None:

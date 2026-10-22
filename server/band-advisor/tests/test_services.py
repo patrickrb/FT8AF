@@ -140,8 +140,28 @@ class TestPskService:
         )
         service = self._service(settings, fixed_clock, client)
         service.get_regional_activity("EM28")
-        service.get_regional_activity("EM29")  # same field EM -> same entry
+        service.get_regional_activity("EM28")  # aggregate cache hit
+        service.get_regional_activity("EM29")  # own aggregate, shared raw fetch
         assert len(client.calls) == 1
+
+    def test_same_field_squares_get_their_own_nearby_statistics(
+        self, settings, fixed_clock
+    ):
+        # EM29 is ~110 km from EM28 but ~1000 km from EM20, all in field EM.
+        client = FakeClient(
+            [_report("K0AAA", "EM29", "G0AAA", "JO01")], fixed_clock.now()
+        )
+        service = self._service(settings, fixed_clock, client)
+        near = service.get_regional_activity("EM28")
+        far = service.get_regional_activity("EM20")
+        assert near.bands["20m"].nearby_tx_total == 1
+        assert far.bands["20m"].nearby_tx_total == 0
+        # and in the reverse population order
+        service2 = self._service(settings, fixed_clock, FakeClient(
+            [_report("K0AAA", "EM29", "G0AAA", "JO01")], fixed_clock.now()
+        ))
+        assert service2.get_regional_activity("EM20").bands["20m"].nearby_tx_total == 0
+        assert service2.get_regional_activity("EM28").bands["20m"].nearby_tx_total == 1
 
     def test_failure_propagates(self, settings, fixed_clock):
         service = self._service(settings, fixed_clock, FailingClient())

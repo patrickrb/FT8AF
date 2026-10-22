@@ -3,6 +3,10 @@
 Privacy rules enforced here and at call sites:
 * location is only ever logged as a 4-char Maidenhead square (never GPS);
 * no tokens, no emails, no full query strings.
+
+Third-party loggers that would break those rules at INFO are capped at
+WARNING here: HTTPX/httpcore log every request URL, and the PSK Reporter
+client's URLs carry ``appcontact`` (an email) and ``senderCallsign``.
 """
 
 from __future__ import annotations
@@ -37,7 +41,14 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(payload, default=str)
 
 
+#: Loggers whose INFO/DEBUG records include full upstream URLs (query strings
+#: with the contact email / callsign). Capped at WARNING regardless of level.
+QUIET_URL_LOGGERS: tuple[str, ...] = ("httpx", "httpcore")
+
+
 def configure_logging(level: int = logging.INFO) -> None:
+    for name in QUIET_URL_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
     root = logging.getLogger()
     if any(isinstance(h.formatter, JsonFormatter) for h in root.handlers):
         return  # already configured (idempotent for tests / reloads)

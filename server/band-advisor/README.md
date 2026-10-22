@@ -34,7 +34,7 @@ app/
     client.py          rate-limited HTTP client (gzip, defusedxml, backoff)
     aggregator.py      per-band stats (distance, octants, nearby-TX, quality)
     baseline.py        EWMA "typical activity" per (band, hour) + trend
-    cache.py           field-granularity 5-min cache, 10-min personal cache
+    cache.py           per-square 5-min aggregate cache, 10-min personal cache
     service.py         facade used by the recommendation layer
 ```
 
@@ -206,13 +206,14 @@ hence the `ba<6 hex>.dat` run names in `app/voacap/runner.py`.
 
 ## Not yet implemented / next steps (honest list)
 
-* **voacapl deck/CLI verification** — the card column layout and the
-  `voacapl <itshfbc> <in> <out>` invocation follow published samples and
-  pythonprop conventions but have not yet been validated against a real
-  voacapl build (tests use fixtures). Do one real run in the container and
-  lock a real output file in as a fixture.
-* **Antenna patterns** — power classes map to generic built-in antenna cards
-  (isotrope/dipole/whip); `BEAM` is modelled as a dipole. Real per-band gain
+* **voacapl end-to-end verification** — the card column widths are checked
+  against voacapl's own deck-writer FORMATs and the parser against upstream's
+  shipped `voacapx.out`, but the container image itself has not been built
+  and run yet. Do one real run in the container and lock its output in as a
+  fixture.
+* **Antenna patterns** — antenna classes map to voacapl's stock files
+  (`default/isotrope`, `samples/sample.23` ITSA-1 horizontal dipole,
+  `default/swwhip.voa`); `BEAM` is modelled as the dipole. Real per-band gain
   files are a follow-up.
 * **Live sunspot number** — `SUNSPOT_NUMBER` is a static env var; wire a
   SIDC/NOAA feed.

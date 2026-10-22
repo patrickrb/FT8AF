@@ -260,6 +260,16 @@ class TestRecommendationValidation:
         assert body["error"]["code"] == code
         assert isinstance(body["error"]["message"], str)
 
+    @pytest.mark.parametrize("call", ["EA8/K1AF", "F/G4XYZ", "VP2E/K1AF/P", "K1AF/QRP"])
+    def test_portable_callsigns_accepted(self, settings, fixed_clock, call):
+        # The Android client accepts and sends these; rejecting them would
+        # fail the whole recommendation, regional advice included.
+        response = make_client(settings, fixed_clock).get(
+            "/v1/recommendation", params={"grid": "EM28", "callsign": call}
+        )
+        assert response.status_code == 200
+        assert response.json()["personalAnalytics"]["reportsReceived"] == 23
+
 
 class TestDegradation:
     def test_voacap_down_still_200(self, settings, fixed_clock):

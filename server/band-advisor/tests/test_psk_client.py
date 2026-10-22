@@ -176,3 +176,17 @@ class TestClientBehavior:
         client = make_client(settings, fixed_clock, handler)
         client.fetch_reports(mode="FT8", sender_callsign="k1af")
         assert seen["senderCallsign"] == "K1AF"
+
+    def test_min_interval_bookkeeping_does_not_grow_per_callsign(self, settings, fixed_clock):
+        client = make_client(
+            settings, fixed_clock, lambda r: httpx.Response(200, content=VALID_XML)
+        )
+        for i in range(5):
+            client.fetch_reports(mode="FT8", sender_callsign=f"K{i}AF")
+        assert len(client._last_fetch_mono) == 5
+        fixed_clock.advance(settings.psk_min_interval_s)
+        client.fetch_reports(mode="FT8", sender_callsign="K9AF")
+        # only the parameter set still inside its min-interval is remembered
+        assert len(client._last_fetch_mono) == 1
+        with pytest.raises(PskReporterBackoff):
+            client.fetch_reports(mode="FT8", sender_callsign="K9AF")
