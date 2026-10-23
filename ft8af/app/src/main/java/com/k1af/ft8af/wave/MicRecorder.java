@@ -37,14 +37,31 @@ public class MicRecorder {
     // createAudioRecord(). Volatile because reinitialize() writes it from
     // another thread than the reader loop that snapshots it.
     private volatile int captureChannelCount = 1;
-    //private static final int audioFormat = AudioFormat.ENCODING_PCM_16BIT; //quantization bit depth
-    private static final int audioFormat = AudioFormat.ENCODING_PCM_FLOAT; //quantization bit depth
+    // NOT ENCODING_PCM_FLOAT: on this phone's MediaTek USB audio HAL,
+    // requesting float capture from a USB input silently produces unusable
+    // samples (the HAL's own log shows it falling back to a 16-bit word size
+    // internally while still being asked for 4-byte floats). Capture PCM16
+    // and convert to float in software instead (see startAudioRecordCapture()).
+    private static final int audioFormat = AudioFormat.ENCODING_PCM_16BIT; //quantization bit depth
 
     private AudioRecord audioRecord = null;//AudioRecord object
     private UsbAudioDevice usbAudioDevice = null; // USB audio device
     private boolean useUsbAudio = false;
 
     private volatile boolean isRunning = false;//whether currently in recording state
+    // Whether the OWNER (HamRecorder) wants capture running -- set only by
+    // start()/stopRecord(), the two owner-facing entry points. Deliberately
+    // separate from isRunning, which a failed AudioRecord also flips to false
+    // as a side effect (see startAudioRecordCapture()'s capture thread, and
+    // reinitialize() below): reinitialize() used to key its end-of-method
+    // restart decision off isRunning, so one transient createRecord_l failure
+    // (observed in the field right after a replug, before the audio HAL had
+    // caught up) permanently masked the owner's actual intent -- every later
+    // reinitialize() (e.g. the operator picking a perfectly valid device
+    // afterward) saw isRunning already false and silently skipped start(),
+    // leaving capture stopped for the rest of the session even though
+    // setPreferredDevice() kept reporting ok=true/deviceFound=true.
+    private volatile boolean shouldBeRunning = false;
     private OnDataListener onDataListener;
 
     // AudioRecord capture-thread handoff. reinitialize() can be called from
@@ -354,7 +371,9 @@ public class MicRecorder {
     }
 
     /**
-     * Find AudioDeviceInfo by device ID
+     * Find AudioDeviceInfo by device ID. Falls back to matching by the
+     * persisted input VID:PID (via its current product name) when the exact
+     * id isn't found -- see {@link UsbAudioDevice#resolveDeviceIndex}.
      */
     private AudioDeviceInfo findAudioDeviceById(int deviceId, int deviceType) {
         Context context = GeneralVariables.getMainContext();
@@ -362,12 +381,20 @@ public class MicRecorder {
         AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         if (audioManager == null) return null;
         AudioDeviceInfo[] devices = audioManager.getDevices(deviceType);
-        for (AudioDeviceInfo device : devices) {
-            if (device.getId() == deviceId) {
-                return device;
-            }
+        int[] ids = new int[devices.length];
+        String[] names = new String[devices.length];
+        for (int i = 0; i < devices.length; i++) {
+            ids[i] = devices[i].getId();
+            CharSequence name = devices[i].getProductName();
+            names[i] = name == null ? null : name.toString();
         }
-        return null;
+        UsbDevice fallback = GeneralVariables.usbAudioInputVendorId == 0 ? null
+                : UsbAudioDevice.findDeviceByVidPid(context,
+                        GeneralVariables.usbAudioInputVendorId,
+                        GeneralVariables.usbAudioInputProductId);
+        int idx = UsbAudioDevice.resolveDeviceIndex(ids, names, deviceId,
+                fallback == null ? null : fallback.getProductName());
+        return idx < 0 ? null : devices[idx];
     }
 
     /**
@@ -430,6 +457,7 @@ public class MicRecorder {
     }
 
     public synchronized void start(){
+        shouldBeRunning = true;
         if (isRunning) return;
 
         if (useUsbAudio && usbAudioDevice != null) {
@@ -569,6 +597,11 @@ public class MicRecorder {
         // read(), native releaseBuffer abort from two threads on one instance).
         final AudioRecord rec = audioRecord;
         final int myGeneration = captureGeneration;
+        // Raw capture buffer: audioFormat is ENCODING_PCM_16BIT (see its field
+        // comment for why), so AudioRecord.read() fills a short[], converted
+        // to float[] below for the rest of the pipeline (decode/waterfall)
+        // unchanged.
+        short[] rawBuffer = new short[bufferSize];
         float[] buffer = new float[bufferSize];
         // Snapshotted with `rec`: the fold below must match the channel count of
         // the AudioRecord this thread owns, not whatever a later reinit opened.
@@ -601,7 +634,11 @@ public class MicRecorder {
                     }
 
                     //read recording data
-                    int bufferReadResult = rec.read(buffer, 0, buffer.length,AudioRecord.READ_BLOCKING);
+                    int bufferReadResult = rec.read(rawBuffer, 0, rawBuffer.length, AudioRecord.READ_BLOCKING);
+
+                    if (bufferReadResult > 0) {
+                        int16ToFloat(rawBuffer, bufferReadResult, buffer);
+                    }
 
                     if (bufferReadResult < 0) {
                         // Error codes (ERROR_INVALID_OPERATION=-3, ERROR_BAD_VALUE=-2,
@@ -669,9 +706,16 @@ public class MicRecorder {
 
     /**
      * Stop recording. When recording stops, all monitors in the listener list are removed.
+     *
+     * <p>Owner-facing: also clears {@link #shouldBeRunning}, so a later
+     * {@link #reinitialize()} (e.g. from a USB attach event) knows not to
+     * restart capture the operator explicitly stopped. {@link #reinitialize()}
+     * itself does the equivalent teardown inline rather than calling this, so
+     * its own internal stop/rebuild cycle never clears that intent flag.
      */
     public synchronized void stopRecord() {
         isRunning = false;
+        shouldBeRunning = false;
         if (useUsbAudio && usbAudioDevice != null) {
             usbAudioDevice.stopCapture();
         }
@@ -693,14 +737,20 @@ public class MicRecorder {
      */
     @SuppressLint("MissingPermission")
     public synchronized void reinitialize() {
-        boolean wasRunning = isRunning;
         OnDataListener savedListener = onDataListener;
 
-        // Supersede the running reader thread's generation, then stop capture.
+        // Supersede the running reader thread's generation, then stop capture
+        // inline (NOT via stopRecord(): that also clears shouldBeRunning, which
+        // must survive this method's own internal stop/rebuild cycle -- see
+        // shouldBeRunning's field comment for why keying off isRunning here
+        // used to permanently wedge capture after one transient failure).
         captureGeneration++;
-        stopRecord();
+        isRunning = false;
+        if (useUsbAudio && usbAudioDevice != null) {
+            usbAudioDevice.stopCapture();
+        }
 
-        // Release old AudioRecord (stopRecord only sets isRunning=false). The
+        // Release old AudioRecord (the above only sets isRunning=false). The
         // reader thread may still be inside a blocking read() on it: stop()
         // unblocks that read, and we must wait for the thread to exit before
         // release() — releasing mid-read is a fatal native abort
@@ -771,11 +821,24 @@ public class MicRecorder {
             }
         }
 
-        // Restore listener and restart if it was running
         onDataListener = savedListener;
-        if (wasRunning) {
+        if (shouldRestartAfterReinitialize(shouldBeRunning)) {
             start();
         }
+    }
+
+    /**
+     * Whether {@link #reinitialize()} should restart capture once it has
+     * rebuilt the audio input. Keyed on {@code shouldBeRunning} (owner
+     * intent, touched only by {@link #start()}/{@link #stopRecord()}), NOT
+     * {@code isRunning} -- a transient failure in the rebuild above (or an
+     * earlier {@link #reinitialize()} call) can leave {@code isRunning} false
+     * with no owner-driven {@link #stopRecord()} ever happening, and that
+     * must not be read as "capture no longer wanted" (the bug fixed by
+     * introducing {@link #shouldBeRunning} in the first place).
+     */
+    static boolean shouldRestartAfterReinitialize(boolean shouldBeRunning) {
+        return shouldBeRunning;
     }
 
     /**
@@ -870,6 +933,25 @@ public class MicRecorder {
         if (source == MediaRecorder.AudioSource.UNPROCESSED) return "UNPROCESSED";
         if (source == MediaRecorder.AudioSource.VOICE_RECOGNITION) return "VOICE_RECOGNITION";
         return String.valueOf(source);
+    }
+
+    /**
+     * Convert {@code length} 16-bit PCM samples to float, filling {@code dest}
+     * in place from index 0 -- the caller's hot-path buffer, reused across
+     * reads rather than allocated per call. Matches {@code float2Short()}'s
+     * inverse scale elsewhere in the app (the TX path, {@code
+     * FT8TransmitSignal.java}): full-scale short (+/-32767) maps to +/-1.0f.
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param src    source samples; must be at least {@code length} long
+     * @param length number of samples to convert
+     * @param dest   destination; must be at least {@code length} long
+     */
+    static void int16ToFloat(short[] src, int length, float[] dest) {
+        for (int i = 0; i < length; i++) {
+            dest[i] = src[i] / 32767.0f;
+        }
     }
 
     /**
