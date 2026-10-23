@@ -87,6 +87,7 @@ import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.count.CountDbOpr
 import com.k1af.ft8af.log.ImportSharedLogs
 import com.k1af.ft8af.log.OnShareLogEvents
+import java.io.IOException
 import com.k1af.ft8af.log.QSLCallsignRecord
 import com.k1af.ft8af.log.ThirdPartyService
 import com.k1af.ft8af.maidenhead.MaidenheadGrid
@@ -209,12 +210,15 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val stream = try {
-            appContext.contentResolver.openInputStream(uri)
+        // Open once just to confirm the URI is actually readable (closed immediately --
+        // ImportSharedLogs.doImport re-opens it per pass itself, see below), so a bad pick
+        // still shows the "failed to open" state up front, same as before.
+        val openable = try {
+            appContext.contentResolver.openInputStream(uri)?.use { true } ?: false
         } catch (e: Exception) {
-            null
+            false
         }
-        if (stream == null) {
+        if (!openable) {
             importDialogState = failedImportState(importOpenFailedMsg)
             return@rememberLauncherForActivityResult
         }
@@ -224,26 +228,35 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
             // ImportSharedLogs runs on its own thread and reports back through
             // these callbacks (also on that thread); Compose snapshot state is
             // safe to write from there, same as the sync-progress callback above.
-            ImportSharedLogs(mainViewModel).doImport(stream, object : OnShareLogEvents {
-                override fun onPreparing(info: String?) {}
+            // It streams the source twice (count, then parse+insert), re-opening the
+            // URI each time rather than buffering the whole file to allow "rewinding".
+            ImportSharedLogs(mainViewModel).doImport(
+                {
+                    appContext.contentResolver.openInputStream(uri)
+                        ?: throw IOException("Failed to open input stream for URI: $uri")
+                },
+                object : OnShareLogEvents {
+                    override fun onPreparing(info: String?) {}
 
-                override fun onShareStart(count: Int, info: String?) {
-                    importDialogState = importDialogState?.copy(total = count)
-                }
+                    override fun onShareStart(count: Int, info: String?) {
+                        importDialogState = importDialogState?.copy(total = count)
+                    }
 
-                override fun onShareProgress(count: Int, position: Int, info: String?): Boolean {
-                    importDialogState = importDialogState?.copy(total = count, position = position)
-                    return true
-                }
+                    override fun onShareProgress(count: Int, position: Int, info: String?): Boolean {
+                        importDialogState = importDialogState?.copy(total = count, position = position)
+                        return true
+                    }
 
-                override fun afterGet(count: Int, info: String?) {
-                    importDialogState = finishedImportState(count, tally)
-                }
+                    override fun afterGet(count: Int, info: String?) {
+                        importDialogState = finishedImportState(count, tally)
+                    }
 
-                override fun onShareFailed(info: String?) {
-                    importDialogState = failedImportState(info)
-                }
-            }, tally)
+                    override fun onShareFailed(info: String?) {
+                        importDialogState = failedImportState(info)
+                    }
+                },
+                tally,
+            )
         } catch (e: java.io.IOException) {
             importDialogState = failedImportState(e.message)
         }

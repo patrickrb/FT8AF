@@ -480,16 +480,18 @@ class ComposeMainActivity : AppCompatActivity() {
         val uri: Uri? = intent.data
         if (uri != null) {
             try {
-                val inputStream = baseContext.contentResolver.openInputStream(uri)
-                if (inputStream == null) {
-                    Log.e(TAG, "Failed to open input stream for URI: $uri")
-                    return
-                }
                 mainViewModel.mutableImportShareRunning.value = true
                 val importSharedLogs = ImportSharedLogs(mainViewModel)
                 Log.d(TAG, "Starting import...")
                 importSharedLogs.doImport(
-                    inputStream,
+                    {
+                        // Re-opened once per pass (ImportSharedLogs.doImport streams the
+                        // source twice: once to count records, once to parse+insert) rather
+                        // than passed as a single already-open stream, so neither pass needs
+                        // to buffer the whole file to allow "rewinding".
+                        baseContext.contentResolver.openInputStream(uri)
+                            ?: throw IOException("Failed to open input stream for URI: $uri")
+                    },
                     object : OnShareLogEvents {
                         override fun onPreparing(info: String?) {
                             mainViewModel.mutableShareInfo.postValue(info)
