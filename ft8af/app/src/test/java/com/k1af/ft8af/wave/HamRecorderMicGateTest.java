@@ -32,4 +32,15 @@ public class HamRecorderMicGateTest {
     public void stoppedRecorderLeavesMicFree() {
         assertThat(HamRecorder.phoneMicCaptureInUse(false, true, false)).isFalse();
     }
+
+    /**
+     * {@link HamRecorder#shouldResumeAfterTxPause} -- resumeAfterTx() must
+     * only restart capture when pauseForTx() actually stopped a running one,
+     * never reviving capture the operator had deliberately turned off.
+     */
+    @Test
+    public void resumeAfterTxPause_onlyWhenPauseActuallyStoppedCapture() {
+        assertThat(HamRecorder.shouldResumeAfterTxPause(true)).isTrue();
+        assertThat(HamRecorder.shouldResumeAfterTxPause(false)).isFalse();
+    }
 }

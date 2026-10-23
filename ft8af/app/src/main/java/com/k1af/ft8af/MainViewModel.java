@@ -132,6 +132,7 @@ import com.k1af.ft8af.timer.DecodeDtDisplay;
 import com.k1af.ft8af.timer.OnUtcTimer;
 import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.ui.ToastMessage;
+import com.k1af.ft8af.wave.AudioChannelSelect;
 import com.k1af.ft8af.wave.HamRecorder;
 import com.k1af.ft8af.wave.MicRecorder;
 import com.k1af.ft8af.wave.OnGetVoiceDataDone;
@@ -986,6 +987,11 @@ public class MainViewModel extends ViewModel {
                         baseRig != null && baseRig.supportWaveOverCAT());
             }
 
+            // Whether this over's beginKeying() actually paused RX capture, so
+            // endKeying() only resumes what it paused (see
+            // shouldPauseRxCaptureForTx's javadoc for why/when).
+            private boolean rxPausedForThisKeying = false;
+
             /**
              * Assert PTT (+ pause SCO) through the configured control path. Shared
              * by the FT8 TX path and the tune carrier (issue #408) so the
@@ -993,6 +999,18 @@ public class MainViewModel extends ViewModel {
              * (VOX), this is a no-op and the audio itself keys the rig.
              */
             private void beginKeying() {
+                rxPausedForThisKeying = hamRecorder != null && shouldPauseRxCaptureForTx(
+                        hamRecorder.isMicSource(),
+                        hamRecorder.getMicRecorder().isUsingUsbDirect(),
+                        GeneralVariables.audioOutputDeviceId == -1,
+                        GeneralVariables.usbAudioInputVendorId,
+                        GeneralVariables.usbAudioInputProductId,
+                        GeneralVariables.usbAudioOutputVendorId,
+                        GeneralVariables.usbAudioOutputProductId);
+                if (rxPausedForThisKeying) {
+                    hamRecorder.pauseForTx();
+                }
+
                 boolean keysViaControlPath = GeneralVariables.controlMode == ControlMode.CAT
                         || GeneralVariables.controlMode == ControlMode.RTS
                         || GeneralVariables.controlMode == ControlMode.DTR;
@@ -1045,6 +1063,11 @@ public class MainViewModel extends ViewModel {
                 // The post-TX restart has been requested; the next over takes a
                 // fresh snapshot in beginKeying().
                 txScoLatch.keyUp();
+
+                if (rxPausedForThisKeying) {
+                    rxPausedForThisKeying = false;
+                    hamRecorder.resumeAfterTx();
+                }
             }
 
             @Override
@@ -2343,6 +2366,76 @@ public class MainViewModel extends ViewModel {
     }
 
     /**
+     * The QRP Labs QMX needs mono/left-channel TX audio to fully drive its
+     * modulator -- confirmed on real hardware across three independent apps
+     * (WSJT-X, QFT8, and this one): FT8AF's historical {@code BOTH} default
+     * opens a mono {@code AudioTrack} and leaves the mono-to-stereo upmix to
+     * Android/the USB Audio Class device, with no control over how much gain
+     * that upmix applies per channel, while an explicit {@code LEFT}
+     * selection opens a genuine stereo track with the left channel at full
+     * scale and the right silenced (see {@link AudioChannelSelect}) --
+     * underdriven either way until the operator finds the manual Settings
+     * toggle. Defaults {@code txAudioChannel} to {@code LEFT} the first time
+     * the QMX connects, but only when the operator has never touched that
+     * setting at all (no "txAudioChannel" config row yet) -- an explicit
+     * choice, even {@code BOTH} itself, is never overridden.
+     */
+    private void applyQmxTxChannelDefaultIfApplicable(int hamlibModelId) {
+        if (databaseOpr == null) return;
+        if (!shouldDefaultQmxTxChannelToLeft(hamlibModelId,
+                databaseOpr.hasConfigKey(AudioChannelSelect.TX_CONFIG_KEY))) {
+            return;
+        }
+        GeneralVariables.txAudioChannel = AudioChannelSelect.LEFT;
+        databaseOpr.writeConfig(AudioChannelSelect.TX_CONFIG_KEY,
+                String.valueOf(AudioChannelSelect.LEFT), null);
+        GeneralVariables.fileLog(
+                "QMX: defaulted TX audio channel to LEFT (first connect, no prior user choice)");
+    }
+
+    /**
+     * The decision behind {@link #applyQmxTxChannelDefaultIfApplicable}, pure
+     * and testable without a real {@code DatabaseOpr}/{@code Context}.
+     */
+    static boolean shouldDefaultQmxTxChannelToLeft(int hamlibModelId, boolean txChannelConfigKeyExists) {
+        return hamlibModelId == HamlibRig.QRPLABS_QMX_MODEL_ID && !txChannelConfigKeyExists;
+    }
+
+    /**
+     * Whether RX capture must be paused for the duration of this TX (see
+     * {@link HamRecorder#pauseForTx()} for the real-hardware failure this
+     * works around). True only when RX is actually holding an Android
+     * capture session on the exact same USB device TX is about to play on --
+     * deliberately narrow, since the conflict was only confirmed for that
+     * exact combination:
+     *
+     * <ul>
+     *   <li>RX must be the phone-audio path ({@code HamRecorder.isMicSource()}),
+     *       not a LAN-connected rig -- those never touch this HAL at all, and
+     *       toggling capture off would spuriously gate their audio too (see
+     *       {@code HamRecorder.doOnWaveDataReceived}'s {@code isRunning} check);
+     *   <li>RX must not already be USB-direct (raw libusb capture, a
+     *       different HAL path with no ALSA proxy to conflict over);
+     *   <li>TX must not be USB-direct output either (that path is separately,
+     *       already broken -- {@code LIBUSB_ERROR_IO} -- and conflating the
+     *       two bugs would make either one harder to fix);
+     *   <li>the input and output VID:PID must both be set and match -- two
+     *       different USB devices, or a non-USB default mic/speaker, have no
+     *       reason to share this HAL's single ALSA card.
+     * </ul>
+     */
+    static boolean shouldPauseRxCaptureForTx(boolean rxIsMicSource, boolean rxIsUsbDirect,
+            boolean txIsUsbDirectOutput, int usbInputVendorId, int usbInputProductId,
+            int usbOutputVendorId, int usbOutputProductId) {
+        if (!rxIsMicSource || rxIsUsbDirect || txIsUsbDirectOutput) {
+            return false;
+        }
+        return usbInputVendorId != 0
+                && usbInputVendorId == usbOutputVendorId
+                && usbInputProductId == usbOutputProductId;
+    }
+
+    /**
      * Create different rig models based on the instruction set
      */
     private void connectRig() {
@@ -2436,11 +2529,22 @@ public class MainViewModel extends ViewModel {
             case InstructionSet.KENWOOD_TS440:
                 baseRig = new KenwoodTS440Rig();//KENWOOD TS-440S (TS-570 CAT, USB mode)
                 break;
-            case InstructionSet.HAMLIB:
+            case InstructionSet.HAMLIB: {
                 // hamlib model number is carried in the rig table's address column
-                // (parsed base-16), e.g. FT-891 = 1036 = 0x40C.
-                baseRig = new HamlibRig(GeneralVariables.civAddress);
+                // (parsed base-16), e.g. FT-891 = 1036 = 0x40C. Derived fresh from the
+                // selected rig entry (HamlibRig.modelIdFor), not persisted separately --
+                // a separate "hamlibModel" config key existed briefly but could go stale
+                // or hold a non-hamlib address (civAddress's own persistence is byte-
+                // masked, a real ICOM CI-V address being a byte where a hamlib model ID
+                // routinely isn't, so it can't carry this value either).
+                android.content.Context ctx = GeneralVariables.getMainContext();
+                RigNameList.RigName selected = ctx == null ? null
+                        : RigNameList.getInstance(ctx).getRigNameByIndex(GeneralVariables.modelNo);
+                int hamlibModelId = HamlibRig.modelIdFor(selected);
+                applyQmxTxChannelDefaultIfApplicable(hamlibModelId);
+                baseRig = new HamlibRig(hamlibModelId);
                 break;
+            }
         }
 
         // Store the rig name for PSKReporter software string.

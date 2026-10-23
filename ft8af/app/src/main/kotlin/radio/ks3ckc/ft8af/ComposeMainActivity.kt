@@ -404,6 +404,16 @@ class ComposeMainActivity : AppCompatActivity() {
                     "baudRate=${GeneralVariables.baudRate}, " +
                     "controlMode=${GeneralVariables.controlMode}, " +
                     "connectMode=${GeneralVariables.connectMode}")
+                // Diagnostic (RX device-selection investigation): the value hydration
+                // actually read from the DB, BEFORE reinitializeAudioInput() below runs
+                // off it — settles whether a later audioInputDeviceId=0 at MicRecorder
+                // init means "never persisted / lost on restart" (this line also shows
+                // 0) or "persisted fine but something reset it afterward" (this line
+                // shows the real value).
+                fileLog("configLoaded: audioInputDeviceId=${GeneralVariables.audioInputDeviceId}, " +
+                    "audioOutputDeviceId=${GeneralVariables.audioOutputDeviceId}, " +
+                    "usbAudioInputVidPid=${GeneralVariables.usbAudioInputVendorId}:" +
+                    "${GeneralVariables.usbAudioInputProductId}")
                 if (GeneralVariables.autoUpdateGridFromGPS) {
                     val grid = MaidenheadGrid.getMyMaidenheadGrid(applicationContext)
                     if (grid.isNotEmpty()) {
@@ -480,16 +490,18 @@ class ComposeMainActivity : AppCompatActivity() {
         val uri: Uri? = intent.data
         if (uri != null) {
             try {
-                val inputStream = baseContext.contentResolver.openInputStream(uri)
-                if (inputStream == null) {
-                    Log.e(TAG, "Failed to open input stream for URI: $uri")
-                    return
-                }
                 mainViewModel.mutableImportShareRunning.value = true
                 val importSharedLogs = ImportSharedLogs(mainViewModel)
                 Log.d(TAG, "Starting import...")
                 importSharedLogs.doImport(
-                    inputStream,
+                    {
+                        // Re-opened once per pass (ImportSharedLogs.doImport streams the
+                        // source twice: once to count records, once to parse+insert) rather
+                        // than passed as a single already-open stream, so neither pass needs
+                        // to buffer the whole file to allow "rewinding".
+                        baseContext.contentResolver.openInputStream(uri)
+                            ?: throw IOException("Failed to open input stream for URI: $uri")
+                    },
                     object : OnShareLogEvents {
                         override fun onPreparing(info: String?) {
                             mainViewModel.mutableShareInfo.postValue(info)

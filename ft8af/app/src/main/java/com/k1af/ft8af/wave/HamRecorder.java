@@ -231,6 +231,61 @@ public class HamRecorder {
         isRunning = false;
     }
 
+    // Whether pauseForTx() actually stopped a running capture, so
+    // resumeAfterTx() only restarts it when it was genuinely running before
+    // -- never reviving capture the operator had deliberately stopped, and
+    // never double-counting a TX that started while already paused.
+    private boolean rxWasRunningBeforeTxPause = false;
+
+    /**
+     * Release RX capture for the duration of one TX "over"/TUNE key-down, when
+     * the caller ({@code MainViewModel.shouldPauseRxCaptureForTx}) has decided
+     * TX and RX share the same physical USB audio device. On that hardware,
+     * opening TX playback while this class's RX capture is still open on the
+     * same device fails at the ALSA proxy level
+     * (<code>alsa_device_proxy: proxy_open() pcm_is_ready() failed: cannot
+     * set hw params: I/O error</code>) and every subsequent write is silently
+     * dropped (<code>AudioALSAPlaybackHandlerUsb: write(), mPcm is NULL!</code>)
+     * -- confirmed on real hardware: FT8AF's generated waveform measured
+     * full-scale all the way to the {@code AudioTrack.write()} call, and TX
+     * was still inaudible on the rig, because the HAL never actually opened
+     * the output. A reference app (QFT8) that drives the same radio to full
+     * output does exactly this: close capture, play, reopen capture
+     * (confirmed via its own logcat -- it closes {@code
+     * AudioALSACaptureHandlerUsb} ~260ms before opening TX and reopens it
+     * right after).
+     *
+     * <p>Counterpart: {@link #resumeAfterTx()}.
+     */
+    public synchronized void pauseForTx() {
+        rxWasRunningBeforeTxPause = isRunning;
+        if (rxWasRunningBeforeTxPause) {
+            stopRecord();
+        }
+    }
+
+    /**
+     * Restart RX capture after a TX "over"/TUNE key-up, undoing {@link
+     * #pauseForTx()} -- but only when that call actually paused a running
+     * capture, so a TX that happens while the operator had RX off (or while
+     * this was already paused) does not unexpectedly turn capture back on.
+     */
+    public synchronized void resumeAfterTx() {
+        if (shouldResumeAfterTxPause(rxWasRunningBeforeTxPause)) {
+            rxWasRunningBeforeTxPause = false;
+            startRecord();
+        }
+    }
+
+    /**
+     * The decision behind {@link #resumeAfterTx()}, pure and testable:
+     * resume only when {@link #pauseForTx()} actually stopped a running
+     * capture.
+     */
+    static boolean shouldResumeAfterTxPause(boolean wasRunningBeforePause) {
+        return wasRunningBeforePause;
+    }
+
     /** The underlying mic capture, for routing introspection (issue #759). */
     public MicRecorder getMicRecorder() {
         return micRecorder;

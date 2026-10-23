@@ -360,3 +360,31 @@ interface (that runs the real `usb_audio_disconnect`). A genuine bus drop
 looks different: `usbDetach` for the hub, serial and audio devices together
 and `serial.send: port not open!` — that one is electrical (RF resetting the
 hub), not software.
+
+**5. On at least one phone's USB-audio HAL, RX capture and TX playback
+cannot share one USB rig at the same time.** Opening TX's `AudioTrack` while
+`MicRecorder`'s RX `AudioRecord` is still open on the same USB device fails
+at the ALSA proxy level, and every subsequent write is then silently
+dropped — the generated waveform can be full-scale all the way to
+`AudioTrack.write()` and still never reach the rig, with no exception and no
+error surfaced to the app. Tell from log (vendor tags, MediaTek-specific
+spelling, but the pattern generalizes): `AudioALSAPlaybackHandlerUsb: open(),
+proxy_open fail, ret -12` right after `alsa_device_proxy: proxy_open()
+pcm_is_ready() failed: cannot set hw params: I/O error`, then
+`AudioALSAPlaybackHandlerUsb: write(), mPcm is NULL!` repeated once per
+buffer for the rest of the transmission (thousands of lines on a 13 s over).
+Correlates exactly with whether `AudioALSACaptureHandlerUsb` is open at that
+moment — a reference app (QFT8) that drives the same radio to full output
+runs strictly half-duplex: it closes its USB capture, plays, then reopens
+capture, and its opens never fail. Fixed by doing the same thing around
+every "over"/TUNE key-down: `MainViewModel`'s shared `beginKeying()`/
+`endKeying()` (already the single choke point for PTT and SCO around TX, see
+items above) now calls `HamRecorder.pauseForTx()`/`resumeAfterTx()`, gated by
+`MainViewModel.shouldPauseRxCaptureForTx()` — deliberately narrow: only when
+RX is actually an Android capture session (not a LAN rig, not already
+USB-direct) on the *same* USB VID:PID as TX's output (not USB-direct output
+either, which is separately broken for unrelated reasons). Don't assume this
+generalizes to every USB audio chipset — it may be specific to this HAL —
+but the guard is cheap and a no-op whenever TX/RX aren't sharing one USB
+device, so there's little reason to narrow it further without a
+contradicting report.

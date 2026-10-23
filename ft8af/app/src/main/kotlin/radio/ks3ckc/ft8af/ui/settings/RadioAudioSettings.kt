@@ -528,15 +528,44 @@ fun RadioAudioSettings(
                     )
                     mainViewModel.requestUsbPermissionIfNeeded(usbInfo.device)
                 } else if (deviceId != -1) {
-                    GeneralVariables.usbAudioInputVendorId = 0
-                    GeneralVariables.usbAudioInputProductId = 0
-                    mainViewModel.databaseOpr.writeConfig("usbAudioInputVid", "0", null)
-                    mainViewModel.databaseOpr.writeConfig("usbAudioInputPid", "0", null)
+                    // A framework-routed USB device (e.g. "USB-Audio - QMX
+                    // Transceiver") carries no VID:PID of its own -- find the
+                    // raw UsbDevice by product-name overlap and persist ITS
+                    // VID:PID, so a later re-enumeration (which changes the
+                    // numeric id but not the product name) can still resolve
+                    // it instead of falling back to Default.
+                    val productName = audioInputAdapter.getUsbFrameworkDeviceProductName(position)
+                    val rawUsb = productName?.let {
+                        UsbAudioDevice.matchByProductName(
+                            UsbAudioDevice.findUsbAudioDevices(context), it, true,
+                        )
+                    }
+                    if (rawUsb != null) {
+                        GeneralVariables.usbAudioInputVendorId = rawUsb.device.vendorId
+                        GeneralVariables.usbAudioInputProductId = rawUsb.device.productId
+                    } else {
+                        GeneralVariables.usbAudioInputVendorId = 0
+                        GeneralVariables.usbAudioInputProductId = 0
+                    }
+                    mainViewModel.databaseOpr.writeConfig(
+                        "usbAudioInputVid", GeneralVariables.usbAudioInputVendorId.toString(), null,
+                    )
+                    mainViewModel.databaseOpr.writeConfig(
+                        "usbAudioInputPid", GeneralVariables.usbAudioInputProductId.toString(), null,
+                    )
                 }
                 audioInputName = audioInputAdapter.getDeviceDisplayName(position)
                 audioInputChannels = selectedDeviceMaxChannels(
                     context, deviceId, AudioManager.GET_DEVICES_INPUTS,
                 )
+                // The live MicRecorder only reads audioInputDeviceId at construction
+                // time (openAudioRecord()'s setPreferredDevice / openUsbAudioInput()),
+                // so without this the newly-picked device is persisted but the running
+                // capture keeps using whatever it opened with — silently, with no error
+                // — until the next USB attach/detach or app restart happens to reopen
+                // it. Mirrors the RX-channel-change and SCO-connect paths, which already
+                // reopen for the same reason.
+                mainViewModel.reinitializeAudioInput()
                 // Selecting a Bluetooth-SCO mic must actually bring SCO up (issue #723);
                 // deselecting it releases SCO unless a Bluetooth rig still needs it.
                 mainViewModel.refreshBluetoothHeadsetMode()
@@ -569,10 +598,26 @@ fun RadioAudioSettings(
                     )
                     mainViewModel.requestUsbPermissionIfNeeded(usbInfo.device)
                 } else if (deviceId != -1) {
-                    GeneralVariables.usbAudioOutputVendorId = 0
-                    GeneralVariables.usbAudioOutputProductId = 0
-                    mainViewModel.databaseOpr.writeConfig("usbAudioOutputVid", "0", null)
-                    mainViewModel.databaseOpr.writeConfig("usbAudioOutputPid", "0", null)
+                    // Same reasoning as the input picker above.
+                    val productName = audioOutputAdapter.getUsbFrameworkDeviceProductName(position)
+                    val rawUsb = productName?.let {
+                        UsbAudioDevice.matchByProductName(
+                            UsbAudioDevice.findUsbAudioDevices(context), it, false,
+                        )
+                    }
+                    if (rawUsb != null) {
+                        GeneralVariables.usbAudioOutputVendorId = rawUsb.device.vendorId
+                        GeneralVariables.usbAudioOutputProductId = rawUsb.device.productId
+                    } else {
+                        GeneralVariables.usbAudioOutputVendorId = 0
+                        GeneralVariables.usbAudioOutputProductId = 0
+                    }
+                    mainViewModel.databaseOpr.writeConfig(
+                        "usbAudioOutputVid", GeneralVariables.usbAudioOutputVendorId.toString(), null,
+                    )
+                    mainViewModel.databaseOpr.writeConfig(
+                        "usbAudioOutputPid", GeneralVariables.usbAudioOutputProductId.toString(), null,
+                    )
                 }
                 audioOutputName = audioOutputAdapter.getDeviceDisplayName(position)
                 audioOutputChannels = selectedDeviceMaxChannels(

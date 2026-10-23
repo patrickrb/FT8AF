@@ -417,8 +417,10 @@ public class LogHttpServer extends NanoHTTPD {
             task.processCount++;
             if (mainViewModel.databaseOpr.doInsertQSLData(qslRecord, new AfterInsertQSLData() {
                 @Override
-                public void doAfterInsert(boolean isInvalid, boolean isNewQSL) {
+                public void doAfterInsert(boolean isInvalid, boolean isNewQSL, boolean hasWarning) {
                     if (isInvalid) {
+                        // Never written at all (e.g. no callsign) -- distinct from
+                        // hasWarning below, which fires on a record that WAS written.
                         task.invalidCount++;
                         return;
                     }
@@ -426,6 +428,12 @@ public class LogHttpServer extends NanoHTTPD {
                         task.newCount++;
                     } else {
                         task.updateCount++;
+                    }
+                    if (hasWarning) {
+                        // Counted above AND here: one field (e.g. an unparseable RST)
+                        // was dropped to a fallback value, but the record was still
+                        // written -- must not also land in invalidCount.
+                        task.warningCount++;
                     }
                 }
             })) {

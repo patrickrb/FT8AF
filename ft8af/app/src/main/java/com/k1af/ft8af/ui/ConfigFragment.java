@@ -906,11 +906,31 @@ public class ConfigFragment extends Fragment {
                                     String.valueOf(GeneralVariables.usbAudioInputProductId));
                             requestUsbPermissionIfNeeded(usbInfo.device);
                         } else if (deviceId != -1) {
-                            // Clear USB audio settings if non-USB device selected
-                            GeneralVariables.usbAudioInputVendorId = 0;
-                            GeneralVariables.usbAudioInputProductId = 0;
-                            writeConfig("usbAudioInputVid", "0");
-                            writeConfig("usbAudioInputPid", "0");
+                            // A framework-routed USB device (e.g. "USB-Audio -
+                            // QMX Transceiver") carries no VID:PID of its own --
+                            // find the raw UsbDevice by product-name overlap and
+                            // persist ITS VID:PID, so a later re-enumeration
+                            // (which changes the numeric id but not the product
+                            // name) can still resolve it instead of falling back
+                            // to Default. See AudioDeviceSpinnerAdapter's
+                            // getUsbFrameworkDeviceProductName javadoc.
+                            String productName =
+                                    audioInputDeviceAdapter.getUsbFrameworkDeviceProductName(i);
+                            UsbAudioDevice.UsbAudioDeviceInfo rawUsb = productName == null ? null
+                                    : UsbAudioDevice.matchByProductName(
+                                            UsbAudioDevice.findUsbAudioDevices(requireContext()),
+                                            productName, true);
+                            if (rawUsb != null) {
+                                GeneralVariables.usbAudioInputVendorId = rawUsb.device.getVendorId();
+                                GeneralVariables.usbAudioInputProductId = rawUsb.device.getProductId();
+                            } else {
+                                GeneralVariables.usbAudioInputVendorId = 0;
+                                GeneralVariables.usbAudioInputProductId = 0;
+                            }
+                            writeConfig("usbAudioInputVid",
+                                    String.valueOf(GeneralVariables.usbAudioInputVendorId));
+                            writeConfig("usbAudioInputPid",
+                                    String.valueOf(GeneralVariables.usbAudioInputProductId));
                         }
                     }
 
@@ -939,10 +959,24 @@ public class ConfigFragment extends Fragment {
                                     String.valueOf(GeneralVariables.usbAudioOutputProductId));
                             requestUsbPermissionIfNeeded(usbInfo.device);
                         } else if (deviceId != -1) {
-                            GeneralVariables.usbAudioOutputVendorId = 0;
-                            GeneralVariables.usbAudioOutputProductId = 0;
-                            writeConfig("usbAudioOutputVid", "0");
-                            writeConfig("usbAudioOutputPid", "0");
+                            // Same reasoning as the input picker above.
+                            String productName =
+                                    audioOutputDeviceAdapter.getUsbFrameworkDeviceProductName(i);
+                            UsbAudioDevice.UsbAudioDeviceInfo rawUsb = productName == null ? null
+                                    : UsbAudioDevice.matchByProductName(
+                                            UsbAudioDevice.findUsbAudioDevices(requireContext()),
+                                            productName, false);
+                            if (rawUsb != null) {
+                                GeneralVariables.usbAudioOutputVendorId = rawUsb.device.getVendorId();
+                                GeneralVariables.usbAudioOutputProductId = rawUsb.device.getProductId();
+                            } else {
+                                GeneralVariables.usbAudioOutputVendorId = 0;
+                                GeneralVariables.usbAudioOutputProductId = 0;
+                            }
+                            writeConfig("usbAudioOutputVid",
+                                    String.valueOf(GeneralVariables.usbAudioOutputVendorId));
+                            writeConfig("usbAudioOutputPid",
+                                    String.valueOf(GeneralVariables.usbAudioOutputProductId));
                         }
                     }
 

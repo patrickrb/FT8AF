@@ -242,6 +242,36 @@ public class QSLRecordTest {
     }
 
     @Test
+    public void mapConstructor_leniableRst_parsesAndDoesNotFlagInvalid() {
+        // Real-world shapes found in a 87 MB ADIF log that strict Integer.parseInt
+        // rejected outright (issue report) -- see AdifFormat#parseReportLeniently.
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("RST_SENT", "59+30");
+        map.put("RST_RCVD", "R-07");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.isInvalid).isFalse();
+        assertThat(r.getSendReport()).isEqualTo(59);
+        assertThat(r.getReceivedReport()).isEqualTo(-7);
+    }
+
+    @Test
+    public void mapConstructor_trulyUnparseableRst_flagsInvalid() {
+        HashMap<String, String> map = new HashMap<>();
+        map.put("CALL", "W1AW");
+        map.put("COMMENT", "imported");
+        map.put("RST_RCVD", "no report at all");
+
+        QSLRecord r = new QSLRecord(map);
+
+        assertThat(r.isInvalid).isTrue();
+        assertThat(r.errorMSG).contains("RST_RCVD");
+    }
+
+    @Test
     public void mapConstructor_uhfFreq_preservesExactHz() {
         // 432.174 MHz (70cm). A 24-bit float mantissa cannot hold this many
         // significant Hz exactly, so the old float-based parse stored 432174016

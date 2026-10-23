@@ -114,6 +114,7 @@ public class RigAddressAssetTest {
         "(tr)uSDX (TS-480)",
         "Yaesu FT-891 (Hamlib)",
         "ICOM IC-7300MK2",
+        "Qrp Labs QMX (Hamlib)",
     };
 
     private RigNameList load() {
@@ -158,11 +159,24 @@ public class RigAddressAssetTest {
     }
 
     @Test
-    public void ic7300mk2_isTheLastEntry() {
-        // New rigs are append-only (class javadoc); MK2 closed the list.
+    public void qmxHamlib_isTheLastEntry() {
+        // New rigs are append-only (class javadoc); QMX (Hamlib) closed the list.
         RigNameList list = load();
         assertThat(list.rigList.get(list.rigList.size() - 1).modelName)
-                .isEqualTo("ICOM IC-7300MK2");
+                .isEqualTo("Qrp Labs QMX (Hamlib)");
+    }
+
+    @Test
+    public void qmxHamlib_isListedWithHamlibModelId() {
+        // hamlib's RIG_MODEL_QRPLABS_QMX = RIG_MAKE_MODEL(RIG_KENWOOD, 57) =
+        // 1000*2+57 = 2057 = 0x809 (see rigs/kenwood/ts480.c's qrplabs_qmx_caps,
+        // MAX_MODELS_PER_BACKEND=1000 and RIG_KENWOOD=2 in riglist.h). Baud 9600
+        // is that backend's declared serial_rate_min.
+        RigNameList.RigName qmx = findByName(load(), "Qrp Labs QMX (Hamlib)");
+        assertThat(qmx).isNotNull();
+        assertThat(qmx.address).isEqualTo(0x809);
+        assertThat(qmx.bauRate).isEqualTo(9600);
+        assertThat(qmx.instructionSet).isEqualTo(26); // InstructionSet.HAMLIB
     }
 
     @Test

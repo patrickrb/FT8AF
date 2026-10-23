@@ -800,6 +800,23 @@ public class DatabaseOpr extends SQLiteOpenHelper {
     }
 
     /**
+     * Whether a config row exists for {@code keyName} at all -- synchronous
+     * (unlike every other config accessor here), for callers on a background
+     * thread that need an answer before deciding what to do next (e.g.
+     * whether the operator has ever touched a given setting themselves,
+     * distinct from it merely holding its hardcoded default).
+     */
+    public boolean hasConfigKey(String keyName) {
+        Cursor cursor = db.rawQuery("select 1 from config where KeyName = ? limit 1",
+                new String[]{keyName});
+        try {
+            return cursor.moveToFirst();
+        } finally {
+            cursor.close();
+        }
+    }
+
+    /**
      * The config value as it may appear in logcat. Keys that hold credentials
      * ({@link SettingsBackup#getSENSITIVE_KEYS()} -- the API keys and passwords a
      * settings export also withholds) are masked, so saving e.g. a World Radio
@@ -1505,7 +1522,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                                    boolean appendToAdifFile) {
         if (record.getToCallsign() == null) {
             if (afterInsertQSLData!=null){
-                afterInsertQSLData.doAfterInsert(true,true);//Invalid QSL
+                afterInsertQSLData.doAfterInsert(true,true,false);//Invalid QSL: not written at all
             }
             return false;
         }
@@ -1608,7 +1625,12 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 com.k1af.ft8af.log.AdifLogFile.logQso(context, record);
             }
             if (afterInsertQSLData!=null){
-                afterInsertQSLData.doAfterInsert(false,true);//New QSL
+                // record.isInvalid as the WARNING flag here, not the isInvalid param:
+                // this record was genuinely inserted (it has a callsign), so it must
+                // still count as added, not skipped -- QSLRecord's own flag (set by,
+                // e.g., an unparseable RST_SENT/RST_RCVD or FREQ) only means one field
+                // was dropped to a fallback value, which callers can tally separately.
+                afterInsertQSLData.doAfterInsert(false,true,record.isInvalid);//New QSL, possibly with a dropped field
             }
 
         } else {
@@ -1670,7 +1692,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
             }
 
             if (afterInsertQSLData!=null){
-                afterInsertQSLData.doAfterInsert(false,false);//Already exists, QSL needs updating
+                afterInsertQSLData.doAfterInsert(false,false,record.isInvalid);//Already exists, QSL needs updating, possibly with a dropped field
             }
         }
         return true;

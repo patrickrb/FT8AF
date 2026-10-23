@@ -499,6 +499,7 @@
     <string name="import_new_count_html">Add QSLs: %d</string>
     <string name="import_update_count_html">Update QSLs: %d</string>
     <string name="import_invalid_count_html">Invalid QSLs: %d</string>
+    <string name="import_warning_count_html">Imported with a dropped field: %d</string>
     <string name="import_progress_html">"Progress: "</string>
     <string name="import_readed_html">Validated QSL: %d</string>
     <string name="import_canceled_html">Canceled!</string>

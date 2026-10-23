@@ -51,13 +51,32 @@ public final class HamlibNative {
     }
 
     /**
-     * Init + open a hamlib rig, wiring its transport to {@code sink}.
+     * Init a hamlib rig and its loopback-socket bridge, wiring its transport
+     * to {@code sink}, but do NOT perform the CAT handshake yet (see
+     * {@link #nativeRigOpen}). Split so the caller can publish the returned
+     * handle (e.g. to {@code HamlibRig.handle}) before the handshake runs —
+     * {@link #nativeFeedFromRig} silently drops bytes delivered against a
+     * handle the caller hasn't published yet, which previously meant every
+     * byte the radio sent during the handshake itself was lost, and hamlib
+     * always saw a timeout even against a replying radio.
      *
      * @param modelId hamlib rig model number (e.g. 3085 = IC-705)
      * @param sink    receives CAT bytes bound for the radio
      * @return opaque handle (&gt; 0) for the other calls, or 0 on failure
      */
-    public static native long nativeOpen(int modelId, HamlibSink sink);
+    public static native long nativeCreate(int modelId, HamlibSink sink);
+
+    /**
+     * Run hamlib's {@code rig_open()} (the CAT handshake) on a bridge handle
+     * from {@link #nativeCreate}. The caller must have already published the
+     * handle so inbound bytes during the handshake reach {@link #nativeFeedFromRig}.
+     *
+     * @return 0 (RIG_OK) on success, or a hamlib error code. Either way the
+     *     bridge is left alive; the caller must release it with
+     *     {@link #nativeClose} exactly once (success or failure), never
+     *     concurrently with {@link #nativeFeedFromRig}.
+     */
+    public static native int nativeRigOpen(long handle);
 
     /** Push bytes received from the radio into hamlib's read side. */
     public static native void nativeFeedFromRig(long handle, byte[] data);
