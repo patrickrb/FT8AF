@@ -86,6 +86,7 @@ jobs:
     outputs:
       release_tag: ${{ steps.tag.outputs.release_tag }}
       version_name: ${{ steps.tag.outputs.version_name }}
+      app_version: ${{ steps.tag.outputs.app_version }}
       should_release: ${{ steps.tag.outputs.should_release }}
       is_prerelease: ${{ steps.tag.outputs.is_prerelease }}
     steps:
@@ -106,6 +107,7 @@ jobs:
           if [[ "${GITHUB_REF}" == refs/tags/desktop-v* ]]; then
             echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
             echo "version_name=${GITHUB_REF_NAME#desktop-v}" >> "$GITHUB_OUTPUT"
+            echo "app_version=${GITHUB_REF_NAME#desktop-v}" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
           elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
@@ -123,6 +125,7 @@ jobs:
             echo "Latest tag: ${latest:-<none>} -> new tag: $new_tag"
             echo "release_tag=$new_tag" >> "$GITHUB_OUTPUT"
             echo "version_name=${new_tag#desktop-v}" >> "$GITHUB_OUTPUT"
+            echo "app_version=${new_tag#desktop-v}" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
           elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/staging" ]]; then
@@ -133,12 +136,19 @@ jobs:
             base_ver="${base_ver:-0.1.0}"
             echo "release_tag=$new_tag" >> "$GITHUB_OUTPUT"
             echo "version_name=${base_ver}-dev.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            # The bundled app version must be MSI-safe (numeric pre-release only),
+            # and must sort below the next release, so stamp <next patch>-<run>.
+            IFS='.' read -ra parts <<< "$base_ver"
+            last_idx=$((${#parts[@]} - 1))
+            parts[$last_idx]=$((parts[$last_idx] + 1))
+            echo "app_version=$(IFS=.; echo "${parts[*]}")-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
           else
             # dev push, PR, or other branch — compile-check only, no release.
             echo "release_tag=" >> "$GITHUB_OUTPUT"
             echo "version_name=" >> "$GITHUB_OUTPUT"
+            echo "app_version=" >> "$GITHUB_OUTPUT"
             echo "should_release=false" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
           fi
@@ -222,6 +232,14 @@ jobs:
         if: ${{ needs.version.outputs.should_release != 'true' }}
         working-directory: desktop
         run: npm run tauri build -- --no-bundle
+
+      # The manifests stay at a placeholder version in git; a release build gets
+      # the tag-derived version stamped into tauri.conf.json (bundle/installer
+      # version) and Cargo.toml (CARGO_PKG_VERSION in the WSJT-X heartbeat).
+      - name: Stamp release version
+        if: ${{ needs.version.outputs.should_release == 'true' }}
+        working-directory: desktop
+        run: node ci/stamp-version.mjs "${{ needs.version.outputs.app_version }}"
 
       # --- Release: build native bundles and upload to the per-platform release.
       # tauri.conf.json has bundle.active=false (keeps local dev builds bundle-
