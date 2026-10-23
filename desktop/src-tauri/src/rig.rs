@@ -6,12 +6,16 @@
 //!   * **Hamlib** — embedded via the dynamically-loaded shared library, with a
 //!     per-model backend for every supported radio. This is the superset that
 //!     replaced the old built-in serial CAT drivers.
+//!   * **Xiegu G106** — a focused direct CI-V backend for the DE-19 interface,
+//!     including its serial-line and CAT-PTT safety requirements.
 //!
 //! Both expose the same `RigTransport` interface; the engine doesn't care which.
 //! Everything here is desktop-only and never touches the Android tree.
 
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::ffi::CString;
+use std::io::Write;
 use std::os::raw::{c_char, c_int, c_long, c_void};
 use std::time::Duration;
 
@@ -24,6 +28,8 @@ pub enum RigBackend {
     Flrig,
     /// Hamlib, embedded via the dynamically-loaded shared library.
     Hamlib,
+    /// Direct Xiegu G106 CI-V over a DE-19 serial interface.
+    G106,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +117,19 @@ trait RigTransport: Send {
     /// backend name — resolved per-backend at connect time.
     fn name(&self) -> String;
     fn connected(&self) -> bool;
+    /// Some radios release CAT-keyed PTT unless the command is periodically
+    /// refreshed. Hardware RTS/DTR keying and most CAT implementations do not.
+    fn requires_ptt_keepalive(&self) -> bool {
+        false
+    }
+    /// Whether a failed PTT-off at connect time must reject the connection.
+    /// True only for direct serial backends where an open can itself key the
+    /// radio. FLrig and Hamlib keep connecting on a failed PTT-off: FLrig may
+    /// not be running yet (it recovers lazily), and Hamlib rigs without CAT PTT
+    /// (VOX, receivers) answer `rig_set_ptt` with an error on every call.
+    fn ptt_off_required_on_connect(&self) -> bool {
+        false
+    }
 }
 
 /// The engine's handle to whatever backend is configured.
@@ -124,11 +143,9 @@ impl RigConnection {
             RigBackend::None => Box::new(NullTransport),
             RigBackend::Flrig => Box::new(Flrig::connect(cfg)),
             RigBackend::Hamlib => Box::new(Hamlib::connect(cfg)?),
+            RigBackend::G106 => Box::new(G106::connect(cfg)?),
         };
-        let mut conn = RigConnection { inner };
-        let _ = conn.set_ptt(false);
-        let _ = conn.set_data_mode();
-        Ok(conn)
+        initialize_connection(inner)
     }
 
     pub fn set_frequency(&mut self, hz: u64) -> anyhow::Result<()> {
@@ -146,6 +163,25 @@ impl RigConnection {
     pub fn connected(&self) -> bool {
         self.inner.connected()
     }
+    pub fn requires_ptt_keepalive(&self) -> bool {
+        self.inner.requires_ptt_keepalive()
+    }
+}
+
+/// Put a newly-opened rig in a known receive state before exposing the
+/// connection to the engine. For backends that opt in
+/// ([`RigTransport::ptt_off_required_on_connect`]) a failure to send PTT-off is
+/// safety-critical and fails the connection rather than leave a possibly keyed
+/// radio marked as connected; other backends keep the previous best-effort
+/// behaviour. Mode selection remains best-effort for older rigs.
+fn initialize_connection(inner: Box<dyn RigTransport>) -> anyhow::Result<RigConnection> {
+    let mut conn = RigConnection { inner };
+    let ptt_off = conn.set_ptt(false);
+    if conn.inner.ptt_off_required_on_connect() {
+        ptt_off.context("failed to establish receive/PTT-off state")?;
+    }
+    let _ = conn.set_data_mode();
+    Ok(conn)
 }
 
 // --- null backend -----------------------------------------------------------
@@ -166,6 +202,137 @@ impl RigTransport for NullTransport {
     }
     fn connected(&self) -> bool {
         false
+    }
+}
+
+// ===========================================================================
+// Xiegu G106 direct CI-V backend
+// ===========================================================================
+
+const G106_CIV_ADDRESS: u8 = 0x70;
+const G106_BAUD: u32 = 19_200;
+
+/// Minimal abstraction used to test the safety-critical modem-line sequence
+/// without opening real radio hardware.
+trait ModemControlLines {
+    fn set_dtr(&mut self, level: bool) -> anyhow::Result<()>;
+    fn set_rts(&mut self, level: bool) -> anyhow::Result<()>;
+}
+
+impl<T: serialport::SerialPort + ?Sized> ModemControlLines for T {
+    fn set_dtr(&mut self, level: bool) -> anyhow::Result<()> {
+        Ok(self.write_data_terminal_ready(level)?)
+    }
+
+    fn set_rts(&mut self, level: bool) -> anyhow::Result<()> {
+        Ok(self.write_request_to_send(level)?)
+    }
+}
+
+/// Release both hardware PTT-capable control lines. The DE-19 can interpret an
+/// asserted DTR/RTS line as PTT even though FT8AF uses CAT PTT. Linux asserts
+/// DTR while opening a tty, so this must run before any CI-V command is sent.
+fn release_modem_ptt_lines<T: ModemControlLines + ?Sized>(port: &mut T) -> anyhow::Result<()> {
+    // Attempt both releases even if the first ioctl fails; either line may be
+    // wired as PTT by an interface.
+    let dtr_result = port.set_dtr(false);
+    let rts_result = port.set_rts(false);
+    dtr_result.context("failed to clear serial DTR/PTT")?;
+    rts_result.context("failed to clear serial RTS/PTT")?;
+    Ok(())
+}
+
+struct G106 {
+    port: Box<dyn serialport::SerialPort>,
+}
+
+impl G106 {
+    fn connect(cfg: &RigConfig) -> anyhow::Result<G106> {
+        // `dtr_on_open(false)` asks serialport to clear DTR before open()
+        // returns. Linux may still assert it very briefly in the kernel during
+        // open, so explicitly clear both DTR and RTS again immediately after.
+        let mut port = serialport::new(&cfg.port, G106_BAUD)
+            .timeout(Duration::from_millis(200))
+            .dtr_on_open(false)
+            .open()?;
+        release_modem_ptt_lines(port.as_mut())?;
+        Ok(G106 { port })
+    }
+
+    fn frame(body: &[u8]) -> Vec<u8> {
+        let mut frame = vec![0xFE, 0xFE, G106_CIV_ADDRESS, 0xE0];
+        frame.extend_from_slice(body);
+        frame.push(0xFD);
+        frame
+    }
+
+    fn frequency_bcd(hz: u64) -> [u8; 5] {
+        let mut digits = [0u8; 10];
+        let mut frequency = hz;
+        for digit in &mut digits {
+            *digit = (frequency % 10) as u8;
+            frequency /= 10;
+        }
+        let mut encoded = [0u8; 5];
+        for i in 0..5 {
+            encoded[i] = digits[2 * i] | (digits[2 * i + 1] << 4);
+        }
+        encoded
+    }
+
+    fn frequency_command(hz: u64) -> Vec<u8> {
+        let mut body = vec![0x05];
+        body.extend_from_slice(&Self::frequency_bcd(hz));
+        Self::frame(&body)
+    }
+
+    fn ptt_command(on: bool) -> Vec<u8> {
+        Self::frame(&[0x1C, 0x00, if on { 0x01 } else { 0x00 }])
+    }
+
+    fn send(&mut self, bytes: &[u8]) -> anyhow::Result<()> {
+        self.port.write_all(bytes)?;
+        self.port.flush()?;
+        Ok(())
+    }
+}
+
+impl RigTransport for G106 {
+    fn set_frequency(&mut self, hz: u64) -> anyhow::Result<()> {
+        self.send(&Self::frequency_command(hz))
+    }
+
+    fn set_data_mode(&mut self) -> anyhow::Result<()> {
+        // The G106 uses USB voice mode for FT8: mode 1, filter 1.
+        self.send(&Self::frame(&[0x06, 0x01, 0x01]))
+    }
+
+    fn set_ptt(&mut self, on: bool) -> anyhow::Result<()> {
+        self.send(&Self::ptt_command(on))
+    }
+
+    fn name(&self) -> String {
+        "Xiegu G106".into()
+    }
+
+    fn connected(&self) -> bool {
+        true
+    }
+
+    fn requires_ptt_keepalive(&self) -> bool {
+        true
+    }
+
+    fn ptt_off_required_on_connect(&self) -> bool {
+        true
+    }
+}
+
+impl Drop for G106 {
+    fn drop(&mut self) {
+        // Best effort: leave hardware PTT lines released even if the caller is
+        // unwinding after another CAT error.
+        let _ = release_modem_ptt_lines(self.port.as_mut());
     }
 }
 
@@ -506,6 +673,69 @@ impl Drop for Hamlib {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Default)]
+    struct RecordingLines {
+        changes: Vec<(&'static str, bool)>,
+        fail_dtr: bool,
+    }
+
+    impl ModemControlLines for RecordingLines {
+        fn set_dtr(&mut self, level: bool) -> anyhow::Result<()> {
+            self.changes.push(("dtr", level));
+            if self.fail_dtr {
+                anyhow::bail!("simulated DTR failure");
+            }
+            Ok(())
+        }
+
+        fn set_rts(&mut self, level: bool) -> anyhow::Result<()> {
+            self.changes.push(("rts", level));
+            Ok(())
+        }
+    }
+
+    struct RecordingTransport {
+        events: Arc<Mutex<Vec<&'static str>>>,
+        fail_ptt_off: bool,
+        strict_ptt_off: bool,
+    }
+
+    impl RigTransport for RecordingTransport {
+        fn set_frequency(&mut self, _hz: u64) -> anyhow::Result<()> {
+            self.events.lock().unwrap().push("frequency");
+            Ok(())
+        }
+
+        fn set_data_mode(&mut self) -> anyhow::Result<()> {
+            self.events.lock().unwrap().push("data-mode");
+            Ok(())
+        }
+
+        fn set_ptt(&mut self, on: bool) -> anyhow::Result<()> {
+            self.events
+                .lock()
+                .unwrap()
+                .push(if on { "ptt-on" } else { "ptt-off" });
+            if !on && self.fail_ptt_off {
+                anyhow::bail!("simulated PTT-off failure");
+            }
+            Ok(())
+        }
+
+        fn name(&self) -> String {
+            "test rig".into()
+        }
+
+        fn connected(&self) -> bool {
+            true
+        }
+
+        fn ptt_off_required_on_connect(&self) -> bool {
+            self.strict_ptt_off
+        }
+    }
 
     /// A fresh install must default to manual tuning ("None"), not a backend
     /// that immediately tries to load a shared library that may be absent.
@@ -517,19 +747,110 @@ mod tests {
     }
 
     /// The removed serial backend is no longer a valid selector value; only
-    /// none / flrig / hamlib deserialize.
+    /// none / flrig / hamlib / g106 deserialize.
     #[test]
     fn backend_serde_roundtrip() {
         for (json, backend) in [
             ("\"none\"", RigBackend::None),
             ("\"flrig\"", RigBackend::Flrig),
             ("\"hamlib\"", RigBackend::Hamlib),
+            ("\"g106\"", RigBackend::G106),
         ] {
             let b: RigBackend = serde_json::from_str(json).unwrap();
             assert_eq!(b, backend);
             assert_eq!(serde_json::to_string(&b).unwrap(), json);
         }
         assert!(serde_json::from_str::<RigBackend>("\"serial\"").is_err());
+    }
+
+    #[test]
+    fn g106_commands_use_address_70_and_correct_ptt_polarity() {
+        assert_eq!(
+            G106::frequency_command(14_074_000),
+            vec![0xFE, 0xFE, 0x70, 0xE0, 0x05, 0x00, 0x40, 0x07, 0x14, 0x00, 0xFD]
+        );
+        assert_eq!(
+            G106::ptt_command(true),
+            vec![0xFE, 0xFE, 0x70, 0xE0, 0x1C, 0x00, 0x01, 0xFD]
+        );
+        assert_eq!(
+            G106::ptt_command(false),
+            vec![0xFE, 0xFE, 0x70, 0xE0, 0x1C, 0x00, 0x00, 0xFD]
+        );
+    }
+
+    #[test]
+    fn g106_connect_releases_dtr_and_rts_before_cat_initialization() {
+        let mut lines = RecordingLines::default();
+        release_modem_ptt_lines(&mut lines).unwrap();
+        assert_eq!(lines.changes, vec![("dtr", false), ("rts", false)]);
+    }
+
+    #[test]
+    fn g106_connect_attempts_both_releases_if_dtr_clear_fails() {
+        let mut lines = RecordingLines {
+            fail_dtr: true,
+            ..Default::default()
+        };
+        assert!(release_modem_ptt_lines(&mut lines).is_err());
+        assert_eq!(lines.changes, vec![("dtr", false), ("rts", false)]);
+    }
+
+    #[test]
+    fn connection_establishes_ptt_off_before_setting_mode() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let transport = RecordingTransport {
+            events: events.clone(),
+            fail_ptt_off: false,
+            strict_ptt_off: true,
+        };
+
+        let _connection = initialize_connection(Box::new(transport)).unwrap();
+        assert_eq!(*events.lock().unwrap(), vec!["ptt-off", "data-mode"]);
+    }
+
+    #[test]
+    fn connection_fails_closed_when_ptt_off_cannot_be_sent() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let transport = RecordingTransport {
+            events: events.clone(),
+            fail_ptt_off: true,
+            strict_ptt_off: true,
+        };
+
+        let error = initialize_connection(Box::new(transport))
+            .err()
+            .expect("PTT-off failure must reject the connection");
+        assert!(error
+            .to_string()
+            .contains("failed to establish receive/PTT-off state"));
+        assert_eq!(*events.lock().unwrap(), vec!["ptt-off"]);
+    }
+
+    /// FLrig (not running yet) and Hamlib rigs without CAT PTT fail PTT-off on
+    /// every call; they must still connect, as they did before G106 support.
+    #[test]
+    fn non_strict_backends_still_connect_when_ptt_off_fails() {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let transport = RecordingTransport {
+            events: events.clone(),
+            fail_ptt_off: true,
+            strict_ptt_off: false,
+        };
+
+        assert!(initialize_connection(Box::new(transport)).is_ok());
+        assert_eq!(*events.lock().unwrap(), vec!["ptt-off", "data-mode"]);
+    }
+
+    #[test]
+    fn flrig_and_null_backends_do_not_require_ptt_off_on_connect() {
+        assert!(!NullTransport.ptt_off_required_on_connect());
+        let flrig = Flrig {
+            url: "http://127.0.0.1:1/".into(),
+            connected: false,
+            radio: "FLrig".into(),
+        };
+        assert!(!flrig.ptt_off_required_on_connect());
     }
 
     /// A config persisted by an older build (with the now-removed serial fields

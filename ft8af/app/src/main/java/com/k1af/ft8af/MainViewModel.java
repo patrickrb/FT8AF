@@ -119,6 +119,7 @@ import com.k1af.ft8af.rigs.TrUSDXRig;
 import com.k1af.ft8af.rigs.Wolf_sdr_450Rig;
 import com.k1af.ft8af.rigs.XieGu6100NetRig;
 import com.k1af.ft8af.rigs.XieGu6100Rig;
+import com.k1af.ft8af.rigs.XieGuG106Rig;
 import com.k1af.ft8af.rigs.XieGuRig;
 import com.k1af.ft8af.rigs.Yaesu2Rig;
 import com.k1af.ft8af.rigs.Yaesu2_847Rig;
@@ -2395,6 +2396,9 @@ public class MainViewModel extends ViewModel {
                 break;
             case InstructionSet.XIEGUG90S://XieGu, USB mode
                 baseRig = new XieGuRig(GeneralVariables.civAddress);//XieGu G90S
+                break;
+            case InstructionSet.XIEGU_G106:
+                baseRig = new XieGuG106Rig(GeneralVariables.civAddress);
                 break;
             case InstructionSet.ELECRAFT:
                 baseRig = new ElecraftRig();//ELECRAFT

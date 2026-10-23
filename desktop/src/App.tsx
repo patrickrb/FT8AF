@@ -31,6 +31,7 @@ import {
 } from "./logbook";
 import { applySelection, configToSelection, rigName, rigOptions } from "./rig";
 import { debounce } from "./debounce";
+import { audioDeviceLabel } from "./audioDevice";
 
 type Tab = "decode" | "log" | "settings";
 type Filter = "all" | "cq" | "tome";
@@ -72,9 +73,7 @@ function drawWaterfallRow(bins: number[], boundary = false) {
     img.data[i * 4 + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
-  // 15 s cycle grid line, on the same rx-corrected clock as decode DT: a faint
-  // overlay so the waterfall's timing reads against the cycle (and the DT)
-  // rather than appearing to run ahead of it.
+  // 15 s UTC cycle grid line on the same fixed clock as the decoder.
   if (boundary) {
     ctx.fillStyle = "rgba(255,255,255,0.35)";
     ctx.fillRect(0, 0, cols, 1);
@@ -1087,7 +1086,9 @@ function SettingsScreen(props: {
   // after launch — or a Hamlib radio picked before its serial port was chosen —
   // showed an empty/stale list. Selecting a serial-connected Hamlib radio now
   // re-scans, so /dev/ttyACM0 (a QMX/QDX) appears without a workaround.
-  const showsPortList = rigCfg.backend === "hamlib" && !rigCfg.hamlib_network;
+  const showsPortList =
+    rigCfg.backend === "g106" ||
+    (rigCfg.backend === "hamlib" && !rigCfg.hamlib_network);
   useEffect(() => {
     if (showsPortList) refreshPorts();
   }, [showsPortList]);
@@ -1196,12 +1197,11 @@ function SettingsScreen(props: {
             </div>
           </div>
           <div className="field">
-            <label>DT auto-calibration (audio latency)</label>
+            <label>Receive timing</label>
             <div>
-              {clock ? `${fmtOffset(clock.rx_offset_ms)} (${clock.rx_offset_ms} ms)` : "—"}
+              {clock ? "Fixed to UTC slots (auto-calibration disabled)" : "—"}
               <span className="muted" style={{ display: "block", marginTop: 4 }}>
-                Auto-tuned from decoded DT to keep the RX window aligned with your
-                soundcard/SDR latency. Self-corrects over a few cycles.
+                Decoded DT is informational and cannot move later capture windows.
               </span>
             </div>
           </div>
@@ -1232,7 +1232,7 @@ function SettingsScreen(props: {
               <option value="">System default</option>
               {inputs.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.name} {d.is_default ? "(default)" : ""}
+                  {audioDeviceLabel(d)} {d.is_default ? "(default)" : ""}
                 </option>
               ))}
             </select>
@@ -1250,7 +1250,7 @@ function SettingsScreen(props: {
               <option value="">System default</option>
               {outputs.map((d) => (
                 <option key={d.id} value={d.id}>
-                  {d.name} {d.is_default ? "(default)" : ""}
+                  {audioDeviceLabel(d)} {d.is_default ? "(default)" : ""}
                 </option>
               ))}
             </select>
@@ -1307,13 +1307,43 @@ function SettingsScreen(props: {
             </select>
             {hamlibRigs.length === 0 && (
               <span className="muted" style={{ display: "block", marginTop: 4 }}>
-                Only None and FLrig are listed — the Hamlib library didn't load, so
+                The built-in choices remain available, but Hamlib radios are not listed —
+                the Hamlib library didn't load, so
                 no radios could be enumerated. Install Hamlib and put{" "}
                 <code>hamlib-4.dll</code> / <code>libhamlib</code> next to the app or
                 on PATH, then reopen.
               </span>
             )}
           </div>
+
+          {rigCfg.backend === "g106" && (
+            <div className="row">
+              <div className="field">
+                <label>DE-19 serial port</label>
+                <div className="row">
+                  <select
+                    id="rig-serial-port-select"
+                    value={rigCfg.port}
+                    onChange={(e) => setRigCfg({ ...rigCfg, port: e.target.value })}
+                  >
+                    <option value="">(select port)</option>
+                    {ports.map((p) => (
+                      <option key={p.name} value={p.name}>
+                        {p.name} ({p.kind})
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" title="Re-scan serial ports" onClick={refreshPorts}>
+                    ↻
+                  </button>
+                </div>
+              </div>
+              <div className="field">
+                <label>Baud</label>
+                <input value="19200" readOnly style={{ width: 80 }} />
+              </div>
+            </div>
+          )}
 
           {rigCfg.backend === "hamlib" && (
             <>
@@ -1410,6 +1440,8 @@ function SettingsScreen(props: {
               const detail =
                 rigCfg.backend === "flrig"
                   ? ` (${rigCfg.flrig_host}:${rigCfg.flrig_port})`
+                  : rigCfg.backend === "g106"
+                  ? ` (${rigCfg.port || "no port"} at 19200 baud)`
                   : rigCfg.backend === "hamlib"
                   ? ` (${rigCfg.hamlib_network ? rigCfg.hamlib_address : rigCfg.port || "no port"})`
                   : "";

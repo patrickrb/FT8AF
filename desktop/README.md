@@ -6,8 +6,8 @@ exact pure-C FT8 DSP core from the Android app (`ft8af/app/src/main/cpp`,
 kgoba `ft8_lib` @ `6f528128`) — compiled from source, no JNI.
 
 MVP scope: receive/decode FT8, transmit + auto-QSO sequencing, logbook with ADIF
-export, rig control (**Hamlib** embedded library, **FLrig** XML-RPC, or direct
-serial CAT — Yaesu / Kenwood / Icom CI-V), audio device selection, and a
+export, rig control (**Hamlib** embedded library, **FLrig** XML-RPC, or a
+safety-hardened direct Xiegu G106 CI-V profile), audio device selection, and a
 waterfall. Deferred: map, POTA, QRZ photos, Bluetooth, PSKReporter upload.
 
 ## Layout
@@ -24,7 +24,7 @@ desktop/
       audio/        cpal capture/playback, 12 kHz resample, slot buffer
       engine.rs     the runtime: 15 s UTC cycle, decode, QSO, TX/PTT, events
       qso.rs        FT8 QSO auto-sequence state machine (pure, unit-tested)
-      rig.rs        rig control backends: Hamlib (dyn-loaded), FLrig XML-RPC, serial CAT
+      rig.rs        rig control backends: Hamlib, FLrig XML-RPC, direct G106 CI-V
       db.rs         SQLite (rusqlite) qso_log + config + ADIF export
       bands.rs      FT8 band plan
       main.rs       Tauri commands + event forwarding
@@ -34,6 +34,16 @@ desktop/
 
 - **Rust** (stable, MSVC toolchain on Windows): `winget install Rustlang.Rustup`
 - **Node.js 18+** and npm
+- **Debian / Ubuntu / Linux Mint:** install Tauri's native WebKit/GTK build
+  dependencies plus the ALSA and udev headers used by audio and serial support:
+
+  ```bash
+  sudo apt update
+  sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
+    libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+    libasound2-dev libudev-dev
+  ```
+
 - **Windows only:** the C core uses C99 VLAs that MSVC's `cl.exe` rejects, so the
   build compiles the C with **clang-cl**. Install LLVM: `winget install LLVM.LLVM`
   (build.rs auto-detects `C:\Program Files\LLVM\bin\clang-cl.exe`, or set
@@ -95,6 +105,24 @@ isn't found the rig list is empty and you get a clean message rather than a cras
 
 > If you later enable Tauri bundling (`bundle.active`), add `hamlib/<arch>/*.dll`
 > to the bundle `resources` so they ship in the installer too.
+
+### Xiegu G106 / G106C
+
+For a direct connection, choose **Xiegu G106 (direct CI-V)** in the Rig list. The
+profile selects 19,200 baud and CI-V address `0x70`. CAT PTT is refreshed once
+per second during transmit because the G106 otherwise releases CAT-keyed PTT
+after roughly two seconds. On every serial connect and disconnect FT8AF clears
+both DTR and RTS before issuing CAT commands; this prevents the DE-19 from
+interpreting Linux's default asserted DTR state as PTT. RTS or DTR PTT does not
+use the keepalive. Select the DE-19 (or other interface) capture and playback
+devices separately for FT8 audio; the serial CAT cable does not carry audio.
+
+### Receive timing
+
+Desktop 0.1.2 keeps receive capture windows fixed to the NTP-synchronized UTC
+15-second slots. It ignores and clears the legacy `rx_offset_ms` setting used by
+0.1.1. Decoded DT remains visible as diagnostic information, but one decode can
+no longer shift later windows and cut off the leading FT8 sync block.
 
 ## Build / test
 

@@ -114,6 +114,7 @@ public class RigAddressAssetTest {
         "(tr)uSDX (TS-480)",
         "Yaesu FT-891 (Hamlib)",
         "ICOM IC-7300MK2",
+        "XIEGU G106(USB)",
     };
 
     private RigNameList load() {
@@ -158,11 +159,13 @@ public class RigAddressAssetTest {
     }
 
     @Test
-    public void ic7300mk2_isTheLastEntry() {
-        // New rigs are append-only (class javadoc); MK2 closed the list.
+    public void lastEntry_isTheLastGoldenName() {
+        // New rigs are append-only (class javadoc): the loaded list must end
+        // with the newest GOLDEN_ORDER entry. Pinned to the array rather than a
+        // model name so appending a rig doesn't mean rewriting this test.
         RigNameList list = load();
         assertThat(list.rigList.get(list.rigList.size() - 1).modelName)
-                .isEqualTo("ICOM IC-7300MK2");
+                .isEqualTo(GOLDEN_ORDER[GOLDEN_ORDER.length - 1]);
     }
 
     @Test

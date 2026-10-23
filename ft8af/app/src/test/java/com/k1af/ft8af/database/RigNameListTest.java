@@ -2,6 +2,8 @@ package com.k1af.ft8af.database;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.k1af.ft8af.rigs.InstructionSet;
+
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
@@ -29,6 +31,15 @@ public class RigNameListTest {
         assertThat(r.address).isEqualTo(0xA4);   // 164
         assertThat(r.bauRate).isEqualTo(19200);
         assertThat(r.instructionSet).isEqualTo(0);
+    }
+
+    @Test
+    public void rigNameStringConstructor_parsesG106Profile() {
+        RigNameList.RigName r = new RigNameList.RigName("XIEGU G106(USB),70,19200,28");
+        assertThat(r.modelName).isEqualTo("XIEGU G106(USB)");
+        assertThat(r.address).isEqualTo(0x70);
+        assertThat(r.bauRate).isEqualTo(19200);
+        assertThat(r.instructionSet).isEqualTo(InstructionSet.XIEGU_G106);
     }
 
     @Test

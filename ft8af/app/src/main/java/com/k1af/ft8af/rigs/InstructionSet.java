@@ -29,6 +29,7 @@ public class InstructionSet {
     public static final int YAESU_FT710=23;//FT-710, currently reuses DX10 instruction set; CAT read loop must stay off
     public static final int DISCOVERY_TX500=24;//Lab599 Discovery TX-500, TS-2000 compatible, DATA mode (MD6;)
     public static final int KENWOOD_TS440=25;//KENWOOD TS-440S, original Kenwood CAT, TS-570 compatible (TX;/RX; PTT)
+    public static final int XIEGU_G106=28;//Xiegu G106/G106C, CI-V with CAT PTT keepalive (26 is HAMLIB below; 27 is claimed by the open QMX PR #946)
 
     // Hamlib backend: CAT protocol supplied by libhamlib (see HamlibRig). The
     // rig table's address column carries the hamlib model number (in hex, since
