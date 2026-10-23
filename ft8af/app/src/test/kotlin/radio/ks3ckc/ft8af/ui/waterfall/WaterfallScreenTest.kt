@@ -75,6 +75,30 @@ class WaterfallScreenTest {
             .isEqualTo(1200f)
     }
 
+    // -- waterfallHeaderFreqText ----------------------------------------------
+
+    @Test
+    fun waterfallHeaderFreqText_clearedCursor_showsObservedBaseFrequency() {
+        // The label must reflect the observed offset after a programmatic move
+        // (e.g. following an answered station), not a stale 1000 Hz (#947).
+        assertThat(waterfallHeaderFreqText(touchedFreqHz = -1, baseFreqHz = 1537f))
+            .isEqualTo("1537 Hz")
+    }
+
+    @Test
+    fun waterfallHeaderFreqText_activeCursor_showsTouchedFrequency() {
+        assertThat(waterfallHeaderFreqText(touchedFreqHz = 1450, baseFreqHz = 1200f))
+            .isEqualTo("1450 Hz")
+    }
+
+    @Test
+    fun waterfallHeaderFreqText_roundsFractionalOffsetToWholeHz() {
+        // Decoded stations report fractional freq_hz, which setTransmit copies
+        // into the base frequency in TX=RX mode.
+        assertThat(waterfallHeaderFreqText(touchedFreqHz = -1, baseFreqHz = 1536.6f))
+            .isEqualTo("1537 Hz")
+    }
+
     // -- dispatchSpectrumTouch ------------------------------------------------
 
     @Test
