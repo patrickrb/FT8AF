@@ -35,5 +35,10 @@ public class InstructionSet {
     // that column is parsed base-16), e.g. FT-891 = 1036 = 0x40C.
     public static final int HAMLIB=26;
 
+    // QRP Labs QMX in its Kenwood TS-480/590 CAT emulation: same commands as
+    // KENWOOD_TS590, but the rig is put in its digital mode (MD6;) rather than
+    // MD2;, which on SSB-capable QMX firmware selects USB voice. Issue #945.
+    public static final int QRPLABS_QMX=27;
+
 
 }
