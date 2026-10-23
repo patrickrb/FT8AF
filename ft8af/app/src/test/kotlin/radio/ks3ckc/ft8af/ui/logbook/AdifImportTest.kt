@@ -12,44 +12,69 @@ class AdifImportTest {
     @Test
     fun tallyCountsNewInsertAsAdded() {
         val tally = AdifImportTally()
-        tally.doAfterInsert(false, true)
+        tally.doAfterInsert(false, true, false)
         assertThat(tally.added).isEqualTo(1)
         assertThat(tally.updated).isEqualTo(0)
         assertThat(tally.invalid).isEqualTo(0)
+        assertThat(tally.warnings).isEqualTo(0)
     }
 
     @Test
     fun tallyCountsExistingMatchAsUpdated() {
         val tally = AdifImportTally()
-        tally.doAfterInsert(false, false)
+        tally.doAfterInsert(false, false, false)
         assertThat(tally.added).isEqualTo(0)
         assertThat(tally.updated).isEqualTo(1)
         assertThat(tally.invalid).isEqualTo(0)
+        assertThat(tally.warnings).isEqualTo(0)
     }
 
     @Test
     fun tallyInvalidWinsOverNewFlag() {
         // DatabaseOpr reports an invalid record (no callsign) as
-        // doAfterInsert(true, true) — the invalid flag must win so a rejected
+        // doAfterInsert(true, true, false) — the invalid flag must win so a rejected
         // record is never also counted as added.
         val tally = AdifImportTally()
-        tally.doAfterInsert(true, true)
+        tally.doAfterInsert(true, true, false)
         assertThat(tally.added).isEqualTo(0)
         assertThat(tally.updated).isEqualTo(0)
         assertThat(tally.invalid).isEqualTo(1)
+        assertThat(tally.warnings).isEqualTo(0)
+    }
+
+    @Test
+    fun tallyWarningIsCountedAlongsideAdded_notInsteadOf() {
+        // A record WAS written (new insert) but had one field (e.g. an unparseable
+        // RST) dropped to a fallback value -- must still count as added, AND as a
+        // warning, never as invalid (which means "not written at all").
+        val tally = AdifImportTally()
+        tally.doAfterInsert(false, true, true)
+        assertThat(tally.added).isEqualTo(1)
+        assertThat(tally.invalid).isEqualTo(0)
+        assertThat(tally.warnings).isEqualTo(1)
+    }
+
+    @Test
+    fun tallyWarningIsCountedAlongsideUpdated_notInsteadOf() {
+        val tally = AdifImportTally()
+        tally.doAfterInsert(false, false, true)
+        assertThat(tally.updated).isEqualTo(1)
+        assertThat(tally.invalid).isEqualTo(0)
+        assertThat(tally.warnings).isEqualTo(1)
     }
 
     @Test
     fun tallyAccumulatesMixedSequence() {
         val tally = AdifImportTally()
-        tally.doAfterInsert(false, true)   // added
-        tally.doAfterInsert(false, true)   // added
-        tally.doAfterInsert(false, false)  // updated
-        tally.doAfterInsert(true, true)    // invalid
-        tally.doAfterInsert(false, false)  // updated
+        tally.doAfterInsert(false, true, false)   // added
+        tally.doAfterInsert(false, true, true)    // added, with warning
+        tally.doAfterInsert(false, false, false)  // updated
+        tally.doAfterInsert(true, true, false)    // invalid
+        tally.doAfterInsert(false, false, false)  // updated
         assertThat(tally.added).isEqualTo(2)
         assertThat(tally.updated).isEqualTo(2)
         assertThat(tally.invalid).isEqualTo(1)
+        assertThat(tally.warnings).isEqualTo(1)
     }
 
     @Test
@@ -64,9 +89,9 @@ class AdifImportTest {
     @Test
     fun finishedStateCarriesTallyCounts() {
         val tally = AdifImportTally()
-        tally.doAfterInsert(false, true)
-        tally.doAfterInsert(false, false)
-        tally.doAfterInsert(true, true)
+        tally.doAfterInsert(false, true, false)
+        tally.doAfterInsert(false, false, true)
+        tally.doAfterInsert(true, true, false)
         val state = finishedImportState(3, tally)
         assertThat(state.inProgress).isFalse()
         assertThat(state.finished).isTrue()
@@ -75,6 +100,7 @@ class AdifImportTest {
         assertThat(state.added).isEqualTo(1)
         assertThat(state.updated).isEqualTo(1)
         assertThat(state.invalid).isEqualTo(1)
+        assertThat(state.warnings).isEqualTo(1)
         assertThat(state.failedMessage).isNull()
     }
 
@@ -106,13 +132,13 @@ class AdifImportTest {
     fun importChangedLogOnlyWhenRecordsLanded() {
         val tally = AdifImportTally()
         assertThat(importChangedLog(finishedImportState(0, tally))).isFalse()
-        tally.doAfterInsert(true, true) // invalid only — nothing to refresh
+        tally.doAfterInsert(true, true, false) // invalid only — nothing to refresh
         assertThat(importChangedLog(finishedImportState(1, tally))).isFalse()
-        tally.doAfterInsert(false, false) // an update lands
+        tally.doAfterInsert(false, false, false) // an update lands
         assertThat(importChangedLog(finishedImportState(2, tally))).isTrue()
 
         val addedOnly = AdifImportTally()
-        addedOnly.doAfterInsert(false, true)
+        addedOnly.doAfterInsert(false, true, false)
         assertThat(importChangedLog(finishedImportState(1, addedOnly))).isTrue()
     }
 }

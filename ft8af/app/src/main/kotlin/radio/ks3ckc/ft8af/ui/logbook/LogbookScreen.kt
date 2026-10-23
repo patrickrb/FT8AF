@@ -2618,6 +2618,18 @@ private fun AdifImportDialog(
                         color = TextMuted,
                         fontSize = 12.sp,
                     )
+                    // Only shown when non-zero: records that WERE added/updated above but
+                    // had one field (e.g. an unparseable RST) dropped to a fallback value --
+                    // distinct from "invalid" (not written at all), so this doesn't double
+                    // count against added/updated.
+                    if (state.warnings > 0) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.log_import_warnings, state.warnings),
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                        )
+                    }
                 }
             }
 
