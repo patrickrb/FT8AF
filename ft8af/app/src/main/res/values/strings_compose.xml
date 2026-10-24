@@ -216,7 +216,7 @@
 
     <!-- ===== Decode screen ===== -->
     <string name="decode_title">Decode</string>
-    <string name="decode_subtitle">"%1$s  •  %2$d decoded this cycle"</string>
+    <string name="decode_subtitle">"%1$s  •  %2$d decoded"</string>
     <string name="decode_clear_list">Clear decode list</string>
     <string name="decode_utc_placeholder">UTC : --:--:--</string>
     <string name="decode_time_group_utc">%1$s UTC</string>

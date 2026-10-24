@@ -44,6 +44,7 @@ import com.k1af.ft8af.ModeProfile
 import com.k1af.ft8af.timer.UtcTimer
 import com.k1af.ft8af.ui.WaterfallTimestampGate
 import radio.ks3ckc.ft8af.theme.*
+import radio.ks3ckc.ft8af.ui.components.ClickableTopBarTitle
 import radio.ks3ckc.ft8af.ui.components.EmptyStateWaves
 import radio.ks3ckc.ft8af.ui.components.FilterChips
 import radio.ks3ckc.ft8af.ui.components.TopBar
@@ -58,6 +59,8 @@ import radio.ks3ckc.ft8af.ui.components.TopBarSubtitle
 @Composable
 fun DecodeScreen(
     mainViewModel: MainViewModel,
+    bandModeLabel: String,
+    onOpenBandMode: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Observe LiveData
@@ -247,6 +250,9 @@ fun DecodeScreen(
             // Top bar
             TopBar(
                 title = stringResource(R.string.decode_title),
+                titleContent = {
+                    ClickableTopBarTitle(text = bandModeLabel, onClick = onOpenBandMode)
+                },
                 subtitle = {
                     TopBarSubtitle(
                         text = stringResource(R.string.decode_subtitle, utcString, decodedCount),
