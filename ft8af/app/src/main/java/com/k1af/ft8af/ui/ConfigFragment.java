@@ -45,6 +45,7 @@ import com.k1af.ft8af.database.ControlMode;
 import com.k1af.ft8af.database.OperationBand;
 import com.k1af.ft8af.database.RigNameList;
 import com.k1af.ft8af.databinding.FragmentConfigBinding;
+import com.k1af.ft8af.ft8listener.DecodeDepth;
 import com.k1af.ft8af.ft8signal.FT8Package;
 import com.k1af.ft8af.log.ThirdPartyService;
 import com.k1af.ft8af.maidenhead.MaidenheadGrid;
@@ -1329,19 +1330,27 @@ public class ConfigFragment extends Fragment {
 
     private void setDecodeMode() {
         binding.decodeModeRadioGroup.clearCheck();
-        binding.fastDecodeRadioButton.setChecked(!GeneralVariables.deepDecodeMode);
-        binding.deepDecodeRadioButton.setChecked(GeneralVariables.deepDecodeMode);
+        binding.fastDecodeRadioButton.setChecked(GeneralVariables.decodeDepth == DecodeDepth.FAST);
+        binding.balancedDecodeRadioButton.setChecked(GeneralVariables.decodeDepth == DecodeDepth.BALANCED);
+        binding.deepDecodeRadioButton.setChecked(GeneralVariables.decodeDepth == DecodeDepth.DEEP);
 
         View.OnClickListener listener = new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 int buttonId = binding.decodeModeRadioGroup.getCheckedRadioButtonId();
-                GeneralVariables.deepDecodeMode= buttonId ==binding.deepDecodeRadioButton.getId();
-                writeConfig("deepMode", GeneralVariables.deepDecodeMode? "1" : "0");
+                if (buttonId == binding.fastDecodeRadioButton.getId()) {
+                    GeneralVariables.decodeDepth = DecodeDepth.FAST;
+                } else if (buttonId == binding.balancedDecodeRadioButton.getId()) {
+                    GeneralVariables.decodeDepth = DecodeDepth.BALANCED;
+                } else {
+                    GeneralVariables.decodeDepth = DecodeDepth.DEEP;
+                }
+                writeConfig("decodeDepth", String.valueOf(GeneralVariables.decodeDepth));
             }
         };
 
         binding.fastDecodeRadioButton.setOnClickListener(listener);
+        binding.balancedDecodeRadioButton.setOnClickListener(listener);
         binding.deepDecodeRadioButton.setOnClickListener(listener);
 
     }

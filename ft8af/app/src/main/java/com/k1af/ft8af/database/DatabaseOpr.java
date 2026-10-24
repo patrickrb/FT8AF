@@ -30,6 +30,7 @@ import com.k1af.ft8af.R;
 import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.callsign.CallsignInfo;
 import com.k1af.ft8af.connector.ConnectMode;
+import com.k1af.ft8af.ft8listener.DecodeDepth;
 import com.k1af.ft8af.ft8signal.FT8Package;
 import com.k1af.ft8af.log.AdifFormat;
 import com.k1af.ft8af.log.AdifRecord;
@@ -3139,8 +3140,21 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                 if (name.equalsIgnoreCase("usbAudioOutputPid")) {
                     GeneralVariables.usbAudioOutputProductId = parseConfigInt(result, 0);
                 }
-                if (name.equalsIgnoreCase("deepMode")) {//Deep decode mode
-                    GeneralVariables.deepDecodeMode = "1".equals(result);
+                if (name.equalsIgnoreCase("deepMode")) {
+                    // Legacy fast/deep boolean, superseded by "decodeDepth" (3-way:
+                    // FAST/BALANCED/DEEP). Only applied as a migration for an install
+                    // that predates decodeDepth and has never had its own row written —
+                    // getConfigByKey is a direct, order-independent DB check (empty
+                    // string means no row), so this is correct regardless of which of
+                    // the two rows this hydration pass happens to visit first.
+                    if (getConfigByKey("decodeDepth").isEmpty()) {
+                        GeneralVariables.decodeDepth =
+                                "1".equals(result) ? DecodeDepth.DEEP : DecodeDepth.FAST;
+                    }
+                }
+                if (name.equalsIgnoreCase("decodeDepth")) {
+                    GeneralVariables.decodeDepth =
+                            DecodeDepth.clamp(parseConfigInt(result, DecodeDepth.DEEP));
                 }
                 if (name.equalsIgnoreCase("keepScreenOn")) {//Hold the screen awake in foreground
                     // "1".equals(result), not result.equals("1"): a null config value

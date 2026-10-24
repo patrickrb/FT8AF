@@ -37,6 +37,7 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import com.k1af.ft8af.database.OnAfterQueryConfig
+import com.k1af.ft8af.ft8listener.DecodeDepth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -165,7 +166,7 @@ fun AdvancedSettings(
     // Power & heat knobs. Seeded from GeneralVariables, which config hydration
     // has already populated by the time settings can be opened.
     var keepScreenOn by remember { mutableStateOf(GeneralVariables.keepScreenOn) }
-    var deepDecode by remember { mutableStateOf(GeneralVariables.deepDecodeMode) }
+    var decodeDepth by remember { mutableIntStateOf(DecodeDepth.clamp(GeneralVariables.decodeDepth)) }
 
     // Opt-in crash reporting (Sentry). Only surfaced when a DSN was compiled in.
     var crashReportingEnabled by remember { mutableStateOf(CrashReporting.isOptedIn(context)) }
@@ -597,17 +598,22 @@ fun AdvancedSettings(
                         },
                     )
                     SectionDivider()
-                    SettingsRow(
+                    SegmentedSelectRow(
                         label = stringResource(R.string.settings_deep_decode),
                         description = stringResource(R.string.settings_deep_decode_desc),
-                        toggle = deepDecode,
-                        onToggleChange = { on ->
-                            deepDecode = on
-                            GeneralVariables.deepDecodeMode = on
-                            // Same "deepMode" key the retired legacy fragment wrote,
-                            // so an existing preference carries over unchanged.
+                        optionLabels = listOf(
+                            DecodeDepth.FAST to stringResource(R.string.fast_mode),
+                            DecodeDepth.BALANCED to stringResource(R.string.balanced_mode),
+                            DecodeDepth.DEEP to stringResource(R.string.deep_mode),
+                        ),
+                        selected = decodeDepth,
+                        enabled = true,
+                        disabledNote = "",
+                        onSelect = { value ->
+                            decodeDepth = value
+                            GeneralVariables.decodeDepth = value
                             mainViewModel.databaseOpr.writeConfig(
-                                "deepMode", if (on) "1" else "0", null,
+                                "decodeDepth", value.toString(), null,
                             )
                         },
                     )

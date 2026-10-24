@@ -21,6 +21,7 @@ import com.k1af.ft8af.connector.ConnectMode;
 import com.k1af.ft8af.database.AfterInsertQSLData;
 import com.k1af.ft8af.database.ControlMode;
 import com.k1af.ft8af.database.RigNameList;
+import com.k1af.ft8af.ft8listener.DecodeDepth;
 import com.k1af.ft8af.log.LogFileImport;
 import com.k1af.ft8af.log.QSLRecord;
 import com.k1af.ft8af.maidenhead.MaidenheadGrid;
@@ -714,6 +715,23 @@ public class LogHttpServer extends NanoHTTPD {
     }
 
     /**
+     * String-resource id for the given decode depth's display label, for the
+     * debug page's "Decode mode" row.
+     *
+     * <p>Package-visible for testing.
+     */
+    static int decodeDepthLabel(int decodeDepth) {
+        switch (decodeDepth) {
+            case DecodeDepth.FAST:
+                return R.string.fast_mode;
+            case DecodeDepth.BALANCED:
+                return R.string.balanced_mode;
+            default:
+                return R.string.deep_mode;
+        }
+    }
+
+    /**
      * Show debug information
      *
      * @return html
@@ -771,9 +789,7 @@ public class LogHttpServer extends NanoHTTPD {
 
         HtmlContext.tableKeyRow(result, false
                 , GeneralVariables.getStringFromResource(R.string.decode_mode_text)
-                , GeneralVariables.deepDecodeMode
-                        ? GeneralVariables.getStringFromResource(R.string.deep_mode)
-                        : GeneralVariables.getStringFromResource(R.string.fast_mode));
+                , GeneralVariables.getStringFromResource(decodeDepthLabel(GeneralVariables.decodeDepth)));
 
 
         HtmlContext.tableKeyRow(result, true

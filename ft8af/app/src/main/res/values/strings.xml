@@ -490,6 +490,7 @@
     <string name="html_comment">Comment</string>
     <string name="decode_mode_text">Decode mode</string>
     <string name="fast_mode">Fast decode</string>
+    <string name="balanced_mode">Balanced decode</string>
     <string name="deep_mode">Deep decode</string>
     <string name="export_null">Export from WebUI via web browser on another device under the same LAN \n Please connect to a valid Wi-Fi</string>
     <string name="null_task_html">Task not exist!</string>

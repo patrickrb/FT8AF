@@ -701,7 +701,7 @@ fun RadioAudioSettings(
                             micSource = mainViewModel.hamRecorder?.isMicSource() ?: true,
                             maxChannels = audioInputChannels,
                         )
-                        AudioChannelSelectRow(
+                        SegmentedSelectRow(
                             label = stringResource(R.string.settings_rx_channel),
                             description = stringResource(R.string.settings_rx_channel_desc),
                             optionLabels = listOf(
@@ -748,7 +748,7 @@ fun RadioAudioSettings(
                             deviceId = GeneralVariables.audioOutputDeviceId,
                             maxChannels = audioOutputChannels,
                         )
-                        AudioChannelSelectRow(
+                        SegmentedSelectRow(
                             label = stringResource(R.string.settings_tx_channel),
                             description = stringResource(R.string.settings_tx_channel_desc),
                             optionLabels = listOf(
@@ -1249,22 +1249,30 @@ private fun AudioChannelRowGate.noteRes(): Int =
     }
 
 /**
- * Audio channel selector: which side of a stereo path the app uses. Used twice —
- * once for receive (Mix / Left / Right) and once for transmit (Both / Left /
- * Right) — because a splitter cable, a dual-receiver rig, or an interface with
- * one side floating needs the two directions set independently.
+ * A segmented control for a small int-valued setting — N options (two-plus),
+ * generic over [optionLabels], not tied to audio at all despite living in
+ * this file. Reused as-is for decode depth in [AdvancedSettings] (`internal`,
+ * not `private`, for exactly that cross-file reuse). Originally built for, and
+ * still used twice for, the audio channel selector: which side of a stereo
+ * path the app uses, once for receive (Mix / Left / Right) and once for
+ * transmit (Both / Left / Right) — because a splitter cable, a dual-receiver
+ * rig, or an interface with one side floating needs the two directions set
+ * independently.
  *
- * A three-position segmented control rather than a picker dialog: the choice is
- * a quick A/B while watching the waterfall or the rig's ALC, so it stays
- * on-screen instead of behind a dialog.
+ * A segmented control rather than a picker dialog: the choice is a quick A/B
+ * while watching the waterfall or the rig's ALC, so it stays on-screen
+ * instead of behind a dialog.
  *
- * When [enabled] is false the device reports a single channel, so there is no
- * side to choose. The control greys out and shows [disabledNote] instead of the
+ * When [enabled] is false the setting doesn't apply right now (e.g. the audio
+ * channel selectors: the device reports a single channel, so there is no side
+ * to choose). The control greys out and shows [disabledNote] instead of the
  * usual description rather than disappearing — an operator looking for the
- * setting needs to see that it exists and why it does not apply here.
+ * setting needs to see that it exists and why it does not apply here. Pass an
+ * empty [disabledNote] (as decode depth does) when the control is always
+ * enabled.
  */
 @Composable
-private fun AudioChannelSelectRow(
+internal fun SegmentedSelectRow(
     label: String,
     description: String,
     optionLabels: List<Pair<Int, String>>,

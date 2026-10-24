@@ -5,6 +5,7 @@ import static com.google.common.truth.Truth.assertThat;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.k1af.ft8af.GeneralVariables;
+import com.k1af.ft8af.ft8listener.DecodeDepth;
 
 import org.junit.After;
 import org.junit.Before;
@@ -54,7 +55,7 @@ public class DatabaseOprConfigHydrationTest {
     private int origIcomUdpPort;
     private float origVolumePercent;
     private int origAlcTargetLow;
-    private boolean origDeepDecodeMode;
+    private int origDecodeDepth;
     private boolean origKeepScreenOn;
     private boolean origAutoSyncClockFromDecodes;
 
@@ -74,7 +75,7 @@ public class DatabaseOprConfigHydrationTest {
         origIcomUdpPort = GeneralVariables.icomUdpPort;
         origVolumePercent = GeneralVariables.volumePercent;
         origAlcTargetLow = GeneralVariables.alcTargetLow;
-        origDeepDecodeMode = GeneralVariables.deepDecodeMode;
+        origDecodeDepth = GeneralVariables.decodeDepth;
         origKeepScreenOn = GeneralVariables.keepScreenOn;
         origAutoSyncClockFromDecodes = GeneralVariables.autoSyncClockFromDecodes;
 
@@ -100,7 +101,7 @@ public class DatabaseOprConfigHydrationTest {
             GeneralVariables.icomUdpPort = origIcomUdpPort;
             GeneralVariables.volumePercent = origVolumePercent;
             GeneralVariables.alcTargetLow = origAlcTargetLow;
-            GeneralVariables.deepDecodeMode = origDeepDecodeMode;
+            GeneralVariables.decodeDepth = origDecodeDepth;
             GeneralVariables.keepScreenOn = origKeepScreenOn;
             GeneralVariables.autoSyncClockFromDecodes = origAutoSyncClockFromDecodes;
         }
@@ -241,14 +242,14 @@ public class DatabaseOprConfigHydrationTest {
     }
 
     // ---- power & heat toggles ------------------------------------------------
-    // Both are surfaced in the Compose settings for the first time. deepMode
-    // reuses the key the retired legacy fragment wrote, so an existing preference
-    // must still hydrate; keepScreenOn is new and must default to the previous
-    // hard-coded behaviour (on) when absent.
+    // keepScreenOn must default to the previous hard-coded behaviour (on) when
+    // absent. deepMode is the RETIRED fast/deep boolean key, now a one-time
+    // migration into decodeDepth (3-way: FAST/BALANCED/DEEP) — these two tests
+    // exercise exactly that migration (no "decodeDepth" row is written).
 
     @Test
     public void powerToggles_hydrateFromStoredValues() {
-        GeneralVariables.deepDecodeMode = true;
+        GeneralVariables.decodeDepth = DecodeDepth.DEEP;
         GeneralVariables.keepScreenOn = true;
 
         Map<String, String> config = new LinkedHashMap<>();
@@ -258,13 +259,13 @@ public class DatabaseOprConfigHydrationTest {
 
         hydrate();
 
-        assertThat(GeneralVariables.deepDecodeMode).isFalse();
+        assertThat(GeneralVariables.decodeDepth).isEqualTo(DecodeDepth.FAST);
         assertThat(GeneralVariables.keepScreenOn).isFalse();
     }
 
     @Test
     public void powerToggles_hydrateBackOn() {
-        GeneralVariables.deepDecodeMode = false;
+        GeneralVariables.decodeDepth = DecodeDepth.FAST;
         GeneralVariables.keepScreenOn = false;
 
         Map<String, String> config = new LinkedHashMap<>();
@@ -274,7 +275,7 @@ public class DatabaseOprConfigHydrationTest {
 
         hydrate();
 
-        assertThat(GeneralVariables.deepDecodeMode).isTrue();
+        assertThat(GeneralVariables.decodeDepth).isEqualTo(DecodeDepth.DEEP);
         assertThat(GeneralVariables.keepScreenOn).isTrue();
     }
 
@@ -379,9 +380,10 @@ public class DatabaseOprConfigHydrationTest {
 
     @Test
     public void powerToggles_nonBooleanValueReadsAsOff() {
-        // Hydration compares against "1", so anything else is off rather than a
-        // parse crash (the failure mode this test class exists for).
-        GeneralVariables.deepDecodeMode = true;
+        // The legacy deepMode migration compares against "1", so anything else
+        // is FAST rather than a parse crash (the failure mode this test class
+        // exists for).
+        GeneralVariables.decodeDepth = DecodeDepth.DEEP;
         GeneralVariables.keepScreenOn = true;
 
         Map<String, String> config = new LinkedHashMap<>();
@@ -391,8 +393,53 @@ public class DatabaseOprConfigHydrationTest {
 
         hydrate(); // must not throw
 
-        assertThat(GeneralVariables.deepDecodeMode).isFalse();
+        assertThat(GeneralVariables.decodeDepth).isEqualTo(DecodeDepth.FAST);
         assertThat(GeneralVariables.keepScreenOn).isFalse();
+    }
+
+    @Test
+    public void decodeDepth_hydratesDirectlyWhenRowExists() {
+        GeneralVariables.decodeDepth = DecodeDepth.FAST;
+
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("decodeDepth", String.valueOf(DecodeDepth.BALANCED));
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.decodeDepth).isEqualTo(DecodeDepth.BALANCED);
+    }
+
+    @Test
+    public void decodeDepth_rowTakesPrecedenceOverLegacyDeepModeRow() {
+        // An install that has already picked a depth under the new key must not
+        // have it clobbered by a stale "deepMode" row that disagrees (e.g. the
+        // operator picked BALANCED, which "deepMode" can't even express).
+        GeneralVariables.decodeDepth = DecodeDepth.FAST;
+
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("decodeDepth", String.valueOf(DecodeDepth.BALANCED));
+        config.put("deepMode", "1"); // would migrate to DEEP if wrongly applied
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.decodeDepth).isEqualTo(DecodeDepth.BALANCED);
+    }
+
+    @Test
+    public void decodeDepth_outOfRangeValueClampsToDeep() {
+        // A garbled or future-version value must degrade to the most thorough
+        // mode, not silently to the least (DecodeDepth.clamp's contract).
+        GeneralVariables.decodeDepth = DecodeDepth.FAST;
+
+        Map<String, String> config = new LinkedHashMap<>();
+        config.put("decodeDepth", "99");
+        opr.writeConfigSync(config);
+
+        hydrate();
+
+        assertThat(GeneralVariables.decodeDepth).isEqualTo(DecodeDepth.DEEP);
     }
 
     /**

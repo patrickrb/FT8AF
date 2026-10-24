@@ -1,4 +1,5 @@
 Decode mode:
-Fast decode: Default mode, one decoding pass on received audio.
-Deep decode: Recursive decoding that process received audio in multiple passes .
-* Note: Deep decoding requires longer decoding time and more battery consumption. 
+Fast decode: One decoding pass on received audio.
+Balanced decode: Adds a deeper decoding pass that tries harder on weak signals, without the extra passes below.
+Deep decode: Default mode. Builds on Balanced decode with additional passes that strip out already-decoded signals and re-decode the rest, recovering weaker signals hidden underneath stronger ones.
+* Note: Balanced and Deep decoding require longer decoding time and more battery consumption, with Deep the most of the two.
