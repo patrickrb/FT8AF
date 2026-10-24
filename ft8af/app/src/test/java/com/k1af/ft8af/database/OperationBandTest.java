@@ -46,6 +46,16 @@ public class OperationBandTest {
     }
 
     @Test
+    public void bandStringConstructor_trimsTrailingCrOnWavelength() {
+        // waveLength is the LAST field on a plain (no mode tag) line, so a CRLF-checked-out
+        // bands.txt (every Windows build with no .gitattributes override, before this fix)
+        // leaves a trailing "\r" here -- "40m\r" never matches "40m" anywhere waveLength is
+        // compared, so the Band & Mode sheet's curated list came up empty on every such build.
+        OperationBand.Band b = new OperationBand.Band(" :7074000:40m\r");
+        assertThat(b.waveLength).isEqualTo("40m");
+    }
+
+    @Test
     public void bandInfo_formatsMHzWithWavelength() {
         OperationBand.Band b = new OperationBand.Band(14_074_000L, "20m");
         assertThat(b.getBandInfo()).isEqualTo("  14.074 MHz (20m)");

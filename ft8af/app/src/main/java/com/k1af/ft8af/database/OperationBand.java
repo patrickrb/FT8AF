@@ -454,7 +454,19 @@ public class OperationBand {
             //Format: marked:freq:waveLength[:mode]. waveLength is field 2; an optional 4th
             //field tags the mode by ModeProfile.displayName ("FT4"/"FT2"), otherwise FT8.
             //Resolving against ModeProfile keeps future modes a one-entry add (no new branch).
-            waveLength=info[2];
+            //
+            //.trim() matters here specifically: on a 3-field (FT8) line, waveLength is the
+            //LAST field, so a CRLF-checked-out bands.txt (e.g. a Windows build with no
+            //.gitattributes override and the user's global core.autocrlf=true -- the asset
+            //is committed as LF, git converts it to CRLF on checkout) leaves a trailing "\r"
+            //on every band name. getLinesFromInputStream only splits on "\n", so that "\r"
+            //survives into waveLength -- "40m\r" never equals "40m" anywhere waveLength is
+            //compared (isBandExcluded, mostUsedBands, getModeBandFreq, ...), so curated band
+            //lists and the Band & Mode sheet quietly came up empty. The actual .gitattributes
+            //fix lives at the repo root; this is the defense-in-depth half, so any other
+            //source of stray whitespace (a hand-edited custom bands file, a future checkout
+            //method) degrades gracefully instead of reproducing the same silent failure.
+            waveLength=info[2].trim();
             if (info.length > 3 && !info[3].trim().isEmpty()) {
                 String tag = info[3].trim();
                 for (com.k1af.ft8af.ModeProfile m : com.k1af.ft8af.ModeProfile.values()) {
