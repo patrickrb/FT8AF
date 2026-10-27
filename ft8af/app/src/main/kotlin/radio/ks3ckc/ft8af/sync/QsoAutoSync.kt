@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.os.SystemClock
+import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.database.DatabaseOpr
 import com.k1af.ft8af.log.ThirdPartyService
 import java.io.File
@@ -56,6 +57,38 @@ internal class QsoSyncGate(private val minIntervalMs: Long = 15_000L) {
 }
 
 /**
+ * Keeps the background sync from toasting the same Cloudlog rejection on every run. A
+ * rejection is shown when its server reason differs from the last one shown; a run with no
+ * server rejection re-arms it, so a problem that comes back after being fixed is reported
+ * again. Transport failures (no signal) never toast and don't change the state. Pure, so it
+ * is unit-testable; synchronized because runs start from several threads.
+ */
+internal class CloudlogRejectionDedupe {
+    private var lastShown: String? = null
+
+    @Synchronized
+    fun shouldShow(failure: String?): Boolean {
+        if (failure.isNullOrBlank()) {
+            lastShown = null
+            return false
+        }
+        if (!isCloudlogServerRejection(failure)) return false
+        val key = cloudlogServerReason(failure)
+        if (key == lastShown) return false
+        lastShown = key
+        return true
+    }
+}
+
+/**
+ * Whether an auto-sync pass has anything to do: rows waiting for upload, or the two-way
+ * Wavelog sync (issue #965), which can find QSOs to download with nothing pending here.
+ * Pure so it is unit-testable.
+ */
+internal fun autoSyncHasWork(pending: Int, cloudlogEnabled: Boolean, downloadQsos: Boolean): Boolean =
+    pending > 0 || (cloudlogEnabled && downloadQsos)
+
+/**
  * Render a finished sync run as the one line that goes into `debug.log`.
  *
  * Always reports the counts; appends each service's failure reason when it had one. The
@@ -65,7 +98,16 @@ internal class QsoSyncGate(private val minIntervalMs: Long = 15_000L) {
  * (no Android types) so it is unit-testable.
  */
 internal fun summarize(result: ThirdPartyService.SyncResult): String {
-    val sb = StringBuilder("cloudlog=${result.cloudlogOk} qrz=${result.qrzOk}")
+    val sb = StringBuilder("cloudlog=${result.cloudlogOk}")
+    // Rows Wavelog already had (issue #936): skipped, not uploaded.
+    if (result.cloudlogAlreadyPresent > 0) {
+        sb.append(" cloudlogExisting=").append(result.cloudlogAlreadyPresent)
+    }
+    // QSOs imported from Wavelog by the two-way sync (issue #965).
+    if (result.cloudlogDownloaded > 0) {
+        sb.append(" cloudlogDownloaded=").append(result.cloudlogDownloaded)
+    }
+    sb.append(" qrz=").append(result.qrzOk)
     // Only when WRL took part, so the line is unchanged for Cloudlog/QRZ-only users.
     if (result.wrlAttempted) sb.append(" wrl=").append(result.wrlOk)
     sb.append(" of ").append(result.total)
@@ -89,6 +131,7 @@ internal fun summarize(result: ThirdPartyService.SyncResult): String {
 class QsoAutoSync(private val appContext: Context) {
 
     private val gate = QsoSyncGate()
+    private val rejectionDedupe = CloudlogRejectionDedupe()
     private val cm =
         appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
 
@@ -157,19 +200,32 @@ class QsoAutoSync(private val appContext: Context) {
                 // uses) so a cold-start trigger that beats MainViewModel's init can't
                 // construct the singleton with a null Context — getWritableDatabase()
                 // would NPE, or a null name would open a throwaway in-memory db.
-                val db = DatabaseOpr.getInstance(appContext, "data.db")?.db
+                val opr = DatabaseOpr.getInstance(appContext, "data.db")
+                val db = opr?.db
                 if (db == null) {
                     log("skip ($reason): no db")
                     return@Thread
                 }
                 val pending = ThirdPartyService.countUnsyncedQSOs(db)
-                if (pending <= 0) {
+                if (!autoSyncHasWork(
+                        pending,
+                        GeneralVariables.enableCloudlog,
+                        GeneralVariables.cloudlogDownloadQsos,
+                    )
+                ) {
                     log("nothing pending ($reason)")
                     return@Thread
                 }
                 log("start ($reason): $pending pending")
-                val result = ThirdPartyService.syncAllQSOs(db, null)
+                val result = ThirdPartyService.syncAllQSOs(opr, null)
                 log("done ($reason): " + summarize(result))
+                // The operator never pressed anything for this run, so the only way they
+                // learn their logbook server is rejecting QSOs is if we say so here. Once
+                // per distinct reason: every app start / reconnect re-runs this sync, and
+                // the same rejection again is just nagging.
+                if (rejectionDedupe.shouldShow(result.cloudlogError)) {
+                    showCloudlogRejectionToast(result.cloudlogError)
+                }
             } catch (e: Exception) {
                 log("error ($reason): ${e.javaClass.simpleName} ${e.message}")
             } finally {

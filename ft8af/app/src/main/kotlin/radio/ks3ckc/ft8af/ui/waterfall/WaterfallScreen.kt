@@ -179,13 +179,11 @@ fun WaterfallScreen(mainViewModel: MainViewModel) {
             .background(BgApp),
     ) {
         TopBar(title = stringResource(R.string.waterfall_title)) {
-            val freqText = if (touchedFreqHz > 0) {
-                "$touchedFreqHz Hz"
-            } else {
-                GeneralVariables.getBaseFrequencyStr() + " Hz"
-            }
+            // Read the observed txFreq state (not GeneralVariables directly) so the
+            // label recomposes when the offset moves without a tap, e.g. following
+            // an answered station in TX=RX mode or a clear-slot CQ relocation (#947).
             Text(
-                text = freqText,
+                text = waterfallHeaderFreqText(touchedFreqHz, txFreq),
                 color = Signal,
                 fontFamily = GeistMonoFamily,
                 fontSize = 12.sp,
@@ -435,6 +433,14 @@ private fun WaterfallCanvas(
  */
 internal fun displayTxFrequencyHz(touchedFreqHz: Int, baseFreqHz: Float): Float =
     if (touchedFreqHz > 0) touchedFreqHz.toFloat() else baseFreqHz
+
+/**
+ * Top-bar frequency label: the touched column while a tap cursor is active,
+ * otherwise the committed TX offset, rounded to whole Hz like
+ * `GeneralVariables.getBaseFrequencyStr()`.
+ */
+internal fun waterfallHeaderFreqText(touchedFreqHz: Int, baseFreqHz: Float): String =
+    "${Math.round(displayTxFrequencyHz(touchedFreqHz, baseFreqHz))} Hz"
 
 /**
  * Route one spectrum touch event to the screen's callbacks, given the

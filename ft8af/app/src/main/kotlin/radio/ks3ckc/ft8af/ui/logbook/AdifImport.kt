@@ -14,15 +14,22 @@ internal data class AdifImportUiState(
     val added: Int = 0,
     val updated: Int = 0,
     val invalid: Int = 0,
+    val warnings: Int = 0,
     val finished: Boolean = false,
     val failedMessage: String? = null,
 )
 
 /**
  * Tallies per-record insert outcomes during an ADIF import. DatabaseOpr's
- * insert callback reports (isInvalid, isNewQSL); an invalid record (no
- * callsign) also arrives with isNewQSL=true, so the invalid flag must win
- * before the new-vs-update split. Only touched from the single import thread.
+ * insert callback reports (isInvalid, isNewQSL, hasWarning); an invalid
+ * record (no callsign) also arrives with isNewQSL=true, so the invalid flag
+ * must win before the new-vs-update split -- that record was never written
+ * at all. hasWarning is independent of all three: it fires on a record that
+ * WAS written (new or updated) but had one of its own fields (e.g. an
+ * unparseable RST) dropped to a fallback value, so it's counted as added or
+ * updated AND tallied as a warning, never counted as invalid (a real-world
+ * 87 MB import previously reported such records as "skipped", which they
+ * were not). Only touched from the single import thread.
  */
 internal class AdifImportTally : AfterInsertQSLData {
     var added = 0
@@ -31,13 +38,16 @@ internal class AdifImportTally : AfterInsertQSLData {
         private set
     var invalid = 0
         private set
+    var warnings = 0
+        private set
 
-    override fun doAfterInsert(isInvalid: Boolean, isNewQSL: Boolean) {
+    override fun doAfterInsert(isInvalid: Boolean, isNewQSL: Boolean, hasWarning: Boolean) {
         when {
             isInvalid -> invalid++
             isNewQSL -> added++
             else -> updated++
         }
+        if (hasWarning) warnings++
     }
 }
 
@@ -52,6 +62,7 @@ internal fun finishedImportState(total: Int, tally: AdifImportTally): AdifImport
         added = tally.added,
         updated = tally.updated,
         invalid = tally.invalid,
+        warnings = tally.warnings,
         finished = true,
     )
 

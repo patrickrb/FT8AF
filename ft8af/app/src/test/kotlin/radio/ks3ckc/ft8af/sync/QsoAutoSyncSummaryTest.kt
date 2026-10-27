@@ -90,4 +90,45 @@ class QsoAutoSyncSummaryTest {
         // The legacy constructor leaves wrl out, so the Cloudlog/QRZ-only line is unchanged.
         assertThat(summarize(result(5, 5, 5))).doesNotContain("wrl")
     }
+
+    @Test
+    fun `rows the logbook already had are reported next to the cloudlog count`() {
+        val withExisting =
+            ThirdPartyService.SyncResult(
+                113, 2, 0, 0,
+                true, false, false,
+                null, null, null,
+                111,
+            )
+
+        assertThat(summarize(withExisting)).isEqualTo("cloudlog=2 cloudlogExisting=111 qrz=0 of 113")
+        // Zero is left out, so the usual line is unchanged.
+        assertThat(summarize(result(5, 5, 5))).doesNotContain("cloudlogExisting")
+    }
+
+    @Test
+    fun `qsos downloaded from wavelog are reported next to the cloudlog count`() {
+        val withDownload =
+            ThirdPartyService.SyncResult(
+                3, 1, 0, 0,
+                true, false, false,
+                null, null, null,
+                2, 40,
+            )
+
+        assertThat(summarize(withDownload))
+            .isEqualTo("cloudlog=1 cloudlogExisting=2 cloudlogDownloaded=40 qrz=0 of 3")
+        // Zero is left out, so the usual line is unchanged.
+        assertThat(summarize(result(5, 5, 5))).doesNotContain("cloudlogDownloaded")
+    }
+
+    @Test
+    fun `auto-sync runs with nothing pending only for the wavelog download`() {
+        assertThat(autoSyncHasWork(pending = 3, cloudlogEnabled = false, downloadQsos = false)).isTrue()
+        assertThat(autoSyncHasWork(pending = 0, cloudlogEnabled = false, downloadQsos = false)).isFalse()
+        assertThat(autoSyncHasWork(pending = 0, cloudlogEnabled = true, downloadQsos = false)).isFalse()
+        assertThat(autoSyncHasWork(pending = 0, cloudlogEnabled = true, downloadQsos = true)).isTrue()
+        // The download setting alone does nothing while Cloudlog/Wavelog is off.
+        assertThat(autoSyncHasWork(pending = 0, cloudlogEnabled = false, downloadQsos = true)).isFalse()
+    }
 }

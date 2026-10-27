@@ -382,14 +382,67 @@ class DecodeCollapseTest {
     }
 
     @Test
-    fun autoScrollTarget_onlyLastHeardScrollsToTopWhenGrown() {
-        assertThat(autoScrollTargetIndex(DecodeSortMode.LAST_HEARD, size = 3, previousSize = 2)).isEqualTo(0)
-        // No growth -> no scroll.
-        assertThat(autoScrollTargetIndex(DecodeSortMode.LAST_HEARD, size = 2, previousSize = 2)).isNull()
+    fun autoScrollTarget_lastHeardScrollsToTopWhenGrown() {
+        assertThat(
+            autoScrollTargetIndex(
+                DecodeSortMode.LAST_HEARD, previousSortMode = DecodeSortMode.LAST_HEARD,
+                size = 3, previousSize = 2,
+            ),
+        ).isEqualTo(0)
+        // No growth, same mode -> no scroll.
+        assertThat(
+            autoScrollTargetIndex(
+                DecodeSortMode.LAST_HEARD, previousSortMode = DecodeSortMode.LAST_HEARD,
+                size = 2, previousSize = 2,
+            ),
+        ).isNull()
         // Other modes never auto-scroll.
-        assertThat(autoScrollTargetIndex(DecodeSortMode.CALLSIGN, size = 3, previousSize = 2)).isNull()
-        assertThat(autoScrollTargetIndex(DecodeSortMode.SNR, size = 3, previousSize = 2)).isNull()
+        assertThat(
+            autoScrollTargetIndex(
+                DecodeSortMode.CALLSIGN, previousSortMode = DecodeSortMode.CALLSIGN,
+                size = 3, previousSize = 2,
+            ),
+        ).isNull()
+        assertThat(
+            autoScrollTargetIndex(
+                DecodeSortMode.SNR, previousSortMode = DecodeSortMode.SNR,
+                size = 3, previousSize = 2,
+            ),
+        ).isNull()
         // Empty list -> no scroll.
-        assertThat(autoScrollTargetIndex(DecodeSortMode.LAST_HEARD, size = 0, previousSize = 0)).isNull()
+        assertThat(
+            autoScrollTargetIndex(
+                DecodeSortMode.LAST_HEARD, previousSortMode = DecodeSortMode.LAST_HEARD,
+                size = 0, previousSize = 0,
+            ),
+        ).isNull()
+    }
+
+    @Test
+    fun autoScrollTarget_scrollsToTopOnSwitchingIntoLastHeardEvenWithoutGrowth() {
+        // Real-device finding: switching DX -> TIME left the newest (count-bearing)
+        // divider off-screen, because the old logic only scrolled on list growth.
+        assertThat(
+            autoScrollTargetIndex(
+                DecodeSortMode.LAST_HEARD, previousSortMode = DecodeSortMode.DISTANCE,
+                size = 5, previousSize = 5,
+            ),
+        ).isEqualTo(0)
+        // Switching AWAY from LAST_HEARD never scrolls (that mode doesn't auto-scroll).
+        assertThat(
+            autoScrollTargetIndex(
+                DecodeSortMode.DISTANCE, previousSortMode = DecodeSortMode.LAST_HEARD,
+                size = 5, previousSize = 5,
+            ),
+        ).isNull()
+    }
+
+    @Test
+    fun showDecodedCountInSubtitle_onlyWhenNotLastHeard() {
+        // LAST_HEARD puts each slot's count on that slot's time-group divider instead.
+        assertThat(showDecodedCountInSubtitle(DecodeSortMode.LAST_HEARD)).isFalse()
+        assertThat(showDecodedCountInSubtitle(DecodeSortMode.CALLSIGN)).isTrue()
+        assertThat(showDecodedCountInSubtitle(DecodeSortMode.SNR)).isTrue()
+        assertThat(showDecodedCountInSubtitle(DecodeSortMode.DISTANCE)).isTrue()
     }
 }

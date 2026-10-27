@@ -137,6 +137,7 @@
     <string name="qsopanel_qsoing_with">QSO com %1$s</string>
     <string name="qsopanel_waiting_for">Aguardando %1$s</string>
     <string name="qsopanel_tap_to_view">toque para ver ↗</string>
+    <string name="qsopanel_sent_report">enviado %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Aguardando mensagens...</string>
     <string name="qsopanel_log_action">LOG</string>
@@ -238,6 +239,8 @@
     <string name="log_sync_enable_services">Ative o Cloudlog/Wavelog/Nextlog, o QRZ ou o World Radio League em Configurações e tente novamente.</string>
     <string name="log_sync_progress_count">%1$d de %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d aceitos</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d já no logbook</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d baixados</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d aceitos</string>
     <string name="log_sync_nothing_to_upload">Nenhum QSO no registro para enviar ainda.</string>
     <string name="log_sync_working">Processando…</string>
@@ -487,6 +490,9 @@
     <string name="settings_per_band_volume">Salvar Nível de Saída por Banda</string>
     <string name="settings_per_band_volume_desc">Memoriza o volume de TX separadamente para cada banda e o restaura ao trocar de banda</string>
     <string name="per_band_volume_restored">Volume de TX %1$d%% restaurado para %2$s</string>
+    <string name="settings_per_band_input_volume">Salvar Volume de Entrada por Banda</string>
+    <string name="settings_per_band_input_volume_desc">Memoriza o volume de entrada (RX) separadamente para cada banda e o restaura ao trocar de banda</string>
+    <string name="per_band_input_volume_restored">Volume de entrada %1$d%% restaurado para %2$s</string>
 
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">Split TX/RX</string>
@@ -581,6 +587,9 @@
     <string name="settings_qrz_profile_lookup_desc">Usuário + senha para a API XML do QRZ (avatares)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">Envia QSOs automaticamente para uma instância do Cloudlog, Wavelog ou Nextlog</string>
+    <string name="settings_cloudlog_download">Baixar QSOs do Wavelog ao sincronizar</string>
+    <string name="settings_cloudlog_download_desc">A sincronização também adiciona os QSOs que estão no seu logbook do Wavelog mas não neste log. Eles não são enviados ao QRZ nem ao World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">Requer Wavelog: este servidor não consegue listar seus QSOs.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">Atraso de PTT</string>
@@ -644,6 +653,7 @@
     <string name="settings_username_hint">Seu nome de usuário no QRZ.com</string>
     <string name="settings_password">Senha</string>
     <string name="settings_enabled_bands_dialog_desc">Bandas ocultas não aparecerão nos seletores de frequência.</string>
+    <string name="settings_enabled_bands_keep_one">Pelo menos uma banda deve permanecer ativada.</string>
     <string name="settings_select_serial_port">Selecionar Porta Serial</string>
     <string name="settings_tx_volume_advice">Ajuste ao vivo — seu próximo TX usará este nível. Observe o ALC do seu rádio e reduza até que ele quase não toque a linha.</string>
     <string name="settings_input_volume">Volume de Entrada</string>
@@ -663,6 +673,8 @@
     <string name="cq_offset_moved">Offset de CQ movido para um espaço livre: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Limpar offset de TX automaticamente</string>
     <string name="settings_auto_clear_tx_desc">Ao chamar CQ, escolhe um espaço livre com base na atividade recente da banda e se afasta se ele ficar ocupado</string>
+    <string name="settings_auto_clear_tx_min">Offset automático mínimo</string>
+    <string name="settings_auto_clear_tx_min_desc">A escolha automática nunca usa um offset abaixo deste. Aumente para manter os harmônicos de áudio fora da banda passante</string>
     <string name="tune_content_description">Tune — inicia o sintonizador do rig ou transmite uma portadora contínua para sintonia de antena</string>
     <string name="tune_stopped_timeout">Tune interrompido após %1$d s</string>
     <string name="tune_blocked_tx">Pare o CQ/QSO antes de sintonizar</string>

@@ -99,6 +99,7 @@
     <string name="qsopanel_qsoing_with">正在与 %1$s 通联</string>
     <string name="qsopanel_waiting_for">正在等待 %1$s</string>
     <string name="qsopanel_tap_to_view">点击查看 ↗</string>
+    <string name="qsopanel_sent_report">已发 %1$s</string>
     <string name="qsopanel_tx_message">TX：%1$s</string>
     <string name="qsopanel_waiting_messages">正在等待消息...</string>
 
@@ -197,6 +198,8 @@
     <string name="log_sync_enable_services">请在设置中启用 Cloudlog/Wavelog/Nextlog、QRZ 或 World Radio League，然后重试。</string>
     <string name="log_sync_progress_count">%2$d 个 QSO 中的第 %1$d 个</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog：已接受 %1$d 个</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog：%1$d 个已在日志中</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog：已下载 %1$d 个</string>
     <string name="log_sync_qrz_accepted">QRZ：已接受 %1$d 个</string>
     <string name="log_sync_nothing_to_upload">日志本中暂无可上传的 QSO。</string>
     <string name="log_sync_working">正在处理…</string>
@@ -415,6 +418,9 @@
     <string name="settings_qrz_profile_lookup_desc">QRZ XML API 的用户名 + 密码（头像）</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">自动将 QSO 上传至 Cloudlog、Wavelog 或 Nextlog 实例</string>
+    <string name="settings_cloudlog_download">同步时从 Wavelog 下载 QSO</string>
+    <string name="settings_cloudlog_download_desc">同步时还会添加 Wavelog 日志中有、而本日志中没有的 QSO。这些 QSO 不会再上传到 QRZ 或 World Radio League。</string>
+    <string name="settings_cloudlog_download_unsupported">需要 Wavelog：此服务器无法列出其 QSO。</string>
 
     <!-- ===== 设置：高级 ===== -->
     <string name="settings_ptt_delay">PTT 延迟</string>
@@ -476,6 +482,7 @@
     <string name="settings_username_hint">您的 QRZ.com 用户名</string>
     <string name="settings_password">密码</string>
     <string name="settings_enabled_bands_dialog_desc">隐藏的波段不会出现在频率选择器中。</string>
+    <string name="settings_enabled_bands_keep_one">至少需要保留一个已启用的波段。</string>
     <string name="settings_select_serial_port">选择串口</string>
     <string name="settings_tx_volume_advice">实时调整 — 您的下一次 TX 将使用此电平。注意您电台的 ALC，逐渐调低直到刚好触及临界线。</string>
     <string name="settings_input_volume">输入音量</string>
@@ -537,6 +544,8 @@
     <string name="cq_offset_moved">CQ频偏已移至空闲位置：%1$d Hz</string>
     <string name="settings_auto_clear_tx">自动选择空闲TX频偏</string>
     <string name="settings_auto_clear_tx_desc">呼叫CQ时根据近期频段活动选择空闲位置，被占用时自动移开</string>
+    <string name="settings_auto_clear_tx_min">自动频偏下限</string>
+    <string name="settings_auto_clear_tx_min_desc">自动选择不会低于此频偏。调高可让音频谐波落在通带之外</string>
     <string name="tune_content_description">Tune：启动电台调谐器或发射连续载波用于天线调谐</string>
     <string name="tune_stopped_timeout">Tune已在%1$d秒后停止</string>
     <string name="tune_blocked_tx">使用Tune前请先停止CQ/QSO</string>

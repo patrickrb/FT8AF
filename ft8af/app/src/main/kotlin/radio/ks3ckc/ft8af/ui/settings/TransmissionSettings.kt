@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import com.k1af.ft8af.ft8transmit.ClearFrequencyFinder
 import com.k1af.ft8af.ft8transmit.MeterProtectionController
 import com.k1af.ft8af.ft8transmit.TuneController
 import com.k1af.ft8af.ft8transmit.TuneMethod
@@ -82,6 +83,39 @@ internal fun clampAlcHigh(desired: Int, low: Int): Int {
     return desired.coerceIn(lower, ALC_HIGH_MAX)
 }
 
+// Slider step for the lowest auto-clear offset (issue #938).
+private const val AUTO_TX_MIN_FREQ_STEP = 50
+
+/**
+ * Snap a slider position for the lowest auto-clear TX offset (issue #938) to the
+ * nearest [AUTO_TX_MIN_FREQ_STEP] Hz, then clamp it to the range
+ * [ClearFrequencyFinder] accepts.
+ */
+internal fun snapAutoTxMinFreq(hz: Int): Int {
+    val snapped = Math.round(hz / AUTO_TX_MIN_FREQ_STEP.toFloat()) * AUTO_TX_MIN_FREQ_STEP
+    return ClearFrequencyFinder.clampUserMinOffsetHz(snapped)
+}
+
+/**
+ * Whether the "TX/RX Split" toggle shows as on. [GeneralVariables.synFrequency]
+ * means the opposite: TX locked to RX ("Lockd TX=RX" in the legacy settings
+ * screen), so split is on exactly when it is false (#947).
+ */
+internal fun txRxSplitFromSynFrequency(synFrequency: Boolean): Boolean = !synFrequency
+
+/**
+ * The [GeneralVariables.synFrequency] value (and persisted "synFreq" config) for
+ * a "TX/RX Split" toggle position: split on means TX is *not* locked to RX.
+ */
+internal fun synFrequencyFromTxRxSplit(split: Boolean): Boolean = !split
+
+/**
+ * Whether the "Hold TX freq" toggle can be changed. Holding only matters when TX
+ * is locked to RX: `FT8TransmitSignal.shouldFollowTargetFreq` never moves the
+ * offset in split mode, so the toggle would have no effect there.
+ */
+internal fun holdTxFreqToggleEnabled(synFrequency: Boolean): Boolean = synFrequency
+
 /**
  * Transmission settings: TX/RX split, watchdog, stop-after, TX protection
  * (auto-volume ALC + SWR halt), and auto-sequencing.
@@ -113,6 +147,7 @@ fun TransmissionSettings(
 
     // Auto-sequence state
     var autoClearTxFreq by remember { mutableStateOf(GeneralVariables.autoClearTxFreq) }
+    var autoClearTxMinFreq by remember { mutableIntStateOf(GeneralVariables.autoClearTxMinFreq) }
     var autoFollowCQ by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
     var huntCallsCQ by remember { mutableStateOf(GeneralVariables.huntCallsCQ) }
     var autoCallFollow by remember { mutableStateOf(GeneralVariables.autoCallFollow) }
@@ -244,12 +279,13 @@ fun TransmissionSettings(
                     SettingsRow(
                         label = stringResource(R.string.settings_tx_rx_split),
                         description = stringResource(R.string.settings_tx_rx_split_desc),
-                        toggle = synFrequency,
-                        onToggleChange = { checked ->
-                            synFrequency = checked
-                            GeneralVariables.synFrequency = checked
+                        toggle = txRxSplitFromSynFrequency(synFrequency),
+                        onToggleChange = { split ->
+                            val locked = synFrequencyFromTxRxSplit(split)
+                            synFrequency = locked
+                            GeneralVariables.synFrequency = locked
                             mainViewModel.databaseOpr.writeConfig(
-                                "synFreq", if (checked) "1" else "0", null,
+                                "synFreq", if (locked) "1" else "0", null,
                             )
                         },
                     )
@@ -258,6 +294,7 @@ fun TransmissionSettings(
                         label = stringResource(R.string.settings_hold_tx_freq),
                         description = stringResource(R.string.settings_hold_tx_freq_desc),
                         toggle = holdTxFreq,
+                        enabled = holdTxFreqToggleEnabled(synFrequency),
                         onToggleChange = { checked ->
                             holdTxFreq = checked
                             GeneralVariables.holdTxFreq = checked
@@ -652,6 +689,40 @@ fun TransmissionSettings(
                             )
                         },
                     )
+                    if (autoClearTxFreq) {
+                        SectionDivider()
+                        SettingsRow(
+                            label = stringResource(R.string.settings_auto_clear_tx_min),
+                            description = stringResource(R.string.settings_auto_clear_tx_min_desc),
+                            value = stringResource(R.string.settings_hz_format, autoClearTxMinFreq),
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                                .padding(bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            IntSlider(
+                                value = autoClearTxMinFreq,
+                                onValueChange = { v ->
+                                    val snapped = snapAutoTxMinFreq(v)
+                                    autoClearTxMinFreq = snapped
+                                    GeneralVariables.autoClearTxMinFreq = snapped
+                                },
+                                onValueChangeFinished = {
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "autoClearTxMinFreq", autoClearTxMinFreq.toString(), null,
+                                    )
+                                },
+                                valueRange = ClearFrequencyFinder.DEFAULT_MIN_OFFSET_HZ..
+                                    ClearFrequencyFinder.MAX_USER_MIN_OFFSET_HZ,
+                                modifier = Modifier.weight(1f),
+                                thumbColor = Accent,
+                                activeTrackColor = Accent,
+                            )
+                        }
+                    }
                     SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_hunt),

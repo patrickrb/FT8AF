@@ -30,6 +30,14 @@ public final class ClearFrequencyFinder {
     public static final float PREFERRED_CENTER_HZ = 1500f;
     public static final long DEFAULT_MOVE_HOLDDOWN_MS = 45_000L;
 
+    /**
+     * Upper bound for the operator's "lowest auto offset" setting (issue #938).
+     * A low offset puts the 2nd/3rd audio harmonics inside the SSB passband;
+     * raising the floor keeps them above it. 2000 Hz still leaves 2000-2800 Hz
+     * to search.
+     */
+    public static final float MAX_USER_MIN_OFFSET_HZ = 2000f;
+
     /** One observed signal: base offset + the slot UTC it was decoded in. */
     private static final class Observation {
         final float freqHz;
@@ -43,7 +51,7 @@ public final class ClearFrequencyFinder {
 
     private final int historyCycles;
     private final float guardHz;
-    private final float minOffsetHz;
+    private float minOffsetHz; // guarded by this; operator-adjustable (#938)
     private final float maxOffsetHz;
     private final float stepHz;
     private final float clearanceCapHz;
@@ -69,6 +77,28 @@ public final class ClearFrequencyFinder {
         this.stepHz = Math.max(1f, stepHz);
         this.clearanceCapHz = Math.max(0f, clearanceCapHz);
         this.moveHolddownMs = Math.max(0L, moveHolddownMs);
+    }
+
+    /**
+     * Clamp the operator's "lowest auto offset" setting (issue #938) into
+     * [{@link #DEFAULT_MIN_OFFSET_HZ}, {@link #MAX_USER_MIN_OFFSET_HZ}]. Values
+     * at or below the default (including 0 and negatives from a bad settings
+     * import) mean "no extra floor" and map to the default.
+     */
+    public static int clampUserMinOffsetHz(int hz) {
+        return (int) Math.max(DEFAULT_MIN_OFFSET_HZ, Math.min(hz, MAX_USER_MIN_OFFSET_HZ));
+    }
+
+    /**
+     * Lowest offset an automatic pick may land on (issue #938). Clamped so the
+     * search window always holds at least one full signal.
+     */
+    public synchronized void setMinOffsetHz(float hz) {
+        minOffsetHz = Math.min(hz, maxOffsetHz - SIGNAL_BANDWIDTH_HZ);
+    }
+
+    synchronized float minOffsetHz() {
+        return minOffsetHz;
     }
 
     /**

@@ -22,4 +22,9 @@ public interface OnDoTransmitted {
     //as onBeforeTransmit/onAfterTransmit (VOX rigs key on the audio itself).
     default void onTuneKeyDown() {}
     default void onTuneKeyUp() {}
+
+    //QMX CAT tones (see QmxCatTones): when true, TX and TUNE send TA commands
+    //instead of audio. Default off so existing implementers compile unchanged.
+    default boolean supportQmxCatTones() { return false; }
+    default void sendQmxCatCommand(String command) {}
 }

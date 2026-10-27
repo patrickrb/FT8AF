@@ -56,6 +56,13 @@ public class ThirdPartyServiceFailureReasonTest {
     }
 
     @Test
+    public void stationId_forLogLine_namesBlankExplicitly() {
+        assertThat(ThirdPartyService.describeStationId(null)).isEqualTo("(blank)");
+        assertThat(ThirdPartyService.describeStationId("  ")).isEqualTo("(blank)");
+        assertThat(ThirdPartyService.describeStationId(" 4 ")).isEqualTo("4");
+    }
+
+    @Test
     public void qrzFailure_reportsResultAndReason() {
         String out = ThirdPartyService.describeQrzFailure(
                 "RESULT=FAIL&REASON=Unable to add QSO to database: duplicate&EXTENDED=");

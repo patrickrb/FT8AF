@@ -128,6 +128,7 @@
     <string name="qsopanel_qsoing_with">%1$s ile QSO yapılıyor</string>
     <string name="qsopanel_waiting_for">%1$s bekleniyor</string>
     <string name="qsopanel_tap_to_view">görüntülemek için dokunun ↗</string>
+    <string name="qsopanel_sent_report">gönderilen %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Mesajlar bekleniyor...</string>
     <string name="qsopanel_log_action">GÜNLÜK</string>
@@ -229,6 +230,8 @@
     <string name="log_sync_enable_services">Ayarlar\'da Cloudlog/Wavelog/Nextlog, QRZ veya World Radio League\'i etkinleştirip yeniden deneyin.</string>
     <string name="log_sync_progress_count">%2$d QSO\'dan %1$d</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d kabul edildi</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d zaten kayıt defterinde</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d indirildi</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d kabul edildi</string>
     <string name="log_sync_nothing_to_upload">Günlükte henüz yüklenecek QSO yok.</string>
     <string name="log_sync_working">İşleniyor…</string>
@@ -485,6 +488,9 @@
     <string name="settings_qrz_profile_lookup_desc">QRZ XML API için kullanıcı adı + parola (avatarlar)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">QSO\'ları bir Cloudlog, Wavelog veya Nextlog örneğine otomatik yükle</string>
+    <string name="settings_cloudlog_download">Eşitlerken QSO\'ları Wavelog\'dan indir</string>
+    <string name="settings_cloudlog_download_desc">Eşitleme, Wavelog kayıt defterinizde olup bu kayıtta olmayan QSO\'ları da ekler. Bunlar QRZ veya World Radio League\'e gönderilmez.</string>
+    <string name="settings_cloudlog_download_unsupported">Wavelog gerekir: bu sunucu QSO\'larını listeleyemiyor.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">PTT Gecikmesi</string>
@@ -547,6 +553,7 @@
     <string name="settings_username_hint">QRZ.com kullanıcı adınız</string>
     <string name="settings_password">Parola</string>
     <string name="settings_enabled_bands_dialog_desc">Gizli bantlar frekans seçicilerde görünmez.</string>
+    <string name="settings_enabled_bands_keep_one">En az bir bant etkin kalmalıdır.</string>
     <string name="settings_select_serial_port">Seri Port Seç</string>
     <string name="settings_tx_volume_advice">Canlı ayarlayın — bir sonraki TX\'iniz bu düzeyi kullanır. Radyonuzun ALC\'sini izleyin ve çizgiye değecek kadar düşürün.</string>
     <string name="settings_input_volume">Giriş Ses Düzeyi</string>
@@ -573,6 +580,8 @@
     <string name="cq_offset_moved">CQ ofseti boş bir noktaya taşındı: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Otomatik boş TX ofseti</string>
     <string name="settings_auto_clear_tx_desc">CQ çağrılırken son bant etkinliğine göre boş bir nokta seçer ve doldurulursa başka yere taşınır</string>
+    <string name="settings_auto_clear_tx_min">En düşük otomatik ofset</string>
+    <string name="settings_auto_clear_tx_min_desc">Otomatik seçim bunun altında bir ofset seçmez. Ses harmoniklerini geçiş bandının dışında tutmak için yükseltin</string>
     <string name="tune_content_description">Tune: telsizin tunerini başlatır veya anten ayarı için sürekli taşıyıcı gönderir</string>
     <string name="tune_stopped_timeout">Tune %1$d s sonra durduruldu</string>
     <string name="tune_blocked_tx">Tune kullanmadan önce CQ/QSO\'yu durdurun</string>

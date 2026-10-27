@@ -490,6 +490,7 @@
     <string name="html_comment">Comment</string>
     <string name="decode_mode_text">Decode mode</string>
     <string name="fast_mode">Fast decode</string>
+    <string name="balanced_mode">Balanced decode</string>
     <string name="deep_mode">Deep decode</string>
     <string name="export_null">Export from WebUI via web browser on another device under the same LAN \n Please connect to a valid Wi-Fi</string>
     <string name="null_task_html">Task not exist!</string>
@@ -499,6 +500,7 @@
     <string name="import_new_count_html">Add QSLs: %d</string>
     <string name="import_update_count_html">Update QSLs: %d</string>
     <string name="import_invalid_count_html">Invalid QSLs: %d</string>
+    <string name="import_warning_count_html">Imported with a dropped field: %d</string>
     <string name="import_progress_html">"Progress: "</string>
     <string name="import_readed_html">Validated QSL: %d</string>
     <string name="import_canceled_html">Canceled!</string>
@@ -549,7 +551,7 @@
     <string name="cloudlog_addr">Server address</string>
     <string name="cloudlog_api_key">Apikey</string>
     <string name="test_cloudlog_config">TEST</string>
-    <string name="cloudlog_station_id">Station ID</string>
+    <string name="cloudlog_station_id">Station Location ID</string>
     <string name="cloudlog_help">cloudlog_en.txt</string>
     <string name="pass">Pass!</string>
     <string name="fail">Fail!</string>

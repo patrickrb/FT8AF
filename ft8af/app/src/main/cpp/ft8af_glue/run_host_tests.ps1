@@ -208,7 +208,9 @@ $ratExit = $LASTEXITCODE
 # FT8SignalListener + ft8_decode_jni.cpp) and scores against WSJT-X jt9 truth
 # sidecars. Fails if any corpus file matches fewer truth messages than its
 # committed floor (testdata/ft8/floors.txt) — the floors ratchet up as decoder
-# improvements land. See decode_bench.c's header for flags and output format.
+# improvements land. Also fails if the matched decodes' ft8_snr() drifts from
+# jt9's SNR beyond testdata/ft8/snr_bounds.txt (issue #937). See
+# decode_bench.c's header for flags and output format.
 # ---------------------------------------------------------------------------
 $benchSrcs = @(
     "ft8\pack.c","ft8\encode.c","ft8\crc.c","ft8\constants.c",
@@ -232,8 +234,9 @@ $benchSelfExit = $LASTEXITCODE
 
 $corpus = Join-Path $here "testdata\ft8"
 $floors = Join-Path $corpus "floors.txt"
+$snrBounds = Join-Path $corpus "snr_bounds.txt"
 $wavs = Get-ChildItem (Join-Path $corpus "*.wav") | ForEach-Object { $_.FullName }
-& $outBench --assert-floor $floors @wavs
+& $outBench --assert-floor $floors --assert-snr $snrBounds @wavs
 $benchExit = $LASTEXITCODE
 
 # ---------------------------------------------------------------------------
@@ -360,6 +363,22 @@ if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_feed)." }
 $feedExit = $LASTEXITCODE
 
 # ---------------------------------------------------------------------------
+# Grid-shape tests: the shared check (ft8_grid_shape.h) behind a real-device
+# finding -- "RR73" (the protocol's reply token, never a locator) passed the
+# old per-file ft8_looks_like_grid/ft2_looks_like_grid checks by coincidence,
+# so every RR73 reply earned a false "NEW GRID" badge. Header-only, no
+# ft8_lib deps.
+# ---------------------------------------------------------------------------
+$srcGridShape = Join-Path $here "test_grid_shape.c"
+$outGridShape = Join-Path $env:TEMP "ft8_grid_shape_test.exe"
+
+& $Clang @common $srcGridShape -o $outGridShape
+if ($LASTEXITCODE -ne 0) { Write-Error "Compile failed (test_grid_shape)." }
+
+& $outGridShape
+$gridShapeExit = $LASTEXITCODE
+
+# ---------------------------------------------------------------------------
 # NOTE: test_hamlib_feed.c (hamlib_feed.h — the nativeFeedFromRig write loop) is
 # intentionally NOT built here. Both it and the code it covers are POSIX-only:
 # hamlib_jni.cpp uses BSD sockets + pthreads and only compiles for Android
@@ -382,4 +401,5 @@ if ($osdExit -ne 0) { exit $osdExit }
 if ($fineExit -ne 0) { exit $fineExit }
 if ($xslotExit -ne 0) { exit $xslotExit }
 if ($gfskLenExit -ne 0) { exit $gfskLenExit }
-exit $feedExit
+if ($feedExit -ne 0) { exit $feedExit }
+exit $gridShapeExit

@@ -2,6 +2,7 @@ package radio.ks3ckc.ft8af.ui.settings
 
 import android.content.Context
 import android.media.AudioManager
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,9 +52,14 @@ import com.k1af.ft8af.rigs.InstructionSet
 import com.k1af.ft8af.ui.AudioDeviceSpinnerAdapter
 import com.k1af.ft8af.wave.AudioChannelCapability
 import com.k1af.ft8af.wave.AudioChannelSelect
+import com.k1af.ft8af.ft8transmit.QmxCatTones
 import com.k1af.ft8af.wave.UsbAudioDevice
+import radio.ks3ckc.ft8af.PER_BAND_INPUT_LEVEL_KEY
 import radio.ks3ckc.ft8af.PER_BAND_OUTPUT_LEVEL_KEY
+import radio.ks3ckc.ft8af.inputLevelChangedInDialog
+import radio.ks3ckc.ft8af.inputLevelFromGainPercent
 import radio.ks3ckc.ft8af.outputLevelFromVolumePercent
+import radio.ks3ckc.ft8af.saveInputLevelForCurrentBand
 import radio.ks3ckc.ft8af.saveOutputLevelForCurrentBand
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.FT8AFIconButton
@@ -110,7 +116,19 @@ fun RadioAudioSettings(
     // defensive config-load clamp existed) can't start the row/slider invalid.
     var inputVolume by remember {
         mutableIntStateOf(
-            clampVolumePercent((GeneralVariables.inputGainPercent * 100).toInt(), INPUT_VOLUME_MAX),
+            clampVolumePercent(
+                inputLevelFromGainPercent(GeneralVariables.inputGainPercent), INPUT_VOLUME_MAX,
+            ),
+        )
+    }
+    // Level when the Input Volume dialog opened: dismissing without moving the
+    // slider must not overwrite this band's saved per-band level (issue #927).
+    var inputVolumeAtOpen by remember { mutableIntStateOf(inputVolume) }
+    // A band change from this screen's picker may restore a per-band input
+    // volume (issue #927); re-read it so the row shows the restored value.
+    LaunchedEffect(bandIndexLive) {
+        inputVolume = clampVolumePercent(
+            inputLevelFromGainPercent(GeneralVariables.inputGainPercent), INPUT_VOLUME_MAX,
         )
     }
 
@@ -409,10 +427,14 @@ fun RadioAudioSettings(
             excludedBands = excludedBands,
             onDismiss = { showEnabledBands = false },
             onToggle = { waveLength, enabled ->
-                val updated = excludedBands.toMutableSet()
-                if (enabled) updated.remove(waveLength) else updated.add(waveLength)
                 // Never let the user hide every band; at least one must remain.
-                if (updated.size >= OperationBand.getAllWaveLengths().size) return@BandToggleDialog
+                val updated = OperationBand.toggleExcludedBand(
+                    OperationBand.getAllWaveLengths(), excludedBands, waveLength, enabled,
+                )
+                if (updated == null) {
+                    Toast.makeText(context, R.string.settings_enabled_bands_keep_one, Toast.LENGTH_SHORT).show()
+                    return@BandToggleDialog
+                }
                 excludedBands = updated
                 GeneralVariables.excludedBands = java.util.HashSet(updated)
                 mainViewModel.databaseOpr.writeConfig(
@@ -499,6 +521,9 @@ fun RadioAudioSettings(
             onDismiss = {
                 showInputVolume = false
                 mainViewModel.databaseOpr.writeConfig("inputVolume", inputVolume.toString(), null)
+                if (inputLevelChangedInDialog(inputVolumeAtOpen, inputVolume)) {
+                    saveInputLevelForCurrentBand(mainViewModel.databaseOpr, inputVolume)
+                }
             },
         )
     }
@@ -528,15 +553,44 @@ fun RadioAudioSettings(
                     )
                     mainViewModel.requestUsbPermissionIfNeeded(usbInfo.device)
                 } else if (deviceId != -1) {
-                    GeneralVariables.usbAudioInputVendorId = 0
-                    GeneralVariables.usbAudioInputProductId = 0
-                    mainViewModel.databaseOpr.writeConfig("usbAudioInputVid", "0", null)
-                    mainViewModel.databaseOpr.writeConfig("usbAudioInputPid", "0", null)
+                    // A framework-routed USB device (e.g. "USB-Audio - QMX
+                    // Transceiver") carries no VID:PID of its own -- find the
+                    // raw UsbDevice by product-name overlap and persist ITS
+                    // VID:PID, so a later re-enumeration (which changes the
+                    // numeric id but not the product name) can still resolve
+                    // it instead of falling back to Default.
+                    val productName = audioInputAdapter.getUsbFrameworkDeviceProductName(position)
+                    val rawUsb = productName?.let {
+                        UsbAudioDevice.matchByProductName(
+                            UsbAudioDevice.findUsbAudioDevices(context), it, true,
+                        )
+                    }
+                    if (rawUsb != null) {
+                        GeneralVariables.usbAudioInputVendorId = rawUsb.device.vendorId
+                        GeneralVariables.usbAudioInputProductId = rawUsb.device.productId
+                    } else {
+                        GeneralVariables.usbAudioInputVendorId = 0
+                        GeneralVariables.usbAudioInputProductId = 0
+                    }
+                    mainViewModel.databaseOpr.writeConfig(
+                        "usbAudioInputVid", GeneralVariables.usbAudioInputVendorId.toString(), null,
+                    )
+                    mainViewModel.databaseOpr.writeConfig(
+                        "usbAudioInputPid", GeneralVariables.usbAudioInputProductId.toString(), null,
+                    )
                 }
                 audioInputName = audioInputAdapter.getDeviceDisplayName(position)
                 audioInputChannels = selectedDeviceMaxChannels(
                     context, deviceId, AudioManager.GET_DEVICES_INPUTS,
                 )
+                // The live MicRecorder only reads audioInputDeviceId at construction
+                // time (openAudioRecord()'s setPreferredDevice / openUsbAudioInput()),
+                // so without this the newly-picked device is persisted but the running
+                // capture keeps using whatever it opened with — silently, with no error
+                // — until the next USB attach/detach or app restart happens to reopen
+                // it. Mirrors the RX-channel-change and SCO-connect paths, which already
+                // reopen for the same reason.
+                mainViewModel.reinitializeAudioInput()
                 // Selecting a Bluetooth-SCO mic must actually bring SCO up (issue #723);
                 // deselecting it releases SCO unless a Bluetooth rig still needs it.
                 mainViewModel.refreshBluetoothHeadsetMode()
@@ -569,10 +623,26 @@ fun RadioAudioSettings(
                     )
                     mainViewModel.requestUsbPermissionIfNeeded(usbInfo.device)
                 } else if (deviceId != -1) {
-                    GeneralVariables.usbAudioOutputVendorId = 0
-                    GeneralVariables.usbAudioOutputProductId = 0
-                    mainViewModel.databaseOpr.writeConfig("usbAudioOutputVid", "0", null)
-                    mainViewModel.databaseOpr.writeConfig("usbAudioOutputPid", "0", null)
+                    // Same reasoning as the input picker above.
+                    val productName = audioOutputAdapter.getUsbFrameworkDeviceProductName(position)
+                    val rawUsb = productName?.let {
+                        UsbAudioDevice.matchByProductName(
+                            UsbAudioDevice.findUsbAudioDevices(context), it, false,
+                        )
+                    }
+                    if (rawUsb != null) {
+                        GeneralVariables.usbAudioOutputVendorId = rawUsb.device.vendorId
+                        GeneralVariables.usbAudioOutputProductId = rawUsb.device.productId
+                    } else {
+                        GeneralVariables.usbAudioOutputVendorId = 0
+                        GeneralVariables.usbAudioOutputProductId = 0
+                    }
+                    mainViewModel.databaseOpr.writeConfig(
+                        "usbAudioOutputVid", GeneralVariables.usbAudioOutputVendorId.toString(), null,
+                    )
+                    mainViewModel.databaseOpr.writeConfig(
+                        "usbAudioOutputPid", GeneralVariables.usbAudioOutputProductId.toString(), null,
+                    )
                 }
                 audioOutputName = audioOutputAdapter.getDeviceDisplayName(position)
                 audioOutputChannels = selectedDeviceMaxChannels(
@@ -630,12 +700,12 @@ fun RadioAudioSettings(
                     )
                     SectionDivider()
                     run {
-                        val total = OperationBand.getAllWaveLengths().size
+                        val waveLengths = OperationBand.getAllWaveLengths()
                         SettingsRow(
                             label = stringResource(R.string.settings_enabled_bands),
                             value = stringResource(
                                 R.string.settings_bands_enabled_format,
-                                total - excludedBands.size, total,
+                                OperationBand.countEnabledBands(waveLengths, excludedBands), waveLengths.size,
                             ),
                             showChevron = true,
                             onClick = { showEnabledBands = true },
@@ -690,7 +760,10 @@ fun RadioAudioSettings(
                         description = stringResource(R.string.settings_input_volume_desc),
                         value = stringResource(R.string.settings_percent_format, inputVolume),
                         showChevron = true,
-                        onClick = { showInputVolume = true },
+                        onClick = {
+                            inputVolumeAtOpen = inputVolume
+                            showInputVolume = true
+                        },
                     )
                     SectionDivider()
                     run {
@@ -701,7 +774,7 @@ fun RadioAudioSettings(
                             micSource = mainViewModel.hamRecorder?.isMicSource() ?: true,
                             maxChannels = audioInputChannels,
                         )
-                        AudioChannelSelectRow(
+                        SegmentedSelectRow(
                             label = stringResource(R.string.settings_rx_channel),
                             description = stringResource(R.string.settings_rx_channel_desc),
                             optionLabels = listOf(
@@ -748,7 +821,7 @@ fun RadioAudioSettings(
                             deviceId = GeneralVariables.audioOutputDeviceId,
                             maxChannels = audioOutputChannels,
                         )
-                        AudioChannelSelectRow(
+                        SegmentedSelectRow(
                             label = stringResource(R.string.settings_tx_channel),
                             description = stringResource(R.string.settings_tx_channel_desc),
                             optionLabels = listOf(
@@ -779,6 +852,24 @@ fun RadioAudioSettings(
                                 // Nothing to reopen here, unlike RX: both TX paths
                                 // read the selection when the next transmission
                                 // builds its output, so the change lands next over.
+                            },
+                        )
+                    }
+                    SectionDivider()
+                    run {
+                        var qmxCatTones by remember {
+                            mutableStateOf(GeneralVariables.qmxCatTones)
+                        }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_qmx_cat_tones),
+                            description = stringResource(R.string.settings_qmx_cat_tones_desc),
+                            toggle = qmxCatTones,
+                            onToggleChange = { enabled ->
+                                qmxCatTones = enabled
+                                GeneralVariables.qmxCatTones = enabled
+                                mainViewModel.databaseOpr.writeConfig(
+                                    QmxCatTones.CONFIG_KEY, if (enabled) "1" else "0", null,
+                                )
                             },
                         )
                     }
@@ -869,6 +960,31 @@ fun RadioAudioSettings(
                             },
                         )
                     }
+                    SectionDivider()
+                    run {
+                        var perBandInput by remember {
+                            mutableStateOf(GeneralVariables.savePerBandInputLevel)
+                        }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_per_band_input_volume),
+                            description = stringResource(R.string.settings_per_band_input_volume_desc),
+                            toggle = perBandInput,
+                            onToggleChange = { enabled ->
+                                perBandInput = enabled
+                                GeneralVariables.savePerBandInputLevel = enabled
+                                mainViewModel.databaseOpr.writeConfig(
+                                    PER_BAND_INPUT_LEVEL_KEY, if (enabled) "1" else "0", null,
+                                )
+                                // Seed the current band, mirroring the output-level toggle.
+                                if (enabled) {
+                                    saveInputLevelForCurrentBand(
+                                        mainViewModel.databaseOpr,
+                                        inputLevelFromGainPercent(GeneralVariables.inputGainPercent),
+                                    )
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -876,7 +992,8 @@ fun RadioAudioSettings(
 }
 
 /**
- * Per-band visibility toggles. Lists every distinct band name from bands.txt;
+ * Per-band visibility toggles. Lists every distinct band name in the band plan
+ * (bands.txt plus custom dials), lowest frequency first;
  * a band that's switched off is hidden from both band pickers.
  */
 @Composable
@@ -1249,22 +1366,30 @@ private fun AudioChannelRowGate.noteRes(): Int =
     }
 
 /**
- * Audio channel selector: which side of a stereo path the app uses. Used twice —
- * once for receive (Mix / Left / Right) and once for transmit (Both / Left /
- * Right) — because a splitter cable, a dual-receiver rig, or an interface with
- * one side floating needs the two directions set independently.
+ * A segmented control for a small int-valued setting — N options (two-plus),
+ * generic over [optionLabels], not tied to audio at all despite living in
+ * this file. Reused as-is for decode depth in [AdvancedSettings] (`internal`,
+ * not `private`, for exactly that cross-file reuse). Originally built for, and
+ * still used twice for, the audio channel selector: which side of a stereo
+ * path the app uses, once for receive (Mix / Left / Right) and once for
+ * transmit (Both / Left / Right) — because a splitter cable, a dual-receiver
+ * rig, or an interface with one side floating needs the two directions set
+ * independently.
  *
- * A three-position segmented control rather than a picker dialog: the choice is
- * a quick A/B while watching the waterfall or the rig's ALC, so it stays
- * on-screen instead of behind a dialog.
+ * A segmented control rather than a picker dialog: the choice is a quick A/B
+ * while watching the waterfall or the rig's ALC, so it stays on-screen
+ * instead of behind a dialog.
  *
- * When [enabled] is false the device reports a single channel, so there is no
- * side to choose. The control greys out and shows [disabledNote] instead of the
+ * When [enabled] is false the setting doesn't apply right now (e.g. the audio
+ * channel selectors: the device reports a single channel, so there is no side
+ * to choose). The control greys out and shows [disabledNote] instead of the
  * usual description rather than disappearing — an operator looking for the
- * setting needs to see that it exists and why it does not apply here.
+ * setting needs to see that it exists and why it does not apply here. Pass an
+ * empty [disabledNote] (as decode depth does) when the control is always
+ * enabled.
  */
 @Composable
-private fun AudioChannelSelectRow(
+internal fun SegmentedSelectRow(
     label: String,
     description: String,
     optionLabels: List<Pair<Int, String>>,

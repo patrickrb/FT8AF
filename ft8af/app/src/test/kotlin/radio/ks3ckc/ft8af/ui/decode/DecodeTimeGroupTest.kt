@@ -113,4 +113,63 @@ class DecodeTimeGroupTest {
 
         assertThat(result.toList()).containsExactly(true, true).inOrder()
     }
+
+    // ---- per-slot decode counts (one on every divider) ----------------------
+
+    @Test
+    fun countDecodesPerSlot_givesEverySlotItsOwnCount() {
+        val messages = listOf(
+            msg(FT8Common.FT8_MODE, 30_000L),
+            msg(FT8Common.FT8_MODE, 31_000L),
+            msg(FT8Common.FT8_MODE, 32_000L),
+            msg(FT8Common.FT8_MODE, 45_000L),
+            msg(FT8Common.FT8_MODE, 60_000L),
+            msg(FT8Common.FT8_MODE, 61_000L),
+        )
+
+        val counts = countDecodesPerSlot(messages)
+
+        assertThat(counts[decodeSlotKey(messages[0])]).isEqualTo(3)
+        assertThat(counts[decodeSlotKey(messages[3])]).isEqualTo(1)
+        assertThat(counts[decodeSlotKey(messages[4])]).isEqualTo(2)
+        assertThat(counts).hasSize(3)
+    }
+
+    @Test
+    fun countDecodesPerSlot_olderSlotKeepsItsCountWhenItsStationsReappear() {
+        // The real-device complaint: only the newest slot showed a count. Counting
+        // over the uncollapsed list means a station heard again in a later slot
+        // still counts toward the earlier one too, so that slot's number is stable.
+        val older = listOf(
+            msg(FT8Common.FT8_MODE, 15_000L),
+            msg(FT8Common.FT8_MODE, 16_000L),
+        )
+        val newer = listOf(msg(FT8Common.FT8_MODE, 30_000L))
+
+        val before = countDecodesPerSlot(older)
+        val after = countDecodesPerSlot(older + newer)
+
+        assertThat(after[decodeSlotKey(older[0])]).isEqualTo(before[decodeSlotKey(older[0])])
+        assertThat(after[decodeSlotKey(older[0])]).isEqualTo(2)
+        assertThat(after[decodeSlotKey(newer[0])]).isEqualTo(1)
+    }
+
+    @Test
+    fun countDecodesPerSlot_keysByModeLikeTheDividers() {
+        // FT8 utc=15000 and FT4 utc=7500 share slot index 1 but are different
+        // slots (different lengths), matching modeChange_forcesDividerEvenWhenSlotIndexCoincides.
+        val ft8 = msg(FT8Common.FT8_MODE, 15_000L)
+        val ft4 = msg(FT8Common.FT4_MODE, 7_500L)
+
+        val counts = countDecodesPerSlot(listOf(ft8, ft4))
+
+        assertThat(decodeSlotKey(ft8)).isNotEqualTo(decodeSlotKey(ft4))
+        assertThat(counts[decodeSlotKey(ft8)]).isEqualTo(1)
+        assertThat(counts[decodeSlotKey(ft4)]).isEqualTo(1)
+    }
+
+    @Test
+    fun countDecodesPerSlot_emptyListHasNoCounts() {
+        assertThat(countDecodesPerSlot(emptyList())).isEmpty()
+    }
 }

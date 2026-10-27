@@ -184,17 +184,35 @@ internal fun showTimeGroupDividers(sortMode: DecodeSortMode): Boolean =
     sortMode == DecodeSortMode.LAST_HEARD
 
 /**
- * Index to auto-scroll to when the collapsed list grows, or null to leave the
- * scroll position alone. Only [DecodeSortMode.LAST_HEARD] auto-scrolls, and to
- * the top (index 0) because that mode puts the newest station first. In the
- * other modes a new station can land anywhere, so yanking the viewport would
- * fight the operator.
+ * Index to auto-scroll to when the collapsed list grows OR the operator just
+ * switched into [DecodeSortMode.LAST_HEARD], or null to leave the scroll
+ * position alone. Only [LAST_HEARD] auto-scrolls, and to the top (index 0)
+ * because that mode puts the newest station first -- and, in TIME mode
+ * specifically, is also where the newest slot's time-group divider (and its
+ * count) lives, so leaving the viewport wherever a different sort mode had
+ * it hides that divider until the operator scrolls up manually (found in
+ * real-device testing: switching DX -> TIME left the newest divider
+ * off-screen). In the other modes a new station can
+ * land anywhere, so yanking the viewport would fight the operator.
  */
 internal fun autoScrollTargetIndex(
     sortMode: DecodeSortMode,
+    previousSortMode: DecodeSortMode,
     size: Int,
     previousSize: Int,
 ): Int? {
-    if (size <= previousSize || size == 0) return null
-    return if (sortMode == DecodeSortMode.LAST_HEARD) 0 else null
+    if (sortMode != DecodeSortMode.LAST_HEARD || size == 0) return null
+    val justSwitchedToLastHeard = sortMode != previousSortMode
+    val grew = size > previousSize
+    return if (justSwitchedToLastHeard || grew) 0 else null
 }
+
+/**
+ * Whether the "N decoded" count belongs in the Decode screen's top-bar
+ * subtitle for [sortMode]. False only for [DecodeSortMode.LAST_HEARD],
+ * where every time-group divider carries its own slot's count instead (see
+ * `countDecodesPerSlot`) -- the per-slot time dividers only exist in that
+ * mode (see [showTimeGroupDividers]).
+ */
+internal fun showDecodedCountInSubtitle(sortMode: DecodeSortMode): Boolean =
+    sortMode != DecodeSortMode.LAST_HEARD

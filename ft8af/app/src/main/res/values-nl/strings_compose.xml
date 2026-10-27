@@ -139,6 +139,7 @@
     <string name="qsopanel_qsoing_with">QSO met %1$s</string>
     <string name="qsopanel_waiting_for">Wachten op %1$s</string>
     <string name="qsopanel_tap_to_view">tik om te bekijken ↗</string>
+    <string name="qsopanel_sent_report">verzonden %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Wachten op berichten...</string>
     <string name="qsopanel_log_action">LOGGEN</string>
@@ -240,6 +241,8 @@
     <string name="log_sync_enable_services">Schakel Cloudlog/Wavelog/Nextlog, QRZ of World Radio League in bij Instellingen en probeer het opnieuw.</string>
     <string name="log_sync_progress_count">%1$d van %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d geaccepteerd</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d al in logboek</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d gedownload</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d geaccepteerd</string>
     <string name="log_sync_nothing_to_upload">Nog geen QSOs in het logboek om te uploaden.</string>
     <string name="log_sync_working">Bezig…</string>
@@ -496,6 +499,9 @@
     <string name="settings_qrz_profile_lookup_desc">Gebruikersnaam + wachtwoord voor QRZ XML API (avatars)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">QSO\'s automatisch uploaden naar een Cloudlog-, Wavelog- of Nextlog-instantie</string>
+    <string name="settings_cloudlog_download">QSO\'s van Wavelog downloaden bij synchroniseren</string>
+    <string name="settings_cloudlog_download_desc">Synchroniseren voegt ook QSO\'s toe die in je Wavelog-logboek staan maar niet in dit logboek. Ze worden niet doorgestuurd naar QRZ of World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">Vereist Wavelog: deze server kan zijn QSO\'s niet opsommen.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">PTT-vertraging</string>
@@ -558,6 +564,7 @@
     <string name="settings_username_hint">Je QRZ.com-gebruikersnaam</string>
     <string name="settings_password">Wachtwoord</string>
     <string name="settings_enabled_bands_dialog_desc">Verborgen banden verschijnen niet in de frequentiekiezers.</string>
+    <string name="settings_enabled_bands_keep_one">Er moet minstens één band ingeschakeld blijven.</string>
     <string name="settings_select_serial_port">Seriële poort selecteren</string>
     <string name="settings_tx_volume_advice">Pas live aan — je volgende TX gebruikt dit niveau. Houd de ALC van je radio in de gaten en draai terug tot deze net de lijn raakt.</string>
     <string name="settings_input_volume">Ingangsvolume</string>
@@ -584,6 +591,8 @@
     <string name="cq_offset_moved">CQ-offset verplaatst naar een vrije plek: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Automatisch vrije TX-offset</string>
     <string name="settings_auto_clear_tx_desc">Kiest bij het roepen van CQ een vrije plek op basis van recente bandactiviteit en wijkt uit als die bezet raakt</string>
+    <string name="settings_auto_clear_tx_min">Laagste automatische offset</string>
+    <string name="settings_auto_clear_tx_min_desc">Automatisch kiezen gaat nooit onder deze offset. Verhoog hem om audioharmonischen buiten de doorlaatband te houden</string>
     <string name="tune_content_description">Tune: start de tuner van de radio of zendt een continue draaggolf uit voor antenne-afstemming</string>
     <string name="tune_stopped_timeout">Tune gestopt na %1$d s</string>
     <string name="tune_blocked_tx">Stop de CQ/QSO voordat je Tune gebruikt</string>

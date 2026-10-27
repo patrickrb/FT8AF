@@ -68,6 +68,67 @@ Remove the worktree when the branch is merged: `git worktree remove <path>`.
 When nothing else is in flight in your checkout, a feature branch in place is
 fine, but a worktree per task is still the recommended default.
 
+### Branch names
+
+`<type>/<short-slug>`, where `<type>` is `feat`, `fix`, `chore`, or `docs`
+(e.g. `fix/civ-address-hex`). When the work comes from a tracked task, put its
+id first in the slug, e.g. `fix/bur-12-cq-button-stuck`.
+
+### Pull requests
+
+- **Agents never merge.** Open the PR against `dev`, then stop. The maintainer
+  merges. They test on a phone only for `needs-device-test` PRs (see "Device
+  testing" below); for everything else they merge on the CI, code review, and
+  QA evidence.
+- **Fill in every section of the PR template**
+  (`.github/pull_request_template.md`): the debug APK link, a 3-6 step
+  manual test checklist with expected results, what changed, risks, and what was
+  tested automatically.
+- **The debug APK comes from CI.** For any PR that touches `ft8af/**`,
+  `.github/workflows/pr-debug-apk.yml` builds `FT8AF-pr<N>-<sha>-debug.apk`
+  and posts (or updates) one "Debug APK" comment on the PR with the download
+  link. Before you hand off, wait for that comment and link it in the
+  description. If the job fails, the PR isn't ready. PRs that don't touch
+  `ft8af/**` get no debug APK; write "n/a" in that section. On fork PRs the
+  job builds the APK but can't comment (read-only token), so link the
+  artifact from the run's summary page instead.
+- **CI must be green.** That means `android-gate` (unit tests and the release
+  build) plus, on PRs that touch `ft8af/**`, `Debug APK for manual testing`.
+- **Get a code review before QA.** Once CI is green, request a Copilot review
+  first. If Copilot doesn't respond (it can run out of credits), run Claude's
+  `code-review` skill on the PR instead. Address or answer every finding before
+  handing off to QA, and fill in the "Code review" section of the template
+  with the reviewer you used.
+- **Label PRs that come from Discord feedback** with `from-discord`, and link
+  the Discord message or the tracking task in "What changed".
+- **QA attaches evidence.** After code review, QA installs the debug APK on an
+  emulator, runs the PR's manual test checklist, and posts screenshots or a
+  short screen recording to the PR. A PR without that evidence isn't ready
+  for the maintainer.
+
+### Device testing
+
+The maintainer doesn't install every PR's APK. Device testing happens once per
+release batch, on the Play internal build that `staging` produces, which holds
+every PR merged into `dev` since the last batch. Per-PR device testing is only
+for changes an emulator can't check. Label those PRs `needs-device-test`:
+
+- transmit, PTT, or anything that keys the radio
+- CAT / rig control (CI-V, Hamlib, FlexRadio, etc.)
+- USB audio or USB serial
+- audio routing, input/output device selection, or sample-rate handling
+- runtime permissions, or what's declared in `AndroidManifest.xml`
+- signing, build types, `versionCode`, or other release config
+
+The author applies the label and says why in the template's "Device test"
+section. QA checks the label against the diff and adds it if it's missing.
+When in doubt, add it. Everything else (UI, decode/display logic, settings,
+CI, docs) merges on CI + code review + QA evidence.
+
+`from-discord` fixes are confirmed by the reporter: once the fix reaches a Play
+testing track, `discord-play-track-watch` posts to Discord and the reporter
+checks it on their own setup.
+
 ## Testing
 
 **Every new code path requires a new test.** Any branch, helper, or behavior
@@ -108,6 +169,27 @@ export JAVA_HOME=<jdk17-home>
 # or a single class:
 ./gradlew testDebugUnitTest --tests <fully.qualified.ClassName>
 ```
+
+### Android emulator flows
+
+`ft8af/app/src/androidTest/kotlin/com/k1af/ft8af/flows/` holds scripted UI
+flows that run the real app on the CI emulator (the `Instrumented tests
+(emulator)` job): launch, band change, decoding a recorded FT8 WAV from
+`src/main/cpp/ft8af_glue/testdata/ft8`, and a setting surviving an activity
+restart. Each flow saves a screenshot of the screen it ended on; the job uploads
+them as the `emulator-flows` artifact (plus `logcat.txt` when it fails), so a
+PR's UI can be checked without a phone. When you change a screen one of these
+flows walks through, update the flow in the same PR.
+
+Run them locally against an **emulator only** from the `ft8af` dir with
+`./gradlew connectedDebugAndroidTest` (Windows:
+`cmd.exe /c "gradlew.bat connectedDebugAndroidTest"`). Don't run it with your
+own phone attached: the task uninstalls the app at the end (wiping its logbook
+and settings), and the flows drive live state (band, operator identity, and a
+recorded slot through the real decode pipeline, which can spot to PSKReporter
+or start the auto-sequencer). On a physical device the flows skip themselves,
+but the uninstall still happens. The screenshots land on the device in
+`/data/local/tmp/ft8af-flows/`.
 
 ### iOS (`ios/`, macOS only)
 
@@ -278,3 +360,56 @@ interface (that runs the real `usb_audio_disconnect`). A genuine bus drop
 looks different: `usbDetach` for the hub, serial and audio devices together
 and `serial.send: port not open!` — that one is electrical (RF resetting the
 hub), not software.
+
+**5. On at least one phone's USB-audio HAL, RX capture and TX playback
+cannot share one USB rig at the same time.** Opening TX's `AudioTrack` while
+`MicRecorder`'s RX `AudioRecord` is still open on the same USB device fails
+at the ALSA proxy level, and every subsequent write is then silently
+dropped — the generated waveform can be full-scale all the way to
+`AudioTrack.write()` and still never reach the rig, with no exception and no
+error surfaced to the app. Tell from log (vendor tags, MediaTek-specific
+spelling, but the pattern generalizes): `AudioALSAPlaybackHandlerUsb: open(),
+proxy_open fail, ret -12` right after `alsa_device_proxy: proxy_open()
+pcm_is_ready() failed: cannot set hw params: I/O error`, then
+`AudioALSAPlaybackHandlerUsb: write(), mPcm is NULL!` repeated once per
+buffer for the rest of the transmission (thousands of lines on a 13 s over).
+Correlates exactly with whether `AudioALSACaptureHandlerUsb` is open at that
+moment — a reference app (QFT8) that drives the same radio to full output
+runs strictly half-duplex: it closes its USB capture, plays, then reopens
+capture, and its opens never fail. Fixed by doing the same thing around
+every "over"/TUNE key-down: `MainViewModel`'s shared `beginKeying()`/
+`endKeying()` (already the single choke point for PTT and SCO around TX, see
+items above) now calls `HamRecorder.pauseForTx()`/`resumeAfterTx()`, gated by
+`MainViewModel.shouldPauseRxCaptureForTx()`: only for the QRP Labs QMX, and
+only when RX is actually an Android capture session (not a LAN rig, not
+already USB-direct) on the *same* USB VID:PID as TX's output. USB-direct TX
+output pauses too: with the HAL's capture still open on the same rig, every
+libusb iso submit failed with `LIBUSB_ERROR_IO`. Keep the QMX gate: a
+matching VID:PID alone is true for every single-cable USB rig (IC-7300,
+IC-705, IC-9700, FT-991A, Digirig, SignaLink...), and pausing RX there blanks
+the waterfall during TX and breaks full-duplex satellite monitoring for a HAL
+conflict that was only ever confirmed with a QMX. Widen it only on a
+confirmed report from another rig. Pauses nest (a tune carrier and an over
+can overlap), so `HamRecorder` counts them, and `MicRecorder.stopRecord()`
+joins the old reader thread so a quick resume can't leave two readers on one
+`AudioRecord`.
+
+**6. Some phones can't drive the QMX hard enough over audio at all; use CAT
+tones.** On a motorola edge 2022 the QMX's input meter read 1–2 bars (it
+needs 3 to transmit) with FT8AF's waveform at full scale. `dumpsys
+media.audio_flinger` showed why: the TX track at -6 dB with an OEM Dolby
+"Music Listener" effect on its session, at media volume 15/15, neither
+user-switchable (the Dolby settings app was disabled on that phone). A
+LoudnessEnhancer boost and even disabling the Dolby effect on our own
+session (it can be done via AudioEffect's hidden constructor) did not reach
+3 bars. What works is the QMX's own `TA` CAT command (firmware 1.04 CAT
+manual): in Digi mode `TAnnnn.nn;` transmits a carrier at dial + that audio
+frequency, the first TA after `TX;` keys down with a shaped envelope, and
+`TA0;` keys up. Sending one TA per symbol on the symbol clock gives exact
+FSK with no audio path. That is how another Android FT8 app drives the same
+radio at full power (its logcat: "QMX CAT TA in DIGI ... (no audio to the
+radio)"). FT8AF does this when Settings > Radio & Audio > "QMX: Send Tones
+over CAT" is on (`QmxCatTones`, `FT8TransmitSignal.playViaQmxCatTones`).
+Symbol timing measured 0.3 ms worst-case on that phone. USB-direct TX output
+is no substitute: it detaches the kernel audio driver, so Android's RX
+capture is gone until a replug.

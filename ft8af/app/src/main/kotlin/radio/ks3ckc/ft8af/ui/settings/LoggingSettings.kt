@@ -72,6 +72,23 @@ fun LoggingSettings(
     var qrzXmlPass by remember { mutableStateOf(GeneralVariables.qrzXmlPassword.orEmpty()) }
     var qrzApiKey by remember { mutableStateOf(GeneralVariables.qrzApiKey.orEmpty()) }
     var cloudlogAddress by remember { mutableStateOf(GeneralVariables.cloudlogServerAddress.orEmpty()) }
+    var cloudlogDownloadQsos by remember { mutableStateOf(GeneralVariables.cloudlogDownloadQsos) }
+    // Whether the server can list its QSOs, which the download needs (issue #965): null
+    // until known. Re-checked when Cloudlog is switched on or its settings are saved.
+    var cloudlogCanList by remember { mutableStateOf<Boolean?>(null) }
+    var cloudlogSettingsVersion by remember { mutableStateOf(0) }
+    LaunchedEffect(enableCloudlog, cloudlogSettingsVersion) {
+        cloudlogCanList = null
+        if (enableCloudlog) {
+            cloudlogCanList = withContext(Dispatchers.IO) {
+                try {
+                    ThirdPartyService.cloudlogCanListQsos()
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+    }
     // WSJT-X UDP interface (GridTracker / JTAlert / N1MM / Log4OM interop).
     var udpEnabled by remember { mutableStateOf(GeneralVariables.udpEnabled) }
     var udpAccept by remember { mutableStateOf(GeneralVariables.udpAcceptRequests) }
@@ -151,6 +168,7 @@ fun LoggingSettings(
                 GeneralVariables.cloudlogApiKey = apiKey
                 GeneralVariables.cloudlogStationID = stationId
                 cloudlogAddress = address
+                cloudlogSettingsVersion++
                 mainViewModel.databaseOpr.writeConfig("cloudlogServerAddress", address, null)
                 mainViewModel.databaseOpr.writeConfig("cloudlogApiKey", apiKey, null)
                 mainViewModel.databaseOpr.writeConfig("cloudlogStationID", stationId, null)
@@ -282,6 +300,26 @@ fun LoggingSettings(
                         showChevron = true,
                         onClick = { showCloudlog = true },
                     )
+                    if (enableCloudlog) {
+                        SectionDivider()
+                        SettingsRow(
+                            label = stringResource(R.string.settings_cloudlog_download),
+                            description = if (cloudlogDownloadUnsupported(cloudlogCanList)) {
+                                stringResource(R.string.settings_cloudlog_download_unsupported)
+                            } else {
+                                stringResource(R.string.settings_cloudlog_download_desc)
+                            },
+                            toggle = cloudlogDownloadQsos,
+                            onToggleChange = { checked ->
+                                cloudlogDownloadQsos = checked
+                                GeneralVariables.cloudlogDownloadQsos = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "cloudlogDownloadQsos", if (checked) "1" else "0", null,
+                                )
+                            },
+                            enabled = cloudlogDownloadToggleEnabled(cloudlogCanList, cloudlogDownloadQsos),
+                        )
+                    }
                     SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_wrl),
@@ -423,6 +461,8 @@ private fun CloudlogSettingsDialog(
     var addressInput by remember { mutableStateOf(TextFieldValue(initialAddress)) }
     var apiKeyInput by remember { mutableStateOf(TextFieldValue(initialApiKey)) }
     var stationIdInput by remember { mutableStateOf(TextFieldValue(initialStationId)) }
+    // A value saved before #926 may be a callsign or name; flag it and block Save until fixed.
+    val stationIdValid = isValidStationLocationId(stationIdInput.text)
 
     // Test connection state: null = idle, true = pass, false = fail
     var testResult by remember { mutableStateOf<Boolean?>(null) }
@@ -557,6 +597,14 @@ private fun CloudlogSettingsDialog(
                             .clickable { showStationPicker = true }
                             .padding(12.dp),
                     )
+                    if (!stationIdValid) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.settings_station_id_invalid),
+                            color = StatusBad,
+                            fontSize = 12.sp,
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.settings_enter_manually),
@@ -569,10 +617,17 @@ private fun CloudlogSettingsDialog(
                 // Manual entry mode
                 OutlinedTextField(
                     value = stationIdInput,
-                    onValueChange = { stationIdInput = it },
+                    onValueChange = { stationIdInput = filterStationLocationIdInput(stationIdInput, it) },
                     label = { Text(stringResource(R.string.settings_station_id)) },
                     placeholder = { Text(stringResource(R.string.settings_station_id_hint), color = TextFaint) },
+                    isError = !stationIdValid,
+                    supportingText = if (stationIdValid) {
+                        null
+                    } else {
+                        { Text(stringResource(R.string.settings_station_id_invalid)) }
+                    },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     colors = fieldColors,
                     textStyle = TextStyle(fontSize = 14.sp),
                     modifier = Modifier.fillMaxWidth(),
@@ -666,6 +721,21 @@ private fun CloudlogSettingsDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
+            // A passing test says nothing about the Station ID, and Wavelog rejects every
+            // QSO whose station isn't the key owner's. Once the server has answered, warn
+            // when the entered ID is blank (certain failure) or not in the list it returned
+            // for this key (advisory: the list can be scoped to the active logbook).
+            val serverAnswered = testResult == true || stationList.isNotEmpty()
+            val stationWarning = stationIdWarning(checkStationId(stationIdInput.text, stationList))
+            if (serverAnswered && stationWarning != null) {
+                Text(
+                    text = stringResource(stationWarning.messageRes, stationIdInput.text.trim()),
+                    color = if (stationWarning.advisory) StatusWarn else StatusBad,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -683,8 +753,13 @@ private fun CloudlogSettingsDialog(
                             stationIdInput.text.trim(),
                         )
                     },
+                    enabled = stationIdValid,
                 ) {
-                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.action_save),
+                        color = if (stationIdValid) Accent else TextFaint,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }
@@ -706,6 +781,80 @@ private fun CloudlogSettingsDialog(
         )
     }
 }
+
+/**
+ * Cloudlog/Wavelog Station Location ID (`station_profile_id`): a whole number >= 0, or blank
+ * while not set yet. A callsign or station name here makes every upload fail ("0 accepted", #926).
+ */
+internal fun isValidStationLocationId(id: String): Boolean = id.trim().all { it in '0'..'9' }
+
+/** Strips everything but ASCII digits; `Char.isDigit` would also let through non-ASCII digits. */
+internal fun filterStationLocationId(input: String): String = input.filter { it in '0'..'9' }
+
+/**
+ * True when an edit to an invalid saved value (e.g. a callsign stored before #926) should drop the
+ * old text. Stripping "K1AF" to "1" would quietly point uploads at another station location.
+ */
+internal fun shouldClearStationLocationId(previous: String, edited: String): Boolean =
+    edited != previous && !isValidStationLocationId(previous) && !isValidStationLocationId(edited)
+
+/**
+ * The text an edit put in, found by trimming what [previous] and [edited] share at both ends:
+ * "3" for "K1AF" -> "K1AF3", the whole paste for a select-all paste, "" for a backspace.
+ */
+internal fun insertedText(previous: String, edited: String): String {
+    var start = 0
+    while (start < previous.length && start < edited.length && previous[start] == edited[start]) start++
+    var end = 0
+    while (end < previous.length - start && end < edited.length - start &&
+        previous[previous.length - 1 - end] == edited[edited.length - 1 - end]
+    ) {
+        end++
+    }
+    return edited.substring(start, edited.length - end)
+}
+
+/**
+ * [filterStationLocationId] for one edit. An invalid saved value is dropped instead of salvaged,
+ * but digits the user just typed or pasted are kept, the same as in an empty field. Unchanged text
+ * (e.g. a restored view firing its watcher) is left alone, never stripped.
+ */
+internal fun cleanStationLocationIdEdit(previous: String, edited: String): String = when {
+    edited == previous -> edited
+    shouldClearStationLocationId(previous, edited) -> filterStationLocationId(insertedText(previous, edited))
+    else -> filterStationLocationId(edited)
+}
+
+/**
+ * [cleanStationLocationIdEdit] for the manual-entry field, keeping the cursor after the same
+ * digit it followed, so a paste like "ID 12" lands as "12" with the cursor at the end.
+ */
+internal fun filterStationLocationIdInput(previous: TextFieldValue, value: TextFieldValue): TextFieldValue {
+    if (value.text == previous.text) return value
+    val cleaned = cleanStationLocationIdEdit(previous.text, value.text)
+    if (cleaned == value.text) return value
+    val cursor = if (shouldClearStationLocationId(previous.text, value.text)) {
+        cleaned.length
+    } else {
+        filterStationLocationId(value.text.take(value.selection.end)).length
+    }
+    return TextFieldValue(cleaned, TextRange(cursor))
+}
+
+/**
+ * Whether to grey out "Download QSOs from Wavelog when syncing": only once the server is known
+ * to have no QSO listing (plain Cloudlog). While unknown (offline, still checking) it stays
+ * usable, since a sync against such a server just skips the download.
+ */
+internal fun cloudlogDownloadUnsupported(canList: Boolean?): Boolean = canList == false
+
+/**
+ * Whether the toggle can be changed. Greyed out on a server with no QSO listing, except while
+ * it is still on (switched on before the check finished, or before the server changed), so it
+ * can always be turned off.
+ */
+internal fun cloudlogDownloadToggleEnabled(canList: Boolean?, on: Boolean): Boolean =
+    on || !cloudlogDownloadUnsupported(canList)
 
 /** Label for the chosen WRL logbook. A blank id is the account default; an id no longer listed shows raw. */
 internal fun wrlLogbookSelectionLabel(

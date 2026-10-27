@@ -170,6 +170,10 @@ android {
         androidTest {
             java.srcDirs = ['src/androidTest/java']
             kotlin.srcDirs = ['src/androidTest/kotlin']
+            // DecodeWavFlowTest replays the native decoder's recorded FT8 slots
+            // (and their jt9 reference .txt files). Packaged into the test APK
+            // only; the app APK never sees them.
+            assets.srcDirs = ['src/main/cpp/ft8af_glue/testdata/ft8']
         }
     }
     namespace 'com.k1af.ft8af'

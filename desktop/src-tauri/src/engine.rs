@@ -6,7 +6,7 @@
 
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -26,15 +26,19 @@ const PTT_DELAY_MS: u64 = 100;
 // waveform (plus the PTT lead) land before the next slot boundary. Start later
 // than this and the leading Costas array gets clipped — audible but undecodable.
 const TX_LATEST_MS: i64 = TX_SLACK_MS - PTT_DELAY_MS as i64;
-// Point in the (rx-corrected) cycle at which we hand the slot to the decoder.
+// Point in the UTC cycle at which we hand the slot to the decoder.
 // The FT8 waveform is complete at 12.64 s, so decoding ~0.6 s later returns
 // results around the 15 s boundary even on a slow CPU — early enough that the
 // operator's reply lands in the very next slot instead of skipping a cycle.
-// The rx-offset calibration aligns this clock to the real signal timing, and
-// any positive capture latency only pushes the real trigger later (safer), so
+// Keep this anchored to UTC: shifting the trigger while copying only the
+// shifted elapsed sample count can remove the leading Costas sync block.
 // 13.2 s keeps a comfortable margin above the 12.64 s waveform end.
 const DECODE_AT_MS: i64 = 13_200;
 const DEFAULT_TX_AUDIO_HZ: i32 = 1_500;
+/// How often a rig that drops CAT PTT on its own (the Xiegu G106 releases after
+/// ~2 s) gets its PTT-on frame refreshed while keyed. Measured on a monotonic
+/// clock so an NTP correction mid-over can't stall it past the rig's timeout.
+const PTT_KEEPALIVE_INTERVAL: Duration = Duration::from_millis(1_000);
 // Usable TX audio-offset passband (Hz). Real FT8 audio tones live well inside
 // this; both the base-freq setter and an inbound WSJT-X Reply's requested `df`
 // validate against it.
@@ -179,13 +183,10 @@ fn rms_dbfs(samples: &[f32]) -> f32 {
     (20.0 * (rms.max(1e-12)).log10()).max(-120.0) as f32
 }
 
-/// True once per cycle, on the first waterfall row at/after a 15 s boundary on
-/// the rx-corrected clock, advancing `last_slot`. The live waterfall draws audio
-/// on real time while the decoder measures DT on the rx-corrected clock (shifted
-/// by capture latency), so the spectrum reads ahead of the DT; marking the cycle
-/// grid on the corrected clock gives both the same time reference.
-fn wf_boundary_row(corrected_now_ms: i64, last_slot: &mut i64) -> bool {
-    let slot = corrected_now_ms.div_euclid(CYCLE_MS);
+/// True once per cycle, on the first waterfall row at/after a UTC 15 s boundary,
+/// advancing `last_slot`. The decoder and waterfall use this same fixed clock.
+fn wf_boundary_row(now_ms: i64, last_slot: &mut i64) -> bool {
+    let slot = now_ms.div_euclid(CYCLE_MS);
     if slot != *last_slot {
         *last_slot = slot;
         true
@@ -306,7 +307,7 @@ pub struct ClockSyncEvent {
     pub offset_ms: i64,
     /// true once an NTP sync has succeeded this session (or a saved offset was restored).
     pub synced: bool,
-    /// Auto-calibrated audio-capture latency compensation (ms) applied to the RX window.
+    /// Retained for IPC compatibility; always zero since unsafe RX auto-calibration was disabled.
     pub rx_offset_ms: i64,
 }
 
@@ -325,8 +326,7 @@ pub struct WaterfallFrame {
 pub struct WaterfallRow {
     pub bins: Vec<u8>,
     pub hz_per_col: f32,
-    /// True on the first row at/after a 15 s cycle boundary (on the rx-corrected
-    /// clock the decoder measures DT against). The UI draws a grid line there so
+    /// True on the first row at/after a UTC 15 s cycle boundary. The UI draws a grid line there so
     /// the spectrum lines up with decode DT instead of reading ahead of it.
     pub boundary: bool,
 }
@@ -409,7 +409,7 @@ struct Engine {
     tx_gain: f32,
     /// RX input gain (0.0–1.0), applied live inside the capture callback.
     rx_gain: f32,
-    /// Slot id (rx-corrected clock) most recently handed to the decode worker.
+    /// UTC slot id most recently handed to the decode worker.
     /// Guards the once-per-slot early decode trigger in the run loop.
     last_decoded_slot: i64,
     /// Number of decode batches handed to the worker but not yet returned. A
@@ -420,12 +420,13 @@ struct Engine {
     /// so it never keys a stale message ahead of a slow decode (the fresh one is
     /// keyed by `handle_decoded` when it arrives). See [`boundary_tx_ready`].
     pending_decodes: usize,
-    /// Audio-capture latency compensation (ms). The RX decode window is sliced
-    /// this much later than the UTC cycle boundary so that buffered/late-arriving
-    /// input audio lands aligned — drives decoded DT toward 0. Auto-calibrated
-    /// from the median DT of each slot's decodes; persisted across sessions.
+    /// Retained for event compatibility. This is fixed at zero: adjusting the
+    /// receive clock after a decode can remove the next slot's leading sync block.
     rx_offset_ms: i64,
     last_tick_ms: i64,
+    /// Monotonic time the PTT-on frame was last sent (None while unkeyed).
+    /// Drives the CAT PTT keepalive independently of the NTP-corrected clock.
+    last_ptt_on_sent: Option<Instant>,
     tx_parity: Option<i64>,
     clock_offset_ms: i64,
     time_synced: bool,
@@ -439,11 +440,23 @@ struct Engine {
     tx_playback: Option<output::PreparedTx>,
     // live waterfall FFT (plan + window table + floor state; rebuilt on config change)
     wf: WfProcessor,
-    last_wf_slot: i64, // last cycle slot marked on the live waterfall (rx-corrected)
+    last_wf_slot: i64, // last UTC cycle slot marked on the live waterfall
     /// WSJT-X UDP interface (outbound broadcast + inbound request listener).
     udp: crate::udp::UdpService,
     /// UTC ms of the last UDP Heartbeat sent (rate-limits it to ~15 s).
     last_udp_heartbeat_ms: i64,
+}
+
+/// Whether the keepalive should resend PTT-on now. `since_last_on` is the
+/// monotonic time since the last PTT-on frame (None = never sent this over).
+fn should_refresh_ptt(
+    ptt_on: bool,
+    rig_requires_keepalive: bool,
+    since_last_on: Option<Duration>,
+) -> bool {
+    ptt_on
+        && rig_requires_keepalive
+        && since_last_on.map_or(true, |d| d >= PTT_KEEPALIVE_INTERVAL)
 }
 
 impl Engine {
@@ -474,10 +487,12 @@ impl Engine {
         // Restore the last NTP offset so DT is roughly right immediately, before
         // the first fresh sync of this session lands. Treated as already-synced.
         let saved_offset: Option<i64> = db.get_config("clock_offset_ms").and_then(|s| s.parse().ok());
-        let rx_offset_ms: i64 = db
-            .get_config("rx_offset_ms")
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(0);
+        // Versions through 0.1.1 persisted an auto-calibrated RX offset. Applying
+        // that offset changes which samples are treated as the slot start and can
+        // remove the leading Costas sync block. Clear every legacy value and keep
+        // receive windows anchored to UTC.
+        let rx_offset_ms = 0;
+        let _ = db.set_config("rx_offset_ms", "0");
         let mut qso = QsoEngine::new(my_call, my_grid);
         qso.band = bands::band_for_freq_hz(dial_hz).to_string();
         qso.freq_mhz = bands::freq_mhz_string(dial_hz);
@@ -541,6 +556,7 @@ impl Engine {
             pending_decodes: 0,
             rx_offset_ms,
             last_tick_ms: 0,
+            last_ptt_on_sent: None,
             tx_parity: None,
             clock_offset_ms: saved_offset.unwrap_or(0),
             time_synced: saved_offset.is_some(),
@@ -635,15 +651,19 @@ impl Engine {
                 }
             }
 
-            // Decode runs on a clock shifted later by the capture-latency
-            // compensation, so the sliced slot aligns with the audio that has
-            // actually arrived in the buffer (UTC display + TX still use real `now`).
+            // CAT PTT keepalive (G106). Checked every loop pass against a
+            // monotonic clock, not on the 1 Hz UI tick, which runs on the
+            // NTP-corrected clock and can stall when the offset steps backwards.
+            self.refresh_ptt_keepalive();
+
+            // Decode stays anchored to the UTC slot. Do not shift this from a
+            // decoded message's DT: doing so changes the sample chosen as the slot
+            // start and can cut off the next message's leading Costas sync block.
             // We fire once per slot as soon as the 12.64 s waveform is captured
             // (~13.2 s in) rather than at the 15 s boundary, so decodes land a slot
             // earlier and the operator can reply on the next cycle (not skip one).
-            let corrected = now - self.rx_offset_ms;
-            let rx_slot_id = corrected.div_euclid(CYCLE_MS);
-            let into_rx_cycle = corrected.rem_euclid(CYCLE_MS);
+            let rx_slot_id = now.div_euclid(CYCLE_MS);
+            let into_rx_cycle = now.rem_euclid(CYCLE_MS);
             if self.decoding && rx_slot_id != self.last_decoded_slot && into_rx_cycle >= DECODE_AT_MS
             {
                 self.last_decoded_slot = rx_slot_id;
@@ -713,41 +733,6 @@ impl Engine {
         }
     }
 
-    /// Nudge the capture-latency compensation toward zeroing the decoded DT. The
-    /// FT8 network is NTP-synced, so the *median* DT of a slot's decodes is a robust
-    /// estimate of our own systematic timing error (clock residual + audio latency).
-    /// A slow EMA keeps it from chasing noise; persisted so DT is right at next launch.
-    fn calibrate_dt(&mut self, decoded: &[DecodedMessage]) {
-        // Need a few independent decodes for the median to be meaningful.
-        const MIN_DECODES: usize = 4;
-        const ALPHA: f64 = 0.6; // correction fraction applied per slot
-        const DEADBAND_MS: i64 = 60; // ignore tiny residuals to avoid jitter
-        const MAX_OFFSET_MS: i64 = 4_000;
-        if decoded.len() < MIN_DECODES {
-            return;
-        }
-
-        let mut dts: Vec<f32> = decoded.iter().map(|m| m.time_sec).collect();
-        dts.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let median_dt_ms = (dts[dts.len() / 2] * 1000.0) as i64;
-        if median_dt_ms.abs() <= DEADBAND_MS {
-            return;
-        }
-
-        let adjusted = self.rx_offset_ms + (median_dt_ms as f64 * ALPHA).round() as i64;
-        let new_offset = adjusted.clamp(-MAX_OFFSET_MS, MAX_OFFSET_MS);
-        if new_offset == self.rx_offset_ms {
-            return;
-        }
-        self.rx_offset_ms = new_offset;
-        // No re-anchor needed: the decode trigger requires `into_rx_cycle >=
-        // DECODE_AT_MS`, and offset changes land early in the cycle (right after a
-        // decode is delivered), far below that threshold — so a shifted slot id
-        // can't spuriously re-fire the decode this cycle.
-        let _ = self.db.set_config("rx_offset_ms", &new_offset.to_string());
-        self.publish_clock_sync();
-    }
-
     /// Handle one slot's decodes (from the worker): publish them, advance the QSO
     /// state machine, then key up if it's our turn this slot. Runs once per slot
     /// (the decoder returns a batch — possibly empty — every cycle), so this is
@@ -755,7 +740,6 @@ impl Engine {
     fn handle_decoded(&mut self, decoded: Vec<DecodedMessage>, slot_id: i64) {
         self.publish_decodes(&decoded);
         self.broadcast_decodes(&decoded);
-        self.calibrate_dt(&decoded);
 
         if let Some(QsoOutcome::Completed(record)) = self.qso.process_rx(&decoded) {
             match self.db.insert_qso(&record) {
@@ -883,7 +867,33 @@ impl Engine {
             }
         }
         self.ptt = on;
+        self.last_ptt_on_sent = if on { Some(Instant::now()) } else { None };
         self.publish_rig_status();
+    }
+
+    fn refresh_ptt_keepalive(&mut self) {
+        let required = self
+            .rig
+            .as_ref()
+            .map(|rig| rig.requires_ptt_keepalive())
+            .unwrap_or(false);
+        let since_last_on = self.last_ptt_on_sent.map(|t| t.elapsed());
+        if !should_refresh_ptt(self.ptt, required, since_last_on) {
+            return;
+        }
+
+        let result = self.rig.as_mut().map(|rig| rig.set_ptt(true));
+        self.last_ptt_on_sent = Some(Instant::now());
+        if let Some(Err(e)) = result {
+            // The rig will drop PTT on its own within ~2 s, so don't keep
+            // playing audio into an unkeyed radio or re-error every second:
+            // end this over (stops playback, sends a best-effort PTT-off).
+            self.emit(EngineEvent::Error(format!("PTT keepalive failed: {e}")));
+            self.finalize_tx();
+            if self.ptt {
+                self.set_ptt(false);
+            }
+        }
     }
 
     /// Compute one windowed-FFT spectrum row from the most recent audio and emit
@@ -894,9 +904,9 @@ impl Engine {
         let Some((bins, hz_per_col)) = self.wf.process_row(&samples, SAMPLE_RATE as f32) else {
             return; // still warming up
         };
-        // Mark this row if it's the first at/after a cycle boundary on the same
-        // rx-corrected clock the decoder uses, so the grid line aligns with DT.
-        let boundary = wf_boundary_row(self.now() - self.rx_offset_ms, &mut self.last_wf_slot);
+        // Mark the first row at/after each UTC cycle boundary, matching the
+        // fixed clock used for decoder windows.
+        let boundary = wf_boundary_row(self.now(), &mut self.last_wf_slot);
         self.emit(EngineEvent::WaterfallRow(WaterfallRow { bins, hz_per_col, boundary }));
     }
 
@@ -1315,12 +1325,83 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::{
-        clamp_rx_gain, clamp_tx_gain, reply_tx_audio_hz, rms_dbfs, wf_boundary_row, Engine,
-        CYCLE_MS, DEFAULT_RX_GAIN, DEFAULT_TX_GAIN, MAX_TX_AUDIO_HZ, MIN_TX_AUDIO_HZ,
-        SILENCE_DBFS,
+        clamp_rx_gain, clamp_tx_gain, reply_tx_audio_hz, rms_dbfs, should_refresh_ptt,
+        wf_boundary_row, Engine, CYCLE_MS, DEFAULT_RX_GAIN, DEFAULT_TX_GAIN, MAX_TX_AUDIO_HZ,
+        MIN_TX_AUDIO_HZ, PTT_KEEPALIVE_INTERVAL, SILENCE_DBFS,
     };
     use crate::db::Db;
+    use crate::dsp::DecodedMessage;
     use std::sync::Arc;
+    use std::time::Duration;
+
+    #[test]
+    fn ptt_keepalive_only_runs_for_keyed_radios_that_require_it() {
+        let due = Some(PTT_KEEPALIVE_INTERVAL);
+        assert!(should_refresh_ptt(true, true, due));
+        assert!(!should_refresh_ptt(false, true, due));
+        assert!(!should_refresh_ptt(true, false, due));
+        assert!(!should_refresh_ptt(false, false, due));
+    }
+
+    #[test]
+    fn ptt_keepalive_waits_for_its_monotonic_interval() {
+        // Not yet due: the PTT-on frame went out less than the interval ago.
+        assert!(!should_refresh_ptt(true, true, Some(Duration::from_millis(400))));
+        // Due once the interval has elapsed, and well inside the G106's ~2 s release.
+        assert!(should_refresh_ptt(true, true, Some(Duration::from_millis(1_000))));
+        assert!(PTT_KEEPALIVE_INTERVAL < Duration::from_millis(2_000));
+        // Never sent this over (e.g. the initial key-up raced a reconnect): send now.
+        assert!(should_refresh_ptt(true, true, None));
+    }
+
+    #[test]
+    fn unkeying_clears_the_keepalive_timestamp() {
+        let db = Arc::new(Db::open_in_memory().expect("in-memory db"));
+        let (evt_tx, _evt_rx) = std::sync::mpsc::channel();
+        let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
+        let mut engine = Engine::new(Arc::clone(&db), evt_tx, cmd_tx);
+
+        engine.set_ptt(true);
+        assert!(engine.last_ptt_on_sent.is_some());
+        engine.set_ptt(false);
+        assert!(engine.last_ptt_on_sent.is_none());
+        // Unkeyed: the keepalive is a no-op and must not re-key.
+        engine.refresh_ptt_keepalive();
+        assert!(!engine.ptt);
+        assert!(engine.last_ptt_on_sent.is_none());
+    }
+
+    #[test]
+    fn legacy_rx_offsets_are_cleared_on_restart() {
+        for saved in ["-4000", "528"] {
+            let db = Arc::new(Db::open_in_memory().expect("in-memory db"));
+            db.set_config("rx_offset_ms", saved).expect("seed legacy offset");
+            let (evt_tx, _evt_rx) = std::sync::mpsc::channel();
+            let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
+
+            let engine = Engine::new(Arc::clone(&db), evt_tx, cmd_tx);
+
+            assert_eq!(engine.rx_offset_ms, 0, "saved offset {saved} must be ignored");
+            assert_eq!(db.get_config("rx_offset_ms").as_deref(), Some("0"));
+        }
+    }
+
+    #[test]
+    fn decoded_dt_cannot_move_future_receive_windows() {
+        let db = Arc::new(Db::open_in_memory().expect("in-memory db"));
+        let (evt_tx, _evt_rx) = std::sync::mpsc::channel();
+        let (cmd_tx, _cmd_rx) = std::sync::mpsc::channel();
+        let mut engine = Engine::new(Arc::clone(&db), evt_tx, cmd_tx);
+        let decodes = [0.7, 0.8, 0.9, 1.0]
+            .into_iter()
+            .map(|time_sec| DecodedMessage { time_sec, ..Default::default() })
+            .collect();
+
+        engine.handle_decoded(decodes, 1);
+
+        assert_eq!(engine.rx_offset_ms, 0);
+        assert_eq!(db.get_config("rx_offset_ms").as_deref(), Some("0"));
+    }
 
     #[test]
     fn reply_df_updates_session_offset_without_persisting() {

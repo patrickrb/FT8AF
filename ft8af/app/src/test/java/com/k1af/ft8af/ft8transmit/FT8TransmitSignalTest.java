@@ -756,4 +756,34 @@ public class FT8TransmitSignalTest {
         assertThat(FT8TransmitSignal.outputMaxChannels(null))
                 .isEqualTo(com.k1af.ft8af.wave.AudioChannelCapability.UNKNOWN);
     }
+
+    // ---- performanceModeName: TX AudioTrack low-latency request outcome ----
+
+    @Test
+    public void performanceModeName_lowLatency_reportsGranted() {
+        assertThat(FT8TransmitSignal.performanceModeName(
+                android.media.AudioTrack.PERFORMANCE_MODE_LOW_LATENCY))
+                .contains("granted");
+    }
+
+    @Test
+    public void performanceModeName_none_reportsNotGranted() {
+        // A denied low-latency request fails silently otherwise (no exception,
+        // no log visible to the app) -- this is what makes that visible.
+        assertThat(FT8TransmitSignal.performanceModeName(
+                android.media.AudioTrack.PERFORMANCE_MODE_NONE))
+                .contains("NOT granted");
+    }
+
+    @Test
+    public void performanceModeName_powerSaving_isLabeled() {
+        assertThat(FT8TransmitSignal.performanceModeName(
+                android.media.AudioTrack.PERFORMANCE_MODE_POWER_SAVING))
+                .isEqualTo("POWER_SAVING");
+    }
+
+    @Test
+    public void performanceModeName_unrecognizedValue_doesNotThrow() {
+        assertThat(FT8TransmitSignal.performanceModeName(-99)).contains("-99");
+    }
 }

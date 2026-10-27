@@ -29,7 +29,6 @@ import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
-import com.k1af.ft8af.Ft8Message
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.ModeProfile
@@ -38,6 +37,8 @@ import com.k1af.ft8af.database.OperationBand
 import com.k1af.ft8af.rigs.BaseRigOperation
 import com.k1af.ft8af.timer.UtcTimer
 import radio.ks3ckc.ft8af.pota.PotaSessionManager
+import radio.ks3ckc.ft8af.ui.components.heardSnr
+import radio.ks3ckc.ft8af.ui.components.latestDecodeFrom
 import radio.ks3ckc.ft8af.ui.components.slotTimerState
 
 /**
@@ -116,7 +117,12 @@ class QsoStatusScreen(carContext: CarContext) : Screen(carContext), DefaultLifec
             isTransmitting = ts.mutableIsTransmitting.value ?: false,
             functionOrder = ts.mutableFunctionOrder.value ?: TX_FUNCTION_COUNT,
             toCallsign = toCallsign?.callsign,
-            snr = toCallsign?.snr?.takeIf { it != Ft8Message.SNR_UNKNOWN },
+            // Same heard SNR as the phone banner and QSO sheet (#953): the target's
+            // latest decode, else the SNR of its last reply to us.
+            snr = heardSnr(
+                latestDecodeFrom(vm.mutableFt8MessageList.value, toCallsign?.callsign),
+                toCallsign?.snr,
+            ),
             transmittingMessage = ts.mutableTransmittingMessage.value,
             myTxSequential = ts.mutableSequential.value ?: ts.sequential,
             currentSlot = slot.currentSlot,

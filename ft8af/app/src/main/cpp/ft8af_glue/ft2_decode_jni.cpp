@@ -36,6 +36,7 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate);
 #include "ft8_call_hash.h"
 #include "ftx_hash_store.h"
 #include "ftx_feed.h"
+#include "ft8_grid_shape.h"
 
 // ---------------------------------------------------------------------------
 // 22-bit WSJT-X callsign hash (copy of jni_ft8af.cpp's compute_n22, kept local so
@@ -162,13 +163,6 @@ static void ft2_set_string(JNIEnv* env, jobject msg, jfieldID fid, const char* s
     jstring js = env->NewStringUTF(s ? s : "");
     env->SetObjectField(msg, fid, js);
     env->DeleteLocalRef(js);
-}
-
-static bool ft2_looks_like_grid(const char* s)
-{
-    return s && strlen(s) == 4 &&
-           s[0] >= 'A' && s[0] <= 'R' && s[1] >= 'A' && s[1] <= 'R' &&
-           s[2] >= '0' && s[2] <= '9' && s[3] >= '0' && s[3] <= '9';
 }
 
 static void ft2_set_call_hashes(JNIEnv* env, jobject msg, const char* call,
@@ -371,7 +365,7 @@ FT2JNI(jboolean, DecoderFt2Analysis)(JNIEnv* env, jobject, jint idx, jlong handl
         ft2_set_string(env, ft8Message, FF.callsignTo, call_to);
         ft2_set_string(env, ft8Message, FF.callsignFrom, call_de);
         ft2_set_string(env, ft8Message, FF.extraInfo, extra);
-        if (ft2_looks_like_grid(extra))
+        if (ft8af_looks_like_grid(extra))
             ft2_set_string(env, ft8Message, FF.maidenGrid, extra);
         ft2_set_call_hashes(env, ft8Message, call_to, FF.callToHash10, FF.callToHash12, FF.callToHash22);
         ft2_set_call_hashes(env, ft8Message, call_de, FF.callFromHash10, FF.callFromHash12, FF.callFromHash22);

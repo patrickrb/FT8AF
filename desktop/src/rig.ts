@@ -7,12 +7,14 @@
 //
 //   "none"           → RigBackend "none"  — manual tuning (the default)
 //   "flrig"          → RigBackend "flrig" — network CAT via FLrig XML-RPC
+//   "g106"           → RigBackend "g106"  — direct, safety-hardened CI-V
 //   "hamlib:<model>" → RigBackend "hamlib" with hamlib_model = <model>
 //
 import type { HamlibRig, RigConfig } from "./ipc";
 
 export const RIG_NONE = "none";
 export const RIG_FLRIG = "flrig";
+export const RIG_G106 = "g106";
 const HAMLIB_PREFIX = "hamlib:";
 
 export interface RigOption {
@@ -21,14 +23,15 @@ export interface RigOption {
 }
 
 /**
- * Build the Rig dropdown options: **None** (default) and **FLrig** pinned at
- * the top, followed by every Hamlib-supported radio by name. `hamlibRigs` is
+ * Build the Rig dropdown options: **None**, **FLrig**, and the direct G106
+ * profile pinned at the top, followed by every Hamlib-supported radio by name. `hamlibRigs` is
  * already sorted case-insensitively by name by `list_hamlib_rigs()`.
  */
 export function rigOptions(hamlibRigs: HamlibRig[]): RigOption[] {
   return [
     { value: RIG_NONE, label: "None (manual tuning)" },
     { value: RIG_FLRIG, label: "FLrig" },
+    { value: RIG_G106, label: "Xiegu G106 (direct CI-V)" },
     ...hamlibRigs.map((r) => ({ value: `${HAMLIB_PREFIX}${r.model}`, label: r.name })),
   ];
 }
@@ -42,6 +45,8 @@ export function configToSelection(cfg: RigConfig): string {
   switch (cfg.backend) {
     case "flrig":
       return RIG_FLRIG;
+    case "g106":
+      return RIG_G106;
     case "hamlib":
       return `${HAMLIB_PREFIX}${cfg.hamlib_model}`;
     default:
@@ -57,6 +62,9 @@ export function configToSelection(cfg: RigConfig): string {
 export function applySelection(cfg: RigConfig, selection: string): RigConfig {
   if (selection === RIG_FLRIG) {
     return { ...cfg, backend: "flrig" };
+  }
+  if (selection === RIG_G106) {
+    return { ...cfg, backend: "g106", baud: 19200, hamlib_network: false };
   }
   if (selection.startsWith(HAMLIB_PREFIX)) {
     const model = parseInt(selection.slice(HAMLIB_PREFIX.length), 10);
@@ -76,6 +84,8 @@ export function rigName(cfg: RigConfig, hamlibRigs: HamlibRig[]): string {
   switch (cfg.backend) {
     case "flrig":
       return "FLrig";
+    case "g106":
+      return "Xiegu G106";
     case "hamlib":
       return (
         hamlibRigs.find((r) => r.model === cfg.hamlib_model)?.name ??

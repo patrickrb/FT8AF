@@ -686,6 +686,10 @@ Java_com_k1af_ft8af_wave_UsbAudioNative_nativeWrite(
     if (rc != 0 || !handle) {
         LOGE("nativeWrite: libusb_wrap_sys_device(fd=%d): %s",
              fd, libusb_error_name(rc));
+        // Every exit unpublishes before libusb_exit: a STOP after a failed
+        // write otherwise pokes the freed context (crashed the app in
+        // libusb_interrupt_event_handler).
+        g_outputCtx.store(nullptr, std::memory_order_release);
         libusb_exit(ctx);
         return rc != 0 ? rc : LIBUSB_ERROR_NO_DEVICE;
     }
@@ -696,6 +700,7 @@ Java_com_k1af_ft8af_wave_UsbAudioNative_nativeWrite(
     jbyte* pcmBytes = env->GetByteArrayElements(pcmArray, nullptr);
     if (!pcmBytes) {
         libusb_close(handle);
+        g_outputCtx.store(nullptr, std::memory_order_release);
         libusb_exit(ctx);
         return LIBUSB_ERROR_NO_MEM;
     }
@@ -764,6 +769,7 @@ Java_com_k1af_ft8af_wave_UsbAudioNative_nativeWrite(
     if (submitted == 0) {
         env->ReleaseByteArrayElements(pcmArray, pcmBytes, JNI_ABORT);
         libusb_close(handle);
+        g_outputCtx.store(nullptr, std::memory_order_release);
         libusb_exit(ctx);
         return s.firstError.load();
     }

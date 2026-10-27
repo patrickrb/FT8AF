@@ -33,3 +33,10 @@ Tauri's WiX bundler tags the MSI filename with the architecture
 attach to the same release without colliding. All the non-workflow code that
 makes the 32-bit build actually compile and bundle (`build.rs` arch selection,
 the `hamlib/x86` DLL split) ships in this PR directly.
+
+# Release version stamping
+
+`stamp-version.mjs` writes the release version that `desktop.yml` derives from the
+`desktop-v*` tags into `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`
+right before a release build. The manifests in git stay at a placeholder
+version, so don't hand-bump them in feature PRs. Tests: `npx vitest run ci/`.

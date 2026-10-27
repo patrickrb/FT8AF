@@ -139,6 +139,7 @@
     <string name="qsopanel_qsoing_with">إجراء QSO مع %1$s</string>
     <string name="qsopanel_waiting_for">في انتظار %1$s</string>
     <string name="qsopanel_tap_to_view">انقر للعرض ↗</string>
+    <string name="qsopanel_sent_report">أُرسل %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">في انتظار الرسائل...</string>
     <string name="qsopanel_log_action">تسجيل</string>
@@ -240,6 +241,8 @@
     <string name="log_sync_enable_services">فعِّل Cloudlog/Wavelog/Nextlog أو QRZ أو World Radio League في الإعدادات، ثم أعد المحاولة.</string>
     <string name="log_sync_progress_count">%1$d من %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d مقبول</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d موجود بالفعل في السجل</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: تم تنزيل %1$d</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d مقبول</string>
     <string name="log_sync_nothing_to_upload">لا QSOs في السجل للرفع بعد.</string>
     <string name="log_sync_working">جارٍ العمل…</string>
@@ -512,6 +515,9 @@
     <string name="settings_qrz_profile_lookup_desc">اسم المستخدم + كلمة المرور لواجهة QRZ XML API (الصور الرمزية)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">رفع QSOs تلقائياً إلى نسخة Cloudlog أو Wavelog أو Nextlog</string>
+    <string name="settings_cloudlog_download">تنزيل QSOs من Wavelog عند المزامنة</string>
+    <string name="settings_cloudlog_download_desc">تضيف المزامنة أيضاً QSOs الموجودة في سجل Wavelog وغير الموجودة في هذا السجل. لا تُرسل إلى QRZ أو World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">يتطلب Wavelog: هذا الخادم لا يستطيع سرد QSOs الخاصة به.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">تأخير PTT</string>
@@ -574,6 +580,7 @@
     <string name="settings_username_hint">اسم مستخدم QRZ.com الخاص بك</string>
     <string name="settings_password">كلمة المرور</string>
     <string name="settings_enabled_bands_dialog_desc">لن تظهر النطاقات المخفية في منتقيات التردد.</string>
+    <string name="settings_enabled_bands_keep_one">يجب أن يبقى نطاق واحد على الأقل مفعّلاً.</string>
     <string name="settings_select_serial_port">اختر المنفذ التسلسلي</string>
     <string name="settings_tx_volume_advice">عدِّل مباشرة — يستخدم TX التالي هذا المستوى. راقب ALC في راديوك وخفِّضه حتى يلامس الخط بالكاد.</string>
     <string name="settings_input_volume">مستوى صوت الإدخال</string>
@@ -600,6 +607,8 @@
     <string name="cq_offset_moved">تم نقل إزاحة CQ إلى موضع خالٍ: %1$d هرتز</string>
     <string name="settings_auto_clear_tx">اختيار إزاحة إرسال خالية تلقائيًا</string>
     <string name="settings_auto_clear_tx_desc">عند نداء CQ يختار موضعًا خاليًا وفق نشاط النطاق الأخير وينتقل إذا أصبح مشغولًا</string>
+    <string name="settings_auto_clear_tx_min">أدنى إزاحة تلقائية</string>
+    <string name="settings_auto_clear_tx_min_desc">لا يختار الاختيار التلقائي إزاحة أقل من هذه. ارفعها لإبقاء توافقيات الصوت خارج نطاق التمرير</string>
     <string name="tune_content_description">Tune: يبدأ موالف الجهاز أو يرسل موجة حاملة مستمرة لضبط الهوائي</string>
     <string name="tune_stopped_timeout">توقف Tune بعد %1$d ث</string>
     <string name="tune_blocked_tx">أوقف CQ/QSO قبل استخدام Tune</string>

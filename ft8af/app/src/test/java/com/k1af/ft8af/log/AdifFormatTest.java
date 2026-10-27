@@ -243,4 +243,59 @@ public class AdifFormatTest {
         assertThat(AdifFormat.sliceByUtf8Length(emoji, AdifFormat.utf8Length(emoji)))
                 .isEqualTo(emoji);
     }
+
+    // ---- parseReportLeniently: real-world malformed RST values (issue report) ----
+
+    @Test
+    public void parseReportLeniently_plainInteger() {
+        assertThat(AdifFormat.parseReportLeniently("-12")).isEqualTo(-12);
+        assertThat(AdifFormat.parseReportLeniently("5")).isEqualTo(5);
+        assertThat(AdifFormat.parseReportLeniently("+5")).isEqualTo(5);
+    }
+
+    @Test
+    public void parseReportLeniently_trailingNumberIsIgnored() {
+        // "N+N" shape: take the leading number, drop whatever follows.
+        assertThat(AdifFormat.parseReportLeniently("59+30")).isEqualTo(59);
+    }
+
+    @Test
+    public void parseReportLeniently_leadingReportPrefixLetterIsSkipped() {
+        // "R-N" shape.
+        assertThat(AdifFormat.parseReportLeniently("R-07")).isEqualTo(-7);
+    }
+
+    @Test
+    public void parseReportLeniently_trailingUnitSuffixIsIgnored() {
+        // "-Ndb" / "-N dB" shapes.
+        assertThat(AdifFormat.parseReportLeniently("-10db")).isEqualTo(-10);
+        assertThat(AdifFormat.parseReportLeniently("-20 dB")).isEqualTo(-20);
+    }
+
+    @Test
+    public void parseReportLeniently_secondSignedNumberIsIgnored() {
+        // "-N-N" shape: take the first number only.
+        assertThat(AdifFormat.parseReportLeniently("-5-10")).isEqualTo(-5);
+    }
+
+    @Test
+    public void parseReportLeniently_repeatedLeadingSignCollapsesToNegative() {
+        // "--N" shape.
+        assertThat(AdifFormat.parseReportLeniently("--5")).isEqualTo(-5);
+    }
+
+    @Test
+    public void parseReportLeniently_trailingNonNumericTextIsIgnored() {
+        // "-N NW" shape (e.g. a stray compass direction).
+        assertThat(AdifFormat.parseReportLeniently("-5 NW")).isEqualTo(-5);
+    }
+
+    @Test
+    public void parseReportLeniently_noDigitsAtAll_returnsNull() {
+        assertThat(AdifFormat.parseReportLeniently("abc")).isNull();
+        assertThat(AdifFormat.parseReportLeniently("-")).isNull();
+        assertThat(AdifFormat.parseReportLeniently("")).isNull();
+        assertThat(AdifFormat.parseReportLeniently("   ")).isNull();
+        assertThat(AdifFormat.parseReportLeniently(null)).isNull();
+    }
 }

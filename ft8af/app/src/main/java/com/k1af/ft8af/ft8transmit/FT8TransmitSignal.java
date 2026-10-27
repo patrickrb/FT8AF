@@ -13,6 +13,7 @@ import android.hardware.usb.UsbManager;
 import android.media.AudioAttributes;
 import android.media.AudioDeviceInfo;
 import android.os.Build;
+import android.os.SystemClock;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
@@ -191,7 +192,9 @@ public class FT8TransmitSignal {
     // Tune carrier (issue #408): lifecycle/safety state machine + UI state.
     // The controller enforces the hard max-on timeout and single-flight; the
     // worker thread owns keying + AudioTrack teardown in a finally.
-    private final TuneController tuneController = new TuneController(System::currentTimeMillis);
+    // Monotonic: the max-on timeout and the SWR settle window are intervals, and a
+    // wall-clock step (NTP, self-sync) must not stretch or shrink them (#943).
+    private final TuneController tuneController = new TuneController(SystemClock::elapsedRealtime);
     public final MutableLiveData<Boolean> mutableIsTuning = new MutableLiveData<>();
     public final MutableLiveData<Integer> mutableTuneRemainingSec = new MutableLiveData<>();
 
@@ -1000,6 +1003,15 @@ public class FT8TransmitSignal {
         }
 
 
+        // QMX CAT tones: the radio makes the FSK itself from TA commands, no audio.
+        if (onDoTransmitted != null && onDoTransmitted.supportQmxCatTones()) {
+            // Fresh cancel state for this cycle, as the sound-card path below does;
+            // a stale flag from the previous over would skip every symbol.
+            txAudioCancelled = false;
+            runPlaybackWithTeardown(() -> playViaQmxCatTones(msg), this::afterPlayAudio);
+            return;
+        }
+
         // enter sound card mode
         float[] buffer;
         buffer = GenerateFT8.generateFt8(msg, GeneralVariables.getBaseFrequency()
@@ -1083,10 +1095,7 @@ public class FT8TransmitSignal {
             GeneralVariables.fileLog(
                     "playFT8Signal: stereo TX open, channel select=" + layout.selection);
         }
-        attributes = new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build();
+        attributes = buildTxAudioAttributes();
 
         int encoding = GeneralVariables.audioOutput32Bit
                 ? AudioFormat.ENCODING_PCM_FLOAT : AudioFormat.ENCODING_PCM_16BIT;
@@ -1108,13 +1117,18 @@ public class FT8TransmitSignal {
         int minBuf = AudioTrack.getMinBufferSize(GeneralVariables.audioSampleRate,
                 layout.channelMask, encoding);
         int bufBytes = Math.max(targetBufBytes, minBuf > 0 ? minBuf : targetBufBytes);
-        int mySession = 0;
-        audioTrack = new AudioTrack(attributes, myFormat, bufBytes,
-                AudioTrack.MODE_STREAM, mySession);
+        audioTrack = buildTxAudioTrack(attributes, myFormat, bufBytes, "playFT8Signal");
 
         // set preferred output device
         if (GeneralVariables.audioOutputDeviceId > 0) {
-            audioTrack.setPreferredDevice(preferredOutputDevice); // null resets to default
+            boolean ok = audioTrack.setPreferredDevice(preferredOutputDevice); // null resets to default
+            // Logs the REQUESTED id (what was persisted) and the RESOLVED one separately --
+            // see MicRecorder's matching reinit log for why these can legitimately differ.
+            GeneralVariables.fileLog(String.format(
+                    "playFT8Signal: AudioTrack preferredDevice requestedId=%d resolvedId=%d ok=%b deviceFound=%b",
+                    GeneralVariables.audioOutputDeviceId,
+                    preferredOutputDevice == null ? -1 : preferredOutputDevice.getId(),
+                    ok, preferredOutputDevice != null));
         } else {
             applyDefaultOutputRoutingOverride(audioTrack);
         }
@@ -1224,6 +1238,77 @@ public class FT8TransmitSignal {
      * {@link Log} call below — which is a no-op stub under the module's
      * {@code unitTests.returnDefaultValues} setting.
      */
+    /**
+     * Send this over as QMX TA commands, one per symbol on the symbol clock,
+     * then key up with {@code TA0;}. PTT ({@code TX;}/{@code RX;}) stays with
+     * the normal keying path. Must run under {@link #runPlaybackWithTeardown}.
+     */
+    private void playViaQmxCatTones(Ft8Message msg) {
+        ModeProfile mode = GeneralVariables.currentMode();
+        byte[] a91 = GenerateFT8.generateA91(msg, true);
+        if (a91 == null) return;
+        byte[] tones = new byte[mode.numTones];
+        mode.encode(a91, tones);
+        double baseHz = GeneralVariables.getBaseFrequency();
+        int skip = QmxCatTones.symbolsToSkip(lateStartSkipMs, mode.symbolPeriod, tones.length);
+        long periodNs = (long) (mode.symbolPeriod * 1e9);
+        GeneralVariables.fileLog(String.format(java.util.Locale.ROOT,
+                "playFT8Signal: QMX CAT tones, %d symbols from %d, base %.1f Hz",
+                tones.length, skip, baseHz));
+
+        long startNs = SystemClock.elapsedRealtimeNanos();
+        String last = null;
+        int sent = 0;
+        long worstLateUs = 0;
+        boolean stopped = false;
+        try {
+            for (int i = skip; i < tones.length; i++) {
+                if (!isTransmitting || txAudioCancelled) {
+                    stopped = true;
+                    break;
+                }
+                long dueNs = startNs + (i - skip) * periodNs;
+                sleepUntil(dueNs);
+                long lateUs = (SystemClock.elapsedRealtimeNanos() - dueNs) / 1000;
+                if (lateUs > worstLateUs) worstLateUs = lateUs;
+                String cmd = QmxCatTones.taCommand(
+                        QmxCatTones.toneHz(baseHz, tones[i] & 0xFF, mode.symbolPeriod));
+                if (!cmd.equals(last)) {
+                    onDoTransmitted.sendQmxCatCommand(cmd);
+                    last = cmd;
+                    sent++;
+                }
+            }
+            // Hold the last symbol for its full period before keying up.
+            if (!stopped) sleepUntil(startNs + (tones.length - skip) * periodNs);
+        } finally {
+            boolean keyUp = QmxCatTones.keyUpAfterTones(txRestartPending, isTransmitting);
+            if (keyUp) onDoTransmitted.sendQmxCatCommand(QmxCatTones.KEY_UP);
+            GeneralVariables.fileLog(String.format(java.util.Locale.ROOT,
+                    "playFT8Signal: QMX CAT tones done, %d TA commands, worst symbol lateness %.1f ms%s",
+                    sent, worstLateUs / 1000.0,
+                    stopped ? (keyUp ? " (stopped)" : " (swapping message, still keyed)") : ""));
+        }
+    }
+
+    /** Sleep until {@code elapsedRealtimeNanos} reaches {@code dueNs}; spins the last ms. */
+    private static void sleepUntil(long dueNs) {
+        while (true) {
+            long remainingNs = dueNs - SystemClock.elapsedRealtimeNanos();
+            if (remainingNs <= 0) return;
+            if (remainingNs > 2_000_000L) {
+                try {
+                    Thread.sleep((remainingNs - 1_000_000L) / 1_000_000L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            } else {
+                Thread.yield();
+            }
+        }
+    }
+
     static void runPlaybackWithTeardown(Runnable body, Runnable teardown) {
         try {
             body.run();
@@ -2420,6 +2505,15 @@ public class FT8TransmitSignal {
         return toCallsign != null ? toCallsign.callsign : null;
     }
 
+    /**
+     * The signal report recorded as sent to the current target (set when a
+     * "-NN" / "R-NN" message is built), or -100 when none has gone out yet.
+     * Raw value: SNR_UNKNOWN is left as-is. For UI display see sentReportOrNull.
+     */
+    public int getSentTargetReport() {
+        return sentTargetReport;
+    }
+
     public boolean isSynFrequency() {
         return GeneralVariables.synFrequency;
     }
@@ -2624,8 +2718,7 @@ public class FT8TransmitSignal {
                 isTransmitting, functionOrder, toCallsign)
                 && clearFrequencyFinder.shouldRelocate(
                         GeneralVariables.getBaseFrequency(), newestUtc)) {
-            Float pick = clearFrequencyFinder.selectClearOffset(
-                    GeneralVariables.getBaseFrequency());
+            Float pick = pickClearCqOffset();
             if (pick != null) {
                 applyClearCqOffset(pick, newestUtc, "occupied");
             }
@@ -2662,11 +2755,16 @@ public class FT8TransmitSignal {
         if (!GeneralVariables.autoClearTxFreq) {
             return;
         }
-        Float pick = clearFrequencyFinder.selectClearOffset(
-                GeneralVariables.getBaseFrequency());
+        Float pick = pickClearCqOffset();
         if (pick != null) {
             applyClearCqOffset(pick, UtcTimer.getSystemTime(), "cq-start");
         }
+    }
+
+    /** Ask the finder for a clear offset at or above the operator's floor (#938). */
+    private Float pickClearCqOffset() {
+        clearFrequencyFinder.setMinOffsetHz(GeneralVariables.autoClearTxMinFreq);
+        return clearFrequencyFinder.selectClearOffset(GeneralVariables.getBaseFrequency());
     }
 
     private void applyClearCqOffset(float offsetHz, long utcMs, String reason) {
@@ -3175,6 +3273,16 @@ public class FT8TransmitSignal {
         return tuneController.isActive();
     }
 
+    /**
+     * Whether SWR readings should be attributed to the tune carrier. Wider than
+     * {@link #isTuning()}: also covers the ramp-out/key-up tail and a short settle
+     * window after PTT drops (issue #943). Never true during an FT8 over. See
+     * {@link TuneController#suppressesSwrHalt(boolean)}.
+     */
+    public boolean isTuneSwrExempt() {
+        return tuneController.suppressesSwrHalt(isTransmitting);
+    }
+
     /** Milliseconds until the tune safety timeout fires; 0 when not tuning. */
     public long tuneRemainingMs() {
         return tuneController.remainingMs();
@@ -3228,6 +3336,35 @@ public class FT8TransmitSignal {
         tuneController.requestStop(TuneController.STOP_USER);
     }
 
+    /**
+     * TUNE on a QMX with CAT tones: one steady TA at the TX offset until the
+     * tune controller says stop, then {@code TA0;}. No audio, so the tune
+     * level setting does not apply.
+     */
+    private void runQmxCatTune(float offsetHz) {
+        GeneralVariables.fileLog(String.format(java.util.Locale.ROOT,
+                "TUNE: QMX CAT tone %.1f Hz", offsetHz));
+        onDoTransmitted.sendQmxCatCommand(QmxCatTones.taCommand(offsetHz));
+        int lastPostedSec = -1;
+        try {
+            while (tuneController.shouldContinue()) {
+                int remainingSec = (int) Math.ceil(tuneController.remainingMs() / 1000.0);
+                if (remainingSec != lastPostedSec) {
+                    lastPostedSec = remainingSec;
+                    mutableTuneRemainingSec.postValue(remainingSec);
+                }
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        } finally {
+            onDoTransmitted.sendQmxCatCommand(QmxCatTones.KEY_UP);
+        }
+    }
+
     /** The tune level (0..100) resolved from settings, as an amplitude 0..1. */
     private static float currentTuneAmplitude() {
         return radio.ks3ckc.ft8af.TuneLevelKt.currentTuneLevel() / 100f;
@@ -3252,9 +3389,15 @@ public class FT8TransmitSignal {
                     offsetHz, radio.ks3ckc.ft8af.TuneLevelKt.currentTuneLevel(),
                     TuneController.clampMaxOnSeconds(GeneralVariables.tuneMaxOnSeconds),
                     GeneralVariables.audioSampleRate));
+            tuneController.markKeyed();
             onDoTransmitted.onTuneKeyDown();
             keyed = true;
             mutableIsTuning.postValue(true);
+
+            if (onDoTransmitted.supportQmxCatTones()) {
+                runQmxCatTune(offsetHz);
+                return; // finally below unkeys
+            }
 
             // Same mixer-sharing exposure as the FT8 AudioTrack branch; keep
             // other apps' audio out of the carrier. Denial is log-only.
@@ -3263,10 +3406,7 @@ public class FT8TransmitSignal {
                     + (tuneFocusGranted ? "granted (exclusive)" : "NOT granted"));
 
             int sampleRate = GeneralVariables.audioSampleRate;
-            AudioAttributes tuneAttributes = new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build();
+            AudioAttributes tuneAttributes = buildTxAudioAttributes();
             int encoding = GeneralVariables.audioOutput32Bit
                     ? AudioFormat.ENCODING_PCM_FLOAT : AudioFormat.ENCODING_PCM_16BIT;
             // Same TX channel layout as the FT8 over: on a splitter cable the
@@ -3291,10 +3431,14 @@ public class FT8TransmitSignal {
             int minBuf = AudioTrack.getMinBufferSize(sampleRate,
                     layout.channelMask, encoding);
             int bufBytes = Math.max(targetBufBytes, minBuf > 0 ? minBuf : targetBufBytes);
-            track = new AudioTrack(tuneAttributes, tuneFormat, bufBytes,
-                    AudioTrack.MODE_STREAM, 0);
+            track = buildTxAudioTrack(tuneAttributes, tuneFormat, bufBytes, "TUNE");
             if (GeneralVariables.audioOutputDeviceId > 0) {
-                track.setPreferredDevice(tuneOutputDevice);
+                boolean ok = track.setPreferredDevice(tuneOutputDevice);
+                GeneralVariables.fileLog(String.format(
+                        "TUNE: AudioTrack preferredDevice requestedId=%d resolvedId=%d ok=%b deviceFound=%b",
+                        GeneralVariables.audioOutputDeviceId,
+                        tuneOutputDevice == null ? -1 : tuneOutputDevice.getId(),
+                        ok, tuneOutputDevice != null));
             } else {
                 applyDefaultOutputRoutingOverride(track);
             }
@@ -3360,6 +3504,9 @@ public class FT8TransmitSignal {
                     Log.e(TAG, "Tune key-up failed: " + e);
                 }
             }
+            // Starts the SWR settle window; unconditional because markKeyed()
+            // runs before onTuneKeyDown(), which may have thrown.
+            tuneController.markUnkeyed();
             mutableIsTuning.postValue(false);
             String reason = tuneController.lastStopReason();
             GeneralVariables.fileLog(String.format(
@@ -3375,6 +3522,103 @@ public class FT8TransmitSignal {
 
 
     /**
+     * TX audio attributes. Still {@code USAGE_MEDIA}/{@code
+     * CONTENT_TYPE_MUSIC} -- real hardware (a QRP Labs QMX) showed this
+     * resolving to {@code AUDIO_STREAM_MUSIC}, which on that device got a
+     * fixed -6 dB cut from the platform's own volume-curve policy (applied
+     * per volume-source, independent of the app's own volume index --
+     * confirmed happening at max index, 15/15), plus an OEM "Dolby Listener"
+     * enhancement effect inserted into the output's mix chain -- but {@code
+     * USAGE_VOICE_COMMUNICATION} was tried and reverted: it resolves to
+     * {@code AUDIO_STREAM_VOICE_CALL}, which on real hardware was confirmed
+     * sitting at its MINIMUM index (1 of 8) for this USB output, with no
+     * ordinary way for the operator to raise it outside an active call --
+     * tens of dB worse than the music curve's -6 dB, not better. Caught via
+     * {@code dumpsys audio} before an on-air test, not by actually
+     * transmitting at the lower level.
+     *
+     * <p>{@code FLAG_LOW_LATENCY} is still requested, as an attempt at the
+     * Dolby chain specifically -- see {@link #buildTxAudioTrack} -- though
+     * it is not expected to touch the -6 dB curve itself, which applies
+     * regardless of mixer path, and effects already attached to an output's
+     * session-0 (global mix) chain commonly make AudioFlinger deny the FAST
+     * path outright for that output, silently, with no error surfaced to
+     * the app.
+     *
+     * <p>Finding a usage/content-type that both avoids the music volume
+     * curve AND doesn't land on a stream the operator can't easily turn up
+     * (or that gets silenced by ring/notification volume or Do Not Disturb,
+     * which TX audio must never be) needs real per-device volume-curve data
+     * before trying another candidate -- not left as a TODO lightly, just
+     * not safe to guess a third time without it.
+     */
+    private static AudioAttributes buildTxAudioAttributes() {
+        return new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .setFlags(AudioAttributes.FLAG_LOW_LATENCY)
+                .build();
+    }
+
+    /**
+     * Builds the TX {@code AudioTrack} via {@link AudioTrack.Builder} (the
+     * legacy constructor has no equivalent) so {@link
+     * AudioTrack#PERFORMANCE_MODE_LOW_LATENCY} can be requested, and with a
+     * dedicated generated session id rather than the literal {@code 0} the
+     * legacy constructor used -- {@code 0} implicitly joins the output's
+     * global/master session, which is exactly the session (session-0) real
+     * hardware showed carrying the OEM Dolby effect; a dedicated session is
+     * less likely to inherit an effect chain already attached there.
+     *
+     * <p>Logs the ACTUAL granted performance mode: a denied low-latency
+     * request fails silently otherwise (no exception, no log visible to the
+     * app -- confirmed on real hardware that AudioFlinger can deny the FAST
+     * path per-output with zero signal to the caller either way).
+     *
+     * <p>Performance modes only exist from Android 8.0 (API 26); minSdk is 23.
+     * Below 26 the track is built without one: calling
+     * {@code setPerformanceMode}/{@code getPerformanceMode} there throws
+     * {@code NoSuchMethodError}, an Error the TX paths' {@code catch (Exception)}
+     * doesn't catch, so every sound-card over and TUNE crashed the app.
+     *
+     * <p>Package-visible for testing.
+     */
+    static AudioTrack buildTxAudioTrack(AudioAttributes attributes, AudioFormat format,
+                                        int bufBytes, String logTag) {
+        AudioTrack.Builder builder = new AudioTrack.Builder()
+                .setAudioAttributes(attributes)
+                .setAudioFormat(format)
+                .setBufferSizeInBytes(bufBytes)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .setSessionId(AudioManager.AUDIO_SESSION_ID_GENERATE);
+        // The SDK_INT check is inline on purpose so Android lint (NewApi) sees it.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY);
+            AudioTrack track = builder.build();
+            GeneralVariables.fileLog(logTag + ": AudioTrack performanceMode="
+                    + performanceModeName(track.getPerformanceMode()));
+            return track;
+        }
+        GeneralVariables.fileLog(logTag + ": AudioTrack performanceMode=n/a (API "
+                + Build.VERSION.SDK_INT + ", needs 26)");
+        return builder.build();
+    }
+
+    /**
+     * Human-readable form of an {@code AudioTrack#getPerformanceMode()}
+     * result, for logs. Package-private: visible for {@code
+     * performanceModeNameTest}-style direct tests.
+     */
+    static String performanceModeName(int mode) {
+        switch (mode) {
+            case AudioTrack.PERFORMANCE_MODE_LOW_LATENCY: return "LOW_LATENCY (granted)";
+            case AudioTrack.PERFORMANCE_MODE_POWER_SAVING: return "POWER_SAVING";
+            case AudioTrack.PERFORMANCE_MODE_NONE: return "NONE (low-latency NOT granted)";
+            default: return "UNKNOWN(" + mode + ")";
+        }
+    }
+
+    /**
      * Find AudioDeviceInfo by device ID.
      */
     private static AudioDeviceInfo findAudioDeviceById(int deviceId, int deviceType) {
@@ -3383,12 +3627,25 @@ public class FT8TransmitSignal {
         AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         if (audioManager == null) return null;
         AudioDeviceInfo[] devices = audioManager.getDevices(deviceType);
-        for (AudioDeviceInfo device : devices) {
-            if (device.getId() == deviceId) {
-                return device;
-            }
+        int[] ids = new int[devices.length];
+        String[] names = new String[devices.length];
+        for (int i = 0; i < devices.length; i++) {
+            ids[i] = devices[i].getId();
+            CharSequence name = devices[i].getProductName();
+            names[i] = name == null ? null : name.toString();
         }
-        return null;
+        // Falls back to matching by the persisted output VID:PID (via its
+        // current product name) when the exact id isn't found -- a USB
+        // device's numeric AudioDeviceInfo id is not stable across a
+        // replug/power-cycle re-enumeration. See
+        // UsbAudioDevice.resolveDeviceIndex.
+        UsbDevice fallback = GeneralVariables.usbAudioOutputVendorId == 0 ? null
+                : UsbAudioDevice.findDeviceByVidPid(context,
+                        GeneralVariables.usbAudioOutputVendorId,
+                        GeneralVariables.usbAudioOutputProductId);
+        int idx = UsbAudioDevice.resolveDeviceIndex(ids, names, deviceId,
+                fallback == null ? null : fallback.getProductName());
+        return idx < 0 ? null : devices[idx];
     }
 
     /**
@@ -3477,6 +3734,9 @@ public class FT8TransmitSignal {
             // for displaying the message content to be transmitted
             Ft8Message msg = transmitSignal.currentTransmitMessage();
 
+            // A real over is about to key: any SWR reading from here on is its own,
+            // so a just-ended tune's tail/settle window must not exempt it (#943).
+            transmitSignal.tuneController.revokeSwrExemption();
             if (transmitSignal.onDoTransmitted != null) {
                 // handle PTT and other events here
                 transmitSignal.onDoTransmitted.onBeforeTransmit(msg, transmitSignal.functionOrder);

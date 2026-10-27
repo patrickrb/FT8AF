@@ -99,6 +99,7 @@
     <string name="qsopanel_qsoing_with">%1$s と QSO 中</string>
     <string name="qsopanel_waiting_for">%1$s を待機中</string>
     <string name="qsopanel_tap_to_view">タップして表示 ↗</string>
+    <string name="qsopanel_sent_report">送信 %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">メッセージを待機中...</string>
 
@@ -197,6 +198,8 @@
     <string name="log_sync_enable_services">設定で Cloudlog/Wavelog/Nextlog、QRZ、または World Radio League を有効にして、もう一度お試しください。</string>
     <string name="log_sync_progress_count">%2$d 件中 %1$d 件の QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d 件受理</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d 件は登録済み</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d 件をダウンロード</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d 件受理</string>
     <string name="log_sync_nothing_to_upload">アップロードする QSO がログブックにまだありません。</string>
     <string name="log_sync_working">処理中…</string>
@@ -415,6 +418,9 @@
     <string name="settings_qrz_profile_lookup_desc">QRZ XML API 用のユーザー名 + パスワード (アバター)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">QSO を Cloudlog、Wavelog、または Nextlog のインスタンスに自動アップロードします</string>
+    <string name="settings_cloudlog_download">同期時に Wavelog から QSO をダウンロード</string>
+    <string name="settings_cloudlog_download_desc">同期時に、Wavelog のログブックにあってこのログにない QSO も追加します。それらは QRZ や World Radio League には送信されません。</string>
+    <string name="settings_cloudlog_download_unsupported">Wavelog が必要です: このサーバーは QSO の一覧を取得できません。</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">PTT ディレイ</string>
@@ -476,6 +482,7 @@
     <string name="settings_username_hint">あなたの QRZ.com ユーザー名</string>
     <string name="settings_password">パスワード</string>
     <string name="settings_enabled_bands_dialog_desc">非表示のバンドは周波数ピッカーに表示されません。</string>
+    <string name="settings_enabled_bands_keep_one">少なくとも1つのバンドを有効にしておく必要があります。</string>
     <string name="settings_select_serial_port">シリアルポートを選択</string>
     <string name="settings_tx_volume_advice">ライブで調整してください — 次の TX でこのレベルが使われます。無線機の ALC を見ながら、ラインに軽く触れる程度まで下げてください。</string>
     <string name="settings_input_volume">入力音量</string>
@@ -537,6 +544,8 @@
     <string name="cq_offset_moved">CQオフセットを空いている周波数へ移動：%1$d Hz</string>
     <string name="settings_auto_clear_tx">空きTXオフセット自動選択</string>
     <string name="settings_auto_clear_tx_desc">CQ呼び出し時に直近のバンド活動から空き周波数を選び、占有されたら移動します</string>
+    <string name="settings_auto_clear_tx_min">自動オフセットの下限</string>
+    <string name="settings_auto_clear_tx_min_desc">自動選択はこれより低いオフセットを選びません。上げると音声の高調波が通過帯域の外に出ます</string>
     <string name="tune_content_description">Tune：無線機のチューナーを開始、またはアンテナ調整用の連続キャリアを送信します</string>
     <string name="tune_stopped_timeout">Tuneは%1$d秒後に停止しました</string>
     <string name="tune_blocked_tx">Tuneの前にCQ/QSOを停止してください</string>

@@ -133,6 +133,59 @@ public final class AdifFormat {
     }
 
     /**
+     * Parses an ADIF RST_SENT/RST_RCVD value leniently: the first signed integer
+     * found, ignoring a leading report-prefix letter and any trailing text.
+     *
+     * <p>A strict {@code Integer.parseInt} on the raw value discards the whole
+     * report on anything but a bare integer. A real-world 87 MB ADIF log (issue
+     * report) had 73 values other loggers write that this rejects outright --
+     * {@code "59+30"}, {@code "R-07"}, {@code "-10db"}, {@code "-20 dB"},
+     * {@code "--5"} -- each previously silently dropped (the field fell back to
+     * the "no report" sentinel) without being counted as invalid in the import
+     * summary (see {@code DatabaseOpr#doInsertQSLData}). This recovers the
+     * leading number from all of them: {@code "59+30"} -&gt; 59, {@code "R-07"}
+     * -&gt; -7, {@code "-10db"} -&gt; -10, {@code "-20 dB"} -&gt; -20, {@code "--5"}
+     * -&gt; -5 (multiple leading sign characters collapse to negative if any of
+     * them is {@code '-'}).
+     *
+     * @param raw the raw field value (may be null)
+     * @return the parsed report, or null if no leading integer could be found at all
+     */
+    public static Integer parseReportLeniently(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String s = raw.trim();
+        if (s.isEmpty()) {
+            return null;
+        }
+        int i = 0;
+        if (Character.isLetter(s.charAt(0))) {
+            i = 1; // e.g. the "R" in "R-07"
+        }
+        boolean negative = false;
+        while (i < s.length() && (s.charAt(i) == '+' || s.charAt(i) == '-')) {
+            if (s.charAt(i) == '-') {
+                negative = true;
+            }
+            i++;
+        }
+        int digitsStart = i;
+        while (i < s.length() && Character.isDigit(s.charAt(i))) {
+            i++;
+        }
+        if (i == digitsStart) {
+            return null; // no digits found after the optional prefix letter/sign(s)
+        }
+        try {
+            int value = Integer.parseInt(s.substring(digitsStart, i));
+            return negative ? -value : value;
+        } catch (NumberFormatException e) {
+            return null; // digit run too long to fit an int
+        }
+    }
+
+    /**
      * The number of UTF-8 <em>bytes</em> in {@code value} — the length an ADIF
      * {@code <field:len>value } declaration must carry, not the UTF-16
      * {@link String#length()} (char count). The two differ for any non-ASCII content

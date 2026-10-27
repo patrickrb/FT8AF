@@ -388,6 +388,18 @@ fun ActiveQsoPanel(
         if (logTarget == null) emptyList()
         else (rxLog + synthTxLog).sortedBy { it.utcTime }
 
+    // Banner SNR (#953): the heard value is the same decode the QSO sheet's Signal
+    // card shows, falling back to the durable RX log so it doesn't blink out when the
+    // decode list is cleared. The sent report is read on each recomposition; it
+    // changes only when a TX message is built, which also updates transmittingMessage.
+    val latestFromTarget = remember(messageList, messageList?.size, displayCallsign) {
+        latestDecodeFrom(messageList, displayCallsign)
+    }
+    val bannerSnr = qsoBannerSnr(
+        heard = heardSnr(latestFromTarget, rxLog.lastOrNull { it.snr != null }?.snr),
+        sent = sentReportOrNull(mainViewModel.ft8TransmitSignal.sentTargetReport),
+    )
+
     AnimatedVisibility(
         visible = expanded && (hasTarget || isActivated),
         enter = expandVertically(expandFrom = Alignment.Bottom),
@@ -418,7 +430,7 @@ fun ActiveQsoPanel(
                     isTransmitting -> stringResource(R.string.qsopanel_qsoing_with, displayCallsign)
                     else -> stringResource(R.string.qsopanel_waiting_for, displayCallsign)
                 },
-                snr = if (displayCallsign != null) toCallsign?.snr else null,
+                snr = if (displayCallsign != null) bannerSnr else null,
                 onClick = if (displayCallsign != null) onReopenSheet else null,
                 onLog = if (displayCallsign != null) {
                     {
@@ -473,7 +485,7 @@ fun ActiveQsoPanel(
 @Composable
 private fun StationHeader(
     targetCallsign: String,
-    snr: Int?,
+    snr: QsoBannerSnr?,
     onClick: (() -> Unit)? = null,
     onLog: (() -> Unit)? = null,
     onClear: (() -> Unit)? = null,
@@ -506,10 +518,18 @@ private fun StationHeader(
                 fontWeight = FontWeight.Bold,
                 fontFamily = GeistMonoFamily,
             )
-            if (snr != null) {
+            snr?.heard?.let { heard ->
                 Text(
-                    text = if (snr >= 0) "+${snr}dB" else "${snr}dB",
+                    text = bannerSnrLabel(heard),
                     color = Signal,
+                    fontSize = 11.sp,
+                    fontFamily = GeistMonoFamily,
+                )
+            }
+            snr?.sent?.let { sent ->
+                Text(
+                    text = stringResource(R.string.qsopanel_sent_report, bannerSnrLabel(sent)),
+                    color = TextFaint,
                     fontSize = 11.sp,
                     fontFamily = GeistMonoFamily,
                 )
@@ -794,6 +814,58 @@ internal fun orderCallerQueue(
  * with no reported SNR carries 0, which renders as "+0".
  */
 internal fun callerSnrLabel(snr: Int): String = if (snr >= 0) "+$snr" else "$snr"
+
+/**
+ * The newest decode from [callsign] in [messages] (arrival order), or null. Both
+ * sides are compared with hashed-call brackets stripped, so `<CALL>` and `CALL`
+ * find the same decodes whichever form the caller holds: the sheet is keyed by the
+ * tapped row's raw callsign, the banner by the TX target. The QSO sheet's Signal
+ * card and the QSO banner both read this decode, so they show the same SNR (#953).
+ */
+internal fun latestDecodeFrom(messages: List<Ft8Message>?, callsign: String?): Ft8Message? {
+    val key = callsign?.replace("<", "")?.replace(">", "")
+    if (key.isNullOrEmpty()) return null
+    return messages?.lastOrNull { it.getCallsignFrom().equals(key, ignoreCase = true) }
+}
+
+/**
+ * How we last heard the target: the [latest] decode's SNR, else [fallback] (an
+ * older heard value) when the station isn't in the current decode list, which is
+ * emptied by clear-every-cycle, band changes and Clear. SNR_UNKNOWN counts as none.
+ */
+internal fun heardSnr(latest: Ft8Message?, fallback: Int?): Int? =
+    latest?.takeIf { it.hasSnr() }?.snr
+        ?: fallback?.takeIf { it != Ft8Message.SNR_UNKNOWN }
+
+/**
+ * The report we sent for display, from FT8TransmitSignal.getSentTargetReport():
+ * null while it holds -100 (no report sent yet: grid call, Field Day exchange,
+ * Hound before the Fox report). SNR_UNKNOWN maps to 0, which is what
+ * TransmitCallsign.getSnr() puts on the air for it.
+ */
+internal fun sentReportOrNull(raw: Int): Int? = when (raw) {
+    -100 -> null
+    Ft8Message.SNR_UNKNOWN -> 0
+    else -> raw
+}
+
+/**
+ * The two SNR values the QSO banner can show. [heard] is how we last heard the
+ * target (the same number as the sheet's Signal card). [sent] is the report we
+ * transmitted to them, which stays fixed while [heard] moves with conditions.
+ * Showing that report unlabelled as "the" SNR is what made #953 look like a bug.
+ */
+internal data class QsoBannerSnr(val heard: Int?, val sent: Int?)
+
+/**
+ * Pair [heard] with [sent], keeping [sent] only when it adds something: it differs
+ * from [heard], or we have no heard value at all.
+ */
+internal fun qsoBannerSnr(heard: Int?, sent: Int?): QsoBannerSnr =
+    QsoBannerSnr(heard = heard, sent = sent?.takeIf { it != heard })
+
+/** Banner SNR text: "+3dB" / "-7dB". */
+internal fun bannerSnrLabel(snr: Int): String = "${callerSnrLabel(snr)}dB"
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable

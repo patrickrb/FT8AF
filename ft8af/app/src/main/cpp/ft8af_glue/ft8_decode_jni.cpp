@@ -33,6 +33,7 @@ int ft8_snr(const waterfall_t* wf, const candidate_t* candidate);
 #include "ft8_call_hash.h"
 #include "ftx_hash_store.h"
 #include "ftx_feed.h"
+#include "ft8_grid_shape.h"
 
 // ---------------------------------------------------------------------------
 // 22-bit WSJT-X callsign hash (same as ft2_decode_jni.cpp / test_golden_encode.c).
@@ -174,13 +175,6 @@ static void ft8_set_string(JNIEnv* env, jobject msg, jfieldID fid, const char* s
     jstring js = env->NewStringUTF(s ? s : "");
     env->SetObjectField(msg, fid, js);
     env->DeleteLocalRef(js);
-}
-
-static bool ft8_looks_like_grid(const char* s)
-{
-    return s && strlen(s) == 4 &&
-           s[0] >= 'A' && s[0] <= 'R' && s[1] >= 'A' && s[1] <= 'R' &&
-           s[2] >= '0' && s[2] <= '9' && s[3] >= '0' && s[3] <= '9';
 }
 
 static void ft8_set_call_hashes(JNIEnv* env, jobject msg, const char* call,
@@ -690,7 +684,7 @@ Java_com_k1af_ft8af_ft8listener_FT8SignalListener_DecoderFt8Analysis(
         ft8_set_string(env, ft8Message, FF8.callsignTo, call_to);
         ft8_set_string(env, ft8Message, FF8.callsignFrom, call_de);
         ft8_set_string(env, ft8Message, FF8.extraInfo, extra);
-        if (ft8_looks_like_grid(extra))
+        if (ft8af_looks_like_grid(extra))
             ft8_set_string(env, ft8Message, FF8.maidenGrid, extra);
         ft8_set_call_hashes(env, ft8Message, call_to, FF8.callToHash10, FF8.callToHash12, FF8.callToHash22);
         ft8_set_call_hashes(env, ft8Message, call_de, FF8.callFromHash10, FF8.callFromHash12, FF8.callFromHash22);

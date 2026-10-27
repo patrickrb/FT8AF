@@ -1,6 +1,6 @@
 [package]
 name = "ft8af"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2021"
 description = "FT8AF desktop — FT8 transceiver client"
 license = "GPL-3.0-or-later"

@@ -201,9 +201,11 @@ object PskReporterSender {
      * locator worth reporting to PSKReporter, or a value that must be dropped.
      *
      * A standard/non-standard FT8 message ends a QSO with the sign-off token
-     * "RR73", which the JNI decoder stores into [Ft8Message.maidenGrid] because
-     * it is a syntactic 4-char grid look-alike (R,R in field range A–R; 7,3 in
-     * square range 0–9). It is NOT a location: the FT8 encoder always packs
+     * "RR73", a syntactic 4-char grid look-alike (R,R in field range A–R; 7,3 in
+     * square range 0–9). The JNI decoders no longer store it into
+     * [Ft8Message.maidenGrid] (see `ft8af_looks_like_grid` in ft8_grid_shape.h),
+     * so this filter is now defense in depth for any other path that sets the
+     * field. It is NOT a location: the FT8 encoder always packs
      * "RR73" as the roger-73 report, never as a grid (see ft8_lib `packgrid`),
      * so no compliant transmitter ever means grid RR73 (a phantom cell in the
      * Arctic Ocean). Reporting it would inject bogus locators into the global

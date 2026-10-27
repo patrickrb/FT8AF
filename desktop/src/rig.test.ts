@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { HamlibRig, RigConfig } from "./ipc";
 import {
   RIG_FLRIG,
+  RIG_G106,
   RIG_NONE,
   applySelection,
   configToSelection,
@@ -30,27 +31,29 @@ function cfg(overrides: Partial<RigConfig> = {}): RigConfig {
 }
 
 describe("rigOptions", () => {
-  it("pins None (default) then FLrig, then every Hamlib radio", () => {
+  it("pins None, FLrig, and G106 before every Hamlib radio", () => {
     const opts = rigOptions(RIGS);
     expect(opts.map((o) => o.value)).toEqual([
       RIG_NONE,
       RIG_FLRIG,
+      RIG_G106,
       "hamlib:3073",
       "hamlib:2",
     ]);
     expect(opts[0].label).toBe("None (manual tuning)");
     expect(opts[1].label).toBe("FLrig");
     // Radio labels are the plain radio names, no backend jargon or model #.
-    expect(opts[2].label).toBe("Icom IC-7300");
+    expect(opts[2].label).toBe("Xiegu G106 (direct CI-V)");
+    expect(opts[3].label).toBe("Icom IC-7300");
   });
 
   it("preserves the Hamlib list order (already name-sorted upstream)", () => {
-    const opts = rigOptions(RIGS).slice(2);
+    const opts = rigOptions(RIGS).slice(3);
     expect(opts.map((o) => o.label)).toEqual(["Icom IC-7300", "Yaesu FT-991"]);
   });
 
-  it("is just None + FLrig when no Hamlib radios are available", () => {
-    expect(rigOptions([]).map((o) => o.value)).toEqual([RIG_NONE, RIG_FLRIG]);
+  it("keeps the direct G106 profile when Hamlib is unavailable", () => {
+    expect(rigOptions([]).map((o) => o.value)).toEqual([RIG_NONE, RIG_FLRIG, RIG_G106]);
   });
 });
 
@@ -64,6 +67,17 @@ describe("applySelection (selector → backend)", () => {
     expect(next.backend).toBe("flrig");
     expect(next.flrig_host).toBe("10.0.0.5");
     expect(next.flrig_port).toBe(9999);
+  });
+
+  it("G106 → direct backend with its fixed safe serial settings", () => {
+    const next = applySelection(
+      cfg({ port: "/dev/ttyUSB0", baud: 38400, hamlib_network: true }),
+      RIG_G106,
+    );
+    expect(next.backend).toBe("g106");
+    expect(next.port).toBe("/dev/ttyUSB0");
+    expect(next.baud).toBe(19200);
+    expect(next.hamlib_network).toBe(false);
   });
 
   it("a Hamlib radio → backend hamlib with that model id", () => {
@@ -85,9 +99,10 @@ describe("applySelection (selector → backend)", () => {
 });
 
 describe("configToSelection (backend → selector)", () => {
-  it("round-trips none / flrig / hamlib", () => {
+  it("round-trips none / flrig / g106 / hamlib", () => {
     expect(configToSelection(cfg({ backend: "none" }))).toBe(RIG_NONE);
     expect(configToSelection(cfg({ backend: "flrig" }))).toBe(RIG_FLRIG);
+    expect(configToSelection(cfg({ backend: "g106" }))).toBe(RIG_G106);
     expect(configToSelection(cfg({ backend: "hamlib", hamlib_model: 3073 }))).toBe("hamlib:3073");
   });
 
@@ -109,6 +124,7 @@ describe("rigName", () => {
   it("labels the non-Hamlib backends", () => {
     expect(rigName(cfg({ backend: "none" }), RIGS)).toBe("None (manual tuning)");
     expect(rigName(cfg({ backend: "flrig" }), RIGS)).toBe("FLrig");
+    expect(rigName(cfg({ backend: "g106" }), RIGS)).toBe("Xiegu G106");
   });
 
   it("never returns undefined for a legacy/unknown backend", () => {

@@ -139,6 +139,7 @@
     <string name="qsopanel_qsoing_with">QSO s %1$s</string>
     <string name="qsopanel_waiting_for">Čekání na %1$s</string>
     <string name="qsopanel_tap_to_view">klepnutím zobrazit ↗</string>
+    <string name="qsopanel_sent_report">odesláno %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Čekání na zprávy...</string>
     <string name="qsopanel_log_action">ZAPSAT</string>
@@ -240,6 +241,8 @@
     <string name="log_sync_enable_services">Povolte Cloudlog/Wavelog/Nextlog, QRZ nebo World Radio League v Nastavení a zkuste to znovu.</string>
     <string name="log_sync_progress_count">%1$d z %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d přijato</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d již v deníku</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d staženo</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d přijato</string>
     <string name="log_sync_nothing_to_upload">V deníku zatím nejsou žádná QSOs k nahrání.</string>
     <string name="log_sync_working">Pracuji…</string>
@@ -504,6 +507,9 @@
     <string name="settings_qrz_profile_lookup_desc">Uživatelské jméno + heslo pro QRZ XML API (avatary)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">Automaticky nahrávat QSOs do instance Cloudlog, Wavelog nebo Nextlog</string>
+    <string name="settings_cloudlog_download">Při synchronizaci stahovat QSOs z Wavelogu</string>
+    <string name="settings_cloudlog_download_desc">Synchronizace přidá i QSOs, které jsou ve vašem deníku Wavelog, ale ne v tomto deníku. Neodesílají se dál do QRZ ani World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">Vyžaduje Wavelog: tento server neumí vypsat svá QSOs.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">Zpoždění PTT</string>
@@ -566,6 +572,7 @@
     <string name="settings_username_hint">Vaše uživatelské jméno QRZ.com</string>
     <string name="settings_password">Heslo</string>
     <string name="settings_enabled_bands_dialog_desc">Skrytá pásma se neobjeví ve výběru frekvencí.</string>
+    <string name="settings_enabled_bands_keep_one">Alespoň jedno pásmo musí zůstat povolené.</string>
     <string name="settings_select_serial_port">Vyberte sériový port</string>
     <string name="settings_tx_volume_advice">Upravujte naživo — vaše příští TX použije tuto úroveň. Sledujte ALC svého rádia a stahujte, dokud se právě nedotýká čáry.</string>
     <string name="settings_input_volume">Vstupní hlasitost</string>
@@ -592,6 +599,8 @@
     <string name="cq_offset_moved">Offset CQ přesunut na volné místo: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Automaticky volný TX offset</string>
     <string name="settings_auto_clear_tx_desc">Při volání CQ vybere volné místo podle nedávné aktivity v pásmu a uhne, pokud se obsadí</string>
+    <string name="settings_auto_clear_tx_min">Nejnižší automatický offset</string>
+    <string name="settings_auto_clear_tx_min_desc">Automatický výběr nikdy nezvolí offset pod touto hodnotou. Zvyšte ji, aby harmonické zvuku zůstaly mimo propustné pásmo</string>
     <string name="tune_content_description">Tune: spustí tuner rádia nebo vysílá souvislou nosnou pro ladění antény</string>
     <string name="tune_stopped_timeout">Tune zastaven po %1$d s</string>
     <string name="tune_blocked_tx">Před použitím Tune zastavte CQ/QSO</string>

@@ -99,6 +99,7 @@
     <string name="qsopanel_qsoing_with">QSO con %1$s</string>
     <string name="qsopanel_waiting_for">Esperando a %1$s</string>
     <string name="qsopanel_tap_to_view">toca para ver ↗</string>
+    <string name="qsopanel_sent_report">enviado %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Esperando mensajes...</string>
 
@@ -197,6 +198,8 @@
     <string name="log_sync_enable_services">Activa Cloudlog/Wavelog/Nextlog, QRZ o World Radio League en Ajustes e inténtalo de nuevo.</string>
     <string name="log_sync_progress_count">%1$d de %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d aceptados</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d ya en el libro de guardia</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d descargados</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d aceptados</string>
     <string name="log_sync_nothing_to_upload">Aún no hay QSOs en el diario para subir.</string>
     <string name="log_sync_working">Trabajando…</string>
@@ -423,6 +426,9 @@
     <string name="settings_qrz_profile_lookup_desc">Usuario + contraseña para la API XML de QRZ (avatares)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">Subir QSOs automáticamente a una instancia de Cloudlog, Wavelog o Nextlog</string>
+    <string name="settings_cloudlog_download">Descargar QSOs de Wavelog al sincronizar</string>
+    <string name="settings_cloudlog_download_desc">La sincronización también añade los QSOs que están en tu libro de Wavelog pero no en este. No se envían a QRZ ni a World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">Requiere Wavelog: este servidor no puede listar sus QSOs.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">Retardo de PTT</string>
@@ -484,6 +490,7 @@
     <string name="settings_username_hint">Tu usuario de QRZ.com</string>
     <string name="settings_password">Contraseña</string>
     <string name="settings_enabled_bands_dialog_desc">Las bandas ocultas no aparecerán en los selectores de frecuencia.</string>
+    <string name="settings_enabled_bands_keep_one">Al menos una banda debe permanecer activada.</string>
     <string name="settings_select_serial_port">Seleccionar puerto serie</string>
     <string name="settings_tx_volume_advice">Ajústalo en vivo — tu próximo TX usa este nivel. Vigila el ALC de tu radio y bájalo hasta que apenas roce la línea.</string>
     <string name="settings_input_volume">Volumen de entrada</string>
@@ -545,6 +552,8 @@
     <string name="cq_offset_moved">Desplazamiento de CQ movido a un hueco libre: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Offset de TX libre automático</string>
     <string name="settings_auto_clear_tx_desc">Al llamar CQ, elige un hueco libre según la actividad reciente de la banda y se aparta si se ocupa</string>
+    <string name="settings_auto_clear_tx_min">Offset automático mínimo</string>
+    <string name="settings_auto_clear_tx_min_desc">La selección automática nunca elige un offset por debajo de este. Súbelo para dejar los armónicos de audio fuera de la banda de paso</string>
     <string name="tune_content_description">Tune: inicia el sintonizador del equipo o transmite una portadora continua para ajustar la antena</string>
     <string name="tune_stopped_timeout">Tune detenido tras %1$d s</string>
     <string name="tune_blocked_tx">Detén el CQ/QSO antes de usar Tune</string>

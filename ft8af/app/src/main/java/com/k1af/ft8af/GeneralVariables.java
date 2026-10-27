@@ -15,6 +15,7 @@ import com.k1af.ft8af.callsign.CallsignInfo;
 import com.k1af.ft8af.connector.ConnectMode;
 import com.k1af.ft8af.database.ControlMode;
 import com.k1af.ft8af.database.DatabaseOpr;
+import com.k1af.ft8af.ft8listener.DecodeDepth;
 import com.k1af.ft8af.ft8transmit.QslRecordList;
 import com.k1af.ft8af.html.HtmlContext;
 import com.k1af.ft8af.rigs.BaseRigOperation;
@@ -42,6 +43,9 @@ public class GeneralVariables {
     public static boolean saveSWLMessage = false;//Save decoded messages switch
     public static boolean saveSWL_QSO = false;//Save QSOs from decoded messages switch
     public static boolean enableCloudlog = false;//Whether Cloudlog auto-sync is enabled
+    // Whether Sync also imports the QSOs the Wavelog logbook has and this log doesn't (issue #965).
+    // Off by default so an existing user's sync doesn't suddenly pull in thousands of other-mode QSOs.
+    public static boolean cloudlogDownloadQsos = false;
     public static boolean enableQRZ = false;//Whether QRZ auto-sync is enabled
     public static boolean enableWRL = false;//Whether World Radio League auto-sync is enabled (issue #800)
     public static boolean enablePskReporter = true;//Whether PSKReporter spot upload is enabled
@@ -65,12 +69,14 @@ public class GeneralVariables {
     // (verticals/wires) don't need.
     public static boolean showBeamHeading = false;
 
-    // Deep decode (subtract-and-redecode + extra LDPC iterations) is on by default so the app
-    // pulls weak signals out from under strong ones the way WSJT-X does at its default depth.
-    // A persisted "deepMode" config row still overrides this; only installs that never touched
-    // the setting pick up the new default. See ModeProfile#deepDecodeBudgetMillis for the loop
-    // time bound.
-    public static boolean deepDecodeMode = true;//Whether deep decode mode is enabled
+    // Decode depth (see DecodeDepth: FAST/BALANCED/DEEP). DEEP -- the old
+    // "deepMode" boolean's on state -- is the default, so the app pulls weak
+    // signals out from under strong ones the way WSJT-X does at its default
+    // depth; a persisted "decodeDepth" row overrides this, and an install
+    // that only ever had the retired "deepMode" row migrates from it once
+    // (see DatabaseOpr's hydration). See ModeProfile#deepDecodeBudgetMillis
+    // for the subtract-and-redecode loop's time bound.
+    public static int decodeDepth = DecodeDepth.DEEP;
 
     // Hold the screen awake while the app is in the foreground. On by default —
     // that was the hard-coded behaviour before this became a setting — but a long
@@ -140,6 +146,10 @@ public class GeneralVariables {
     // AudioChannelSelect.TX_CONFIG_KEY; read on the TX path, hence volatile.
     public static volatile int txAudioChannel = com.k1af.ft8af.wave.AudioChannelSelect.BOTH;
 
+    // QMX only: send each TX tone as a CAT TA command instead of audio — see
+    // QmxCatTones. Off by default. Persisted under QmxCatTones.CONFIG_KEY.
+    public static volatile boolean qmxCatTones = false;
+
     // Full duplex (satellite operating): show decodes of our OWN transmission
     // instead of discarding them as loopback echoes. On a linear-transponder
     // satellite the operator hears their own downlink while transmitting, and
@@ -171,11 +181,21 @@ public class GeneralVariables {
     public static volatile boolean savePerBandOutputLevel = false;
     //Serialized band=level CSV ("20m=60,40m=85"); parsed/updated in PerBandOutputLevel.kt.
     public static volatile String perBandOutputLevels = "";
+    //Save RX input volume per band (issue #927), defaults off. Same volatile
+    //convention; serialized band=percent CSV ("20m=100,10m=160", 0..200),
+    //parsed/updated in PerBandInputLevel.kt.
+    public static volatile boolean savePerBandInputLevel = false;
+    public static volatile String perBandInputLevels = "";
 
     //Auto-select a clear TX offset when calling CQ (issue #418), defaults off.
     //volatile: written from the config-load thread + Settings toggle, read from
     //the decode-delivery thread inside recordBandActivity.
     public static volatile boolean autoClearTxFreq = false;
+    //Lowest audio offset (Hz) the auto-clear pick may choose (issue #938). A low
+    //offset puts audio harmonics inside the SSB passband. Clamped by
+    //ClearFrequencyFinder.clampUserMinOffsetHz; the default keeps the old behavior.
+    public static volatile int autoClearTxMinFreq =
+            (int) com.k1af.ft8af.ft8transmit.ClearFrequencyFinder.DEFAULT_MIN_OFFSET_HZ;
 
     //Tune button (issue #408): hard cap on a single tune carrier in seconds
     //(clamped by TuneController), whether the tune level is independent of the

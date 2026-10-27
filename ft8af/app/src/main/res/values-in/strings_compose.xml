@@ -139,6 +139,7 @@
     <string name="qsopanel_qsoing_with">QSO dengan %1$s</string>
     <string name="qsopanel_waiting_for">Menunggu %1$s</string>
     <string name="qsopanel_tap_to_view">ketuk untuk lihat ↗</string>
+    <string name="qsopanel_sent_report">dikirim %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Menunggu pesan...</string>
     <string name="qsopanel_log_action">LOG</string>
@@ -240,6 +241,8 @@
     <string name="log_sync_enable_services">Aktifkan Cloudlog/Wavelog/Nextlog, QRZ, atau World Radio League di Setelan, lalu coba lagi.</string>
     <string name="log_sync_progress_count">%1$d dari %2$d QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d diterima</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d sudah ada di logbook</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d diunduh</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d diterima</string>
     <string name="log_sync_nothing_to_upload">Belum ada QSO di buku log untuk diunggah.</string>
     <string name="log_sync_working">Memproses…</string>
@@ -492,6 +495,9 @@
     <string name="settings_qrz_profile_lookup_desc">Nama pengguna + kata sandi untuk QRZ XML API (avatar)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">Unggah QSO otomatis ke instans Cloudlog, Wavelog, atau Nextlog</string>
+    <string name="settings_cloudlog_download">Unduh QSO dari Wavelog saat sinkronisasi</string>
+    <string name="settings_cloudlog_download_desc">Sinkronisasi juga menambahkan QSO yang ada di logbook Wavelog Anda tetapi tidak ada di log ini. QSO tersebut tidak dikirim ke QRZ atau World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">Memerlukan Wavelog: server ini tidak dapat menampilkan daftar QSO-nya.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">Penundaan PTT</string>
@@ -554,6 +560,7 @@
     <string name="settings_username_hint">Nama pengguna QRZ.com Anda</string>
     <string name="settings_password">Kata Sandi</string>
     <string name="settings_enabled_bands_dialog_desc">Band yang disembunyikan tidak akan muncul di pemilih frekuensi.</string>
+    <string name="settings_enabled_bands_keep_one">Setidaknya satu band harus tetap aktif.</string>
     <string name="settings_select_serial_port">Pilih Port Serial</string>
     <string name="settings_tx_volume_advice">Sesuaikan langsung — TX berikutnya menggunakan tingkat ini. Perhatikan ALC radio Anda dan turunkan sampai hanya menyentuh garis.</string>
     <string name="settings_input_volume">Volume Masukan</string>
@@ -580,6 +587,8 @@
     <string name="cq_offset_moved">Offset CQ dipindahkan ke tempat kosong: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Offset TX kosong otomatis</string>
     <string name="settings_auto_clear_tx_desc">Saat memanggil CQ, memilih tempat kosong dari aktivitas band terkini dan berpindah jika terisi</string>
+    <string name="settings_auto_clear_tx_min">Offset otomatis terendah</string>
+    <string name="settings_auto_clear_tx_min_desc">Offset otomatis tidak pernah memilih di bawah nilai ini. Naikkan agar harmonik audio berada di luar passband</string>
     <string name="tune_content_description">Tune: memulai tuner radio atau memancarkan gelombang pembawa kontinu untuk penalaan antena</string>
     <string name="tune_stopped_timeout">Tune dihentikan setelah %1$d dtk</string>
     <string name="tune_blocked_tx">Hentikan CQ/QSO sebelum menggunakan Tune</string>

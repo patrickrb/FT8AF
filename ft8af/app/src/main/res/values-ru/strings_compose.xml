@@ -99,6 +99,7 @@
     <string name="qsopanel_qsoing_with">QSO с %1$s</string>
     <string name="qsopanel_waiting_for">Ожидание %1$s</string>
     <string name="qsopanel_tap_to_view">нажмите для просмотра ↗</string>
+    <string name="qsopanel_sent_report">отпр. %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Ожидание сообщений...</string>
 
@@ -197,6 +198,8 @@
     <string name="log_sync_enable_services">Включите Cloudlog/Wavelog/Nextlog, QRZ или World Radio League в настройках и повторите.</string>
     <string name="log_sync_progress_count">%1$d из %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: принято %1$d</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d уже в журнале</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: загружено %1$d</string>
     <string name="log_sync_qrz_accepted">QRZ: принято %1$d</string>
     <string name="log_sync_nothing_to_upload">В журнале пока нет QSOs для загрузки.</string>
     <string name="log_sync_working">Работа…</string>
@@ -427,6 +430,9 @@
     <string name="settings_qrz_profile_lookup_desc">Имя пользователя + пароль для QRZ XML API (аватары)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">Автозагрузка QSO в экземпляр Cloudlog, Wavelog или Nextlog</string>
+    <string name="settings_cloudlog_download">Загружать QSO из Wavelog при синхронизации</string>
+    <string name="settings_cloudlog_download_desc">Синхронизация также добавляет QSO, которые есть в журнале Wavelog, но отсутствуют в этом журнале. Они не отправляются в QRZ и World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">Нужен Wavelog: этот сервер не умеет выдавать список своих QSO.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">Задержка PTT</string>
@@ -488,6 +494,7 @@
     <string name="settings_username_hint">Ваше имя пользователя QRZ.com</string>
     <string name="settings_password">Пароль</string>
     <string name="settings_enabled_bands_dialog_desc">Скрытые диапазоны не появятся в выборе частоты.</string>
+    <string name="settings_enabled_bands_keep_one">Хотя бы один диапазон должен оставаться включённым.</string>
     <string name="settings_select_serial_port">Выберите последовательный порт</string>
     <string name="settings_tx_volume_advice">Регулируйте вживую — следующая передача использует этот уровень. Следите за ALC трансивера и убавляйте, пока он лишь слегка касается линии.</string>
     <string name="settings_input_volume">Громкость входа</string>
@@ -549,6 +556,8 @@
     <string name="cq_offset_moved">Смещение CQ перенесено на свободное место: %1$d Гц</string>
     <string name="settings_auto_clear_tx">Автовыбор свободного смещения TX</string>
     <string name="settings_auto_clear_tx_desc">При вызове CQ выбирает свободное место по недавней активности диапазона и уходит, если оно занимается</string>
+    <string name="settings_auto_clear_tx_min">Минимальное автосмещение</string>
+    <string name="settings_auto_clear_tx_min_desc">Автовыбор никогда не выбирает смещение ниже этого. Повысьте, чтобы гармоники аудио не попадали в полосу пропускания</string>
     <string name="tune_content_description">Tune: запускает тюнер трансивера или передаёт непрерывную несущую для настройки антенны</string>
     <string name="tune_stopped_timeout">Tune остановлен через %1$d с</string>
     <string name="tune_blocked_tx">Остановите CQ/QSO перед использованием Tune</string>

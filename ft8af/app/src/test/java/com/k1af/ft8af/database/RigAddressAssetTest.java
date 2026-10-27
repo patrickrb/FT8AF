@@ -2,6 +2,8 @@ package com.k1af.ft8af.database;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.k1af.ft8af.rigs.InstructionSet;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -15,7 +17,8 @@ import java.util.ArrayList;
  * exercises getRigNamesFromFile / getRigNameByIndex / getIndexByAddress,
  * which {@link RigNameListTest} can't reach without a Context).
  *
- * <p>Two invariants matter here beyond the IC-7300MK2 entry itself:
+ * <p>Per-rig checks pin the profiles of recently added entries (IC-7300MK2,
+ * FTX-1). Two invariants matter beyond those:
  * <ul>
  *   <li><b>New rigs must be appended, existing lines must not move</b>: the
  *       selected model is persisted as a raw index into this list
@@ -24,7 +27,7 @@ import java.util.ArrayList;
  *       selected rig on upgrade. {@link #rigList_matchesGoldenIndexOrder} pins
  *       every entry to its index; when you add a rig, append it to both the
  *       asset file and the end of {@code GOLDEN_ORDER}.</li>
- *   <li>Its CI-V address (0xB6) is unique in the list, so
+ *   <li>The IC-7300MK2's CI-V address (0xB6) is unique in the list, so
  *       {@link RigNameList#getIndexByAddress(int)} maps it unambiguously.</li>
  * </ul>
  */
@@ -114,6 +117,10 @@ public class RigAddressAssetTest {
         "(tr)uSDX (TS-480)",
         "Yaesu FT-891 (Hamlib)",
         "ICOM IC-7300MK2",
+        "YAESU FTX-1(USB)",
+        "QRP Labs QMX",
+        "Qrp Labs QMX (Hamlib)",
+        "XIEGU G106(USB)",
     };
 
     private RigNameList load() {
@@ -158,11 +165,59 @@ public class RigAddressAssetTest {
     }
 
     @Test
-    public void ic7300mk2_isTheLastEntry() {
-        // New rigs are append-only (class javadoc); MK2 closed the list.
+    public void lastEntry_isTheLastGoldenName() {
+        // New rigs are append-only (class javadoc): the loaded list must end
+        // with the newest GOLDEN_ORDER entry. Pinned to the array rather than a
+        // model name so appending a rig doesn't mean rewriting this test.
         RigNameList list = load();
         assertThat(list.rigList.get(list.rigList.size() - 1).modelName)
-                .isEqualTo("ICOM IC-7300MK2");
+                .isEqualTo(GOLDEN_ORDER[GOLDEN_ORDER.length - 1]);
+    }
+
+    @Test
+    public void ftx1_usesTheFt891991UsbProfile() {
+        // A user reported (issue #931) working CAT on the FTX-1 with the
+        // "FT-891/991(USB)" entry: same 38400 baud and 9-digit Yaesu gen-3
+        // command set, so the named entry mirrors that profile exactly.
+        RigNameList list = load();
+        RigNameList.RigName ftx1 = findByName(list, "YAESU FTX-1(USB)");
+        RigNameList.RigName ft891 = findByName(list, "YAESU FT-891/991(USB)");
+        assertThat(ftx1).isNotNull();
+        assertThat(ft891).isNotNull();
+        assertThat(ftx1.bauRate).isEqualTo(38400);
+        assertThat(ftx1.instructionSet).isEqualTo(2); // InstructionSet.YAESU_3_9
+        assertThat(ftx1.address).isEqualTo(ft891.address);
+        assertThat(ftx1.bauRate).isEqualTo(ft891.bauRate);
+        assertThat(ftx1.instructionSet).isEqualTo(ft891.instructionSet);
+    }
+
+    @Test
+    public void qmx_isListedWithItsOwnInstructionSetAndQdxBaud() {
+        // The QMX speaks the same TS-480-style CAT subset as the QDX, but has
+        // its own instruction set so it is put in digital mode (MD6;) rather
+        // than the TS-590's MD2; (USB voice on SSB-capable QMX firmware).
+        // Baud matches the QDX; it is moot over USB CDC anyway.
+        RigNameList list = load();
+        RigNameList.RigName qmx = findByName(list, "QRP Labs QMX");
+        RigNameList.RigName qdx = findByName(list, "Qrp Labs QDX");
+        assertThat(qmx).isNotNull();
+        assertThat(qmx.instructionSet).isEqualTo(InstructionSet.QRPLABS_QMX);
+        assertThat(qmx.bauRate).isEqualTo(9600);
+        assertThat(qmx.bauRate).isEqualTo(qdx.bauRate);
+        assertThat(qdx.instructionSet).isEqualTo(InstructionSet.KENWOOD_TS590);
+    }
+
+    @Test
+    public void qmxHamlib_isListedWithHamlibModelId() {
+        // hamlib's RIG_MODEL_QRPLABS_QMX = RIG_MAKE_MODEL(RIG_KENWOOD, 57) =
+        // 1000*2+57 = 2057 = 0x809 (see rigs/kenwood/ts480.c's qrplabs_qmx_caps,
+        // MAX_MODELS_PER_BACKEND=1000 and RIG_KENWOOD=2 in riglist.h). Baud 9600
+        // is that backend's declared serial_rate_min.
+        RigNameList.RigName qmx = findByName(load(), "Qrp Labs QMX (Hamlib)");
+        assertThat(qmx).isNotNull();
+        assertThat(qmx.address).isEqualTo(0x809);
+        assertThat(qmx.bauRate).isEqualTo(9600);
+        assertThat(qmx.instructionSet).isEqualTo(26); // InstructionSet.HAMLIB
     }
 
     @Test

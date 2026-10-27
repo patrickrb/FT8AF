@@ -185,6 +185,104 @@ public class UsbAudioDevice {
     }
 
     /**
+     * Resolves a possibly-stale {@code AudioManager} device id against the
+     * current device list: an exact match on {@code ids} if present,
+     * otherwise the first entry whose {@code productNames} contains (or is
+     * contained by -- see {@link #namesOverlap}) {@code fallbackProductName}.
+     * A USB device's numeric {@code AudioDeviceInfo} id is NOT stable across
+     * a replug/power-cycle re-enumeration (confirmed on real hardware: a QMX
+     * power-cycle alone changed it, reverting the Settings audio-device
+     * picker to "Default"), but its product name is -- callers derive {@code
+     * fallbackProductName} from the persisted VID:PID via the live USB
+     * device list (e.g. {@link #findDeviceByVidPid}'s {@code
+     * getProductName()}), which doesn't change across reconnects either.
+     * Containment, not equality: confirmed on real hardware that Android's
+     * generic USB-Audio HAL decorates the raw USB descriptor's product name
+     * ("QMX Transceiver", what {@code UsbDevice.getProductName()} and this
+     * method's {@code fallbackProductName} carry) with a prefix for the
+     * {@code AudioDeviceInfo} it exposes ("USB-Audio - QMX Transceiver",
+     * what {@code productNames} carries here) -- the two are never
+     * byte-identical.
+     *
+     * <p>Pure/plain-array so it is unit-testable without Android types:
+     * {@code AudioDeviceInfo} has no public constructor, so a caller passing
+     * real {@code AudioDeviceInfo[]} would make this logic untestable outside
+     * Robolectric.
+     *
+     * @param ids                 device ids, in list order
+     * @param productNames        product names, same order as {@code ids}
+     *                            (entries may be null)
+     * @param deviceId            the persisted device id to resolve
+     * @param fallbackProductName product name to fall back to matching by,
+     *                            or null if there is nothing to fall back to
+     * @return the matching index into {@code ids}/{@code productNames}, or
+     *     -1 if nothing matched
+     */
+    public static int resolveDeviceIndex(int[] ids, String[] productNames, int deviceId,
+                                          String fallbackProductName) {
+        for (int i = 0; i < ids.length; i++) {
+            if (ids[i] == deviceId) return i;
+        }
+        if (fallbackProductName != null) {
+            for (int i = 0; i < productNames.length; i++) {
+                if (namesOverlap(productNames[i], fallbackProductName)) return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Finds the raw USB device (from a fresh {@link #findUsbAudioDevices}
+     * list) whose descriptor is the underlying hardware for a picked
+     * {@code AudioManager} device, by product-name overlap (see {@link
+     * #namesOverlap}) in the given direction. Used to persist a VID:PID for
+     * a framework-routed pick (Settings), since {@code AudioDeviceInfo}
+     * itself exposes no VID:PID. Returns null if {@code audioDeviceProductName}
+     * is null/blank, or if zero or more than one raw device matches -- never
+     * guess between two physically attached USB audio devices.
+     */
+    public static UsbAudioDeviceInfo matchByProductName(
+            List<UsbAudioDeviceInfo> usbDevices, String audioDeviceProductName, boolean input) {
+        List<UsbAudioDeviceInfo> eligible = new ArrayList<>();
+        for (UsbAudioDeviceInfo info : usbDevices) {
+            if (input ? info.hasInput : info.hasOutput) eligible.add(info);
+        }
+        String[] names = new String[eligible.size()];
+        for (int i = 0; i < eligible.size(); i++) {
+            names[i] = eligible.get(i).device.getProductName();
+        }
+        int idx = unambiguousNameMatchIndex(names, audioDeviceProductName);
+        return idx < 0 ? null : eligible.get(idx);
+    }
+
+    /**
+     * Index of the single entry in {@code productNames} that overlaps
+     * {@code audioDeviceProductName} (see {@link #namesOverlap}), or -1 if
+     * zero or more than one match -- never guess between two candidates.
+     * Pure/plain-array (see {@link #resolveDeviceIndex}'s javadoc for why).
+     */
+    static int unambiguousNameMatchIndex(String[] productNames, String audioDeviceProductName) {
+        if (audioDeviceProductName == null || audioDeviceProductName.trim().isEmpty()) return -1;
+        int match = -1;
+        for (int i = 0; i < productNames.length; i++) {
+            if (namesOverlap(audioDeviceProductName, productNames[i])) {
+                if (match != -1) return -1; // ambiguous: more than one match
+                match = i;
+            }
+        }
+        return match;
+    }
+
+    /** Case-insensitive substring match, either direction; false if either side is blank. */
+    private static boolean namesOverlap(String a, String b) {
+        if (a == null || b == null) return false;
+        String na = a.trim().toLowerCase(java.util.Locale.US);
+        String nb = b.trim().toLowerCase(java.util.Locale.US);
+        if (na.isEmpty() || nb.isEmpty()) return false;
+        return na.contains(nb) || nb.contains(na);
+    }
+
+    /**
      * Open the USB audio device and discover audio endpoints.
      */
     public boolean open(Context context, UsbDevice device) {

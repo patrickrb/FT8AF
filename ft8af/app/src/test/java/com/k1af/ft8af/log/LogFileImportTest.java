@@ -240,13 +240,13 @@ public class LogFileImportTest {
         assertThat(LogFileImport.readFully(drip)).isEmpty();
     }
 
-    @Test(expected = IOException.class)
-    public void readFully_throwsWhenExceedingCap() throws IOException {
-        // A stream longer than MAX_IMPORT_BYTES must be rejected (defensive OOM guard on the
-        // web-logger HTTP-upload path), not read unbounded. This synthetic stream reports
-        // just over the cap without allocating a full copy up front.
-        InputStream oversize = new InputStream() {
-            private long remaining = (long) LogFileImport.MAX_IMPORT_BYTES + 1;
+    /**
+     * A stream of {@code length} zero bytes that never holds a copy of itself, so only
+     * the reader under test buffers anything.
+     */
+    private static InputStream zeros(long length) {
+        return new InputStream() {
+            private long remaining = length;
 
             @Override
             public int read() {
@@ -263,7 +263,27 @@ public class LogFileImportTest {
                 return n; // bytes left as-is; only the count matters for the cap
             }
         };
-        LogFileImport.readFully(oversize);
+    }
+
+    @Test(expected = IOException.class)
+    public void readFully_throwsWhenExceedingCap() throws IOException {
+        // A stream longer than the cap must be rejected (defensive OOM guard on the
+        // web-logger HTTP-upload path), not read unbounded. A small cap keeps the test
+        // cheap: at the real 100 MB cap the reader buffered 100 MB before throwing, and
+        // that ran CI's 512 MB test heap out (OutOfMemoryError, not IOException).
+        LogFileImport.readFully(zeros(16 * 1024 + 1), 16 * 1024);
+    }
+
+    @Test
+    public void readFully_acceptsAStreamExactlyAtTheCap() throws IOException {
+        assertThat(LogFileImport.readFully(zeros(16 * 1024), 16 * 1024)).hasLength(16 * 1024);
+    }
+
+    @Test
+    public void maxImportBytes_is100Mb() {
+        // The one-argument readFully() the import calls passes this cap; pin the
+        // documented size without reading that much in a test.
+        assertThat(LogFileImport.MAX_IMPORT_BYTES).isEqualTo(100 * 1024 * 1024);
     }
 
     @Test

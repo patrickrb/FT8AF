@@ -87,6 +87,7 @@ import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.count.CountDbOpr
 import com.k1af.ft8af.log.ImportSharedLogs
 import com.k1af.ft8af.log.OnShareLogEvents
+import java.io.IOException
 import com.k1af.ft8af.log.QSLCallsignRecord
 import com.k1af.ft8af.log.ThirdPartyService
 import com.k1af.ft8af.maidenhead.MaidenheadGrid
@@ -95,6 +96,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import radio.ks3ckc.ft8af.sync.cloudlogHintResId
+import radio.ks3ckc.ft8af.sync.cloudlogServerReason
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.AnimatedCounter
 import radio.ks3ckc.ft8af.ui.components.EmptyStateWaves
@@ -207,12 +210,15 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val stream = try {
-            appContext.contentResolver.openInputStream(uri)
+        // Open once just to confirm the URI is actually readable (closed immediately --
+        // ImportSharedLogs.doImport re-opens it per pass itself, see below), so a bad pick
+        // still shows the "failed to open" state up front, same as before.
+        val openable = try {
+            appContext.contentResolver.openInputStream(uri)?.use { true } ?: false
         } catch (e: Exception) {
-            null
+            false
         }
-        if (stream == null) {
+        if (!openable) {
             importDialogState = failedImportState(importOpenFailedMsg)
             return@rememberLauncherForActivityResult
         }
@@ -222,26 +228,35 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
             // ImportSharedLogs runs on its own thread and reports back through
             // these callbacks (also on that thread); Compose snapshot state is
             // safe to write from there, same as the sync-progress callback above.
-            ImportSharedLogs(mainViewModel).doImport(stream, object : OnShareLogEvents {
-                override fun onPreparing(info: String?) {}
+            // It streams the source twice (count, then parse+insert), re-opening the
+            // URI each time rather than buffering the whole file to allow "rewinding".
+            ImportSharedLogs(mainViewModel).doImport(
+                {
+                    appContext.contentResolver.openInputStream(uri)
+                        ?: throw IOException("Failed to open input stream for URI: $uri")
+                },
+                object : OnShareLogEvents {
+                    override fun onPreparing(info: String?) {}
 
-                override fun onShareStart(count: Int, info: String?) {
-                    importDialogState = importDialogState?.copy(total = count)
-                }
+                    override fun onShareStart(count: Int, info: String?) {
+                        importDialogState = importDialogState?.copy(total = count)
+                    }
 
-                override fun onShareProgress(count: Int, position: Int, info: String?): Boolean {
-                    importDialogState = importDialogState?.copy(total = count, position = position)
-                    return true
-                }
+                    override fun onShareProgress(count: Int, position: Int, info: String?): Boolean {
+                        importDialogState = importDialogState?.copy(total = count, position = position)
+                        return true
+                    }
 
-                override fun afterGet(count: Int, info: String?) {
-                    importDialogState = finishedImportState(count, tally)
-                }
+                    override fun afterGet(count: Int, info: String?) {
+                        importDialogState = finishedImportState(count, tally)
+                    }
 
-                override fun onShareFailed(info: String?) {
-                    importDialogState = failedImportState(info)
-                }
-            }, tally)
+                    override fun onShareFailed(info: String?) {
+                        importDialogState = failedImportState(info)
+                    }
+                },
+                tally,
+            )
         } catch (e: java.io.IOException) {
             importDialogState = failedImportState(e.message)
         }
@@ -408,9 +423,11 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                             )
                             scope.launch {
                                 val result = withContext(Dispatchers.IO) {
-                                    val db = mainViewModel.databaseOpr?.db
+                                    val opr = mainViewModel.databaseOpr
                                         ?: return@withContext null
-                                    ThirdPartyService.syncAllQSOs(db) { done, total, ok1, ok2, ok3 ->
+                                    // Takes the helper, not just its db: with "Download QSOs from
+                                    // Wavelog" on it inserts through the ADIF import's path (#965).
+                                    ThirdPartyService.syncAllQSOs(opr) { done, total, ok1, ok2, ok3 ->
                                         // Marshal back to main thread for state update
                                         syncDialogState = syncDialogState?.copy(
                                             done = done,
@@ -428,6 +445,11 @@ fun LogbookScreen(mainViewModel: MainViewModel) {
                                     cloudlogOk = result?.cloudlogOk ?: 0,
                                     qrzOk = result?.qrzOk ?: 0,
                                     wrlOk = result?.wrlOk ?: 0,
+                                    cloudlogError = result?.cloudlogError,
+                                    qrzError = result?.qrzError,
+                                    wrlError = result?.wrlError,
+                                    cloudlogAlreadyPresent = result?.cloudlogAlreadyPresent ?: 0,
+                                    cloudlogDownloaded = result?.cloudlogDownloaded ?: 0,
                                 )
                                 // Re-query QSLTable so the row chips pick up the
                                 // newly-set synced_cloudlog / synced_qrz / synced_wrl flags.
@@ -577,6 +599,12 @@ private data class SyncDialogState(
     val wrlAttempted: Boolean,
     val finished: Boolean,
     val noServicesEnabled: Boolean,
+    /** Why the first failed upload failed, per service (null = none failed). Shown when finished. */
+    val cloudlogError: String? = null,
+    val qrzError: String? = null,
+    val wrlError: String? = null,
+    val cloudlogAlreadyPresent: Int = 0,
+    val cloudlogDownloaded: Int = 0,
 )
 
 @Composable
@@ -2438,6 +2466,28 @@ private fun CatchUpSyncDialog(
                         color = TextMuted,
                         fontSize = 12.sp,
                     )
+                    if (state.cloudlogAlreadyPresent > 0) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(
+                                R.string.log_sync_cloudlog_already_present,
+                                state.cloudlogAlreadyPresent,
+                            ),
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                        )
+                    }
+                    if (state.cloudlogDownloaded > 0) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(
+                                R.string.log_sync_cloudlog_downloaded,
+                                state.cloudlogDownloaded,
+                            ),
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                        )
+                    }
                 }
                 if (state.qrzAttempted) {
                     Spacer(modifier = Modifier.height(4.dp))
@@ -2463,6 +2513,13 @@ private fun CatchUpSyncDialog(
                         fontSize = 12.sp,
                     )
                 }
+                // "0 accepted" with no reason is what sends people to Discord. Show the
+                // server's own explanation, plus which setting to look at when we know.
+                if (state.finished) {
+                    SyncRejection(R.string.log_sync_cloudlog_rejected, state.cloudlogError, hint = true)
+                    SyncRejection(R.string.log_sync_qrz_rejected, state.qrzError, hint = false)
+                    SyncRejection(R.string.log_sync_wrl_rejected, state.wrlError, hint = false)
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -2486,6 +2543,37 @@ private fun CatchUpSyncDialog(
                 )
             }
         }
+    }
+}
+
+/**
+ * One rejected-upload line in the catch-up dialog: the service's reason in red, and for
+ * Cloudlog-family servers the fix-it hint (Station ID / API key) underneath. Renders
+ * nothing when the service had no failure.
+ */
+@Composable
+private fun SyncRejection(
+    @StringRes labelRes: Int,
+    failure: String?,
+    hint: Boolean,
+) {
+    if (failure.isNullOrBlank()) return
+    Spacer(modifier = Modifier.height(8.dp))
+    Text(
+        text = stringResource(labelRes, cloudlogServerReason(failure)),
+        color = StatusBad,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+    )
+    val hintRes = if (hint) cloudlogHintResId(failure) else null
+    if (hintRes != null) {
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = stringResource(hintRes),
+            color = TextMuted,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
     }
 }
 
@@ -2571,6 +2659,18 @@ private fun AdifImportDialog(
                         color = TextMuted,
                         fontSize = 12.sp,
                     )
+                    // Only shown when non-zero: records that WERE added/updated above but
+                    // had one field (e.g. an unparseable RST) dropped to a fallback value --
+                    // distinct from "invalid" (not written at all), so this doesn't double
+                    // count against added/updated.
+                    if (state.warnings > 0) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.log_import_warnings, state.warnings),
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                        )
+                    }
                 }
             }
 

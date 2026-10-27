@@ -30,6 +30,23 @@ struct TxConnectionState {
     /// connection in the graph, so the next `play()` must reconnect and rebuild
     /// the format converter against the (possibly new) mixer output format.
     mutating func invalidateConnection() { isConnected = false }
+
+    /// Whether `play()` must cycle (stop→start) the shared engine after
+    /// `ensureConnected()` ran.
+    ///
+    /// The capture engine is started for RX *input* only, so the first thing to
+    /// touch `mainMixerNode` is the TX path's `engine.connect(player, to:
+    /// mainMixer)`. Forming that `mixer → output` link on an already-running
+    /// engine leaves the new output chain un-pulled by the render thread: the
+    /// node keys without error but no samples reach the hardware, so TX is
+    /// audible nowhere and the rig's Data-VOX never triggers (TUNE is silent at
+    /// the radio too, since it shares this path). Cycling the engine brings the
+    /// whole graph — including `player → mixer → output` — up rendering.
+    ///
+    /// Only needed when a (re)connect actually happened; the steady-state TX
+    /// (already connected, nothing torn down) must NOT cycle, or every slot
+    /// would stutter the capture tap.
+    static func mustCycleEngineAfterConnect(didConnect: Bool) -> Bool { didConnect }
 }
 
 /// Plays a mono 12 kHz FT8 waveform through the device speaker using an
@@ -94,23 +111,30 @@ final class TxPlayerService: @unchecked Sendable {
     /// keying a disconnected node (which aborts the app).
     @objc private func handleConfigChange() {
         lock.lock()
+        invalidateConnectionLocked()
+        lock.unlock()
+    }
+
+    /// Mark the node's connection stale and drop the converter so the next
+    /// `play()` reconnects. Caller must hold `lock`.
+    private func invalidateConnectionLocked() {
         conn.invalidateConnection()
         outputConverter = nil
-        lock.unlock()
     }
 
     /// Attach (once) and connect the player node, creating the format
     /// converter. Reconnects and rebuilds the converter when a prior config
-    /// change invalidated the connection. Returns the converter, or `nil` if the
-    /// hardware output format is invalid (e.g. 0 Hz on Simulator at startup) —
-    /// the caller should skip playback. Returning the converter directly (rather
+    /// change invalidated the connection. Returns the converter (or `nil` if the
+    /// hardware output format is invalid — e.g. 0 Hz on Simulator at startup, in
+    /// which case the caller should skip playback) and whether this call
+    /// actually (re)connected the node. Returning the converter directly (rather
     /// than letting `play()` re-read `outputConverter`) keeps the read under the
     /// lock, so a concurrent `handleConfigChange` can't nil it between the check
     /// and the use.
-    private func ensureConnected() -> AVAudioConverter? {
+    private func ensureConnected() -> (converter: AVAudioConverter?, didConnect: Bool) {
         lock.lock(); defer { lock.unlock() }
-        if !conn.needsConnect { return outputConverter }
-        guard let engine else { return nil }
+        if !conn.needsConnect { return (outputConverter, false) }
+        guard let engine else { return (nil, false) }
 
         // Use the mixer's output format — on real devices this is the
         // hardware rate (e.g. 48 kHz stereo); on Simulator it becomes valid
@@ -118,7 +142,7 @@ final class TxPlayerService: @unchecked Sendable {
         // different rate (e.g. the DigiRig's), so it must be re-read here.
         let mixerFormat = engine.mainMixerNode.outputFormat(forBus: 0)
         guard mixerFormat.sampleRate > 0, mixerFormat.channelCount > 0 else {
-            return nil
+            return (nil, false)
         }
 
         if conn.needsAttach {
@@ -127,9 +151,9 @@ final class TxPlayerService: @unchecked Sendable {
         }
         engine.connect(playerNode, to: engine.mainMixerNode, format: mixerFormat)
         outputConverter = AVAudioConverter(from: ft8Format, to: mixerFormat)
-        guard outputConverter != nil else { return nil }
+        guard outputConverter != nil else { return (nil, false) }
         conn.markConnected()
-        return outputConverter
+        return (outputConverter, true)
     }
 
     /// Schedule and play `samples` (mono Float32 at 12 kHz). Interrupts any
@@ -159,9 +183,31 @@ final class TxPlayerService: @unchecked Sendable {
         // Re-establish the node connection if a config change invalidated it.
         // Skipping this is what aborts the app: play() on a disconnected node
         // raises an uncaught NSException in AVFAudio.
-        guard let converter = ensureConnected() else {
+        let (maybeConverter, didConnect) = ensureConnected()
+        guard let converter = maybeConverter else {
             completion?()
             return false
+        }
+
+        // A fresh (re)connect formed the player → mixer → output chain on the
+        // already-running capture engine, where the render thread won't pull it
+        // — so TX keys silently (no audio out any route; the rig's Data-VOX
+        // never triggers). Cycle the engine once to bring the new output chain
+        // up rendering. Only on an actual (re)connect: steady-state TX skips
+        // this, so the capture tap isn't stuttered every slot.
+        if TxConnectionState.mustCycleEngineAfterConnect(didConnect: didConnect),
+           let engine {
+            engine.stop()
+            do {
+                try engine.start()
+            } catch {
+                // Couldn't bring the engine back; the connection is now stale.
+                lock.lock()
+                invalidateConnectionLocked()
+                lock.unlock()
+                completion?()
+                return false
+            }
         }
 
         // Wrap input samples in a PCM buffer at 12 kHz.
@@ -223,8 +269,7 @@ final class TxPlayerService: @unchecked Sendable {
         if raised != nil {
             lock.lock()
             _isPlaying = false
-            conn.invalidateConnection()
-            outputConverter = nil
+            invalidateConnectionLocked()
             lock.unlock()
             completion?()
             return false

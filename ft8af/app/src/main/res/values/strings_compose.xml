@@ -208,6 +208,7 @@
     <string name="qsopanel_qsoing_with">QSOing with %1$s</string>
     <string name="qsopanel_waiting_for">Waiting for %1$s</string>
     <string name="qsopanel_tap_to_view">tap to view ↗</string>
+    <string name="qsopanel_sent_report">sent %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Waiting for messages...</string>
     <string name="qsopanel_log_action">LOG</string>
@@ -215,10 +216,11 @@
 
     <!-- ===== Decode screen ===== -->
     <string name="decode_title">Decode</string>
-    <string name="decode_subtitle">"%1$s  •  %2$d decoded this cycle"</string>
+    <string name="decode_subtitle">"%1$s  •  %2$d decoded"</string>
     <string name="decode_clear_list">Clear decode list</string>
     <string name="decode_utc_placeholder">UTC : --:--:--</string>
     <string name="decode_time_group_utc">%1$s UTC</string>
+    <string name="decode_time_group_utc_with_count">%1$s UTC  •  %2$d stations</string>
     <!-- Sort control: cycles the collapsed one-row-per-station decode list. The
          short _label_ strings render inside the top-bar button; the _cd_ strings
          are the accessibility content descriptions announcing the active mode. -->
@@ -372,10 +374,20 @@
     <string name="log_sync_enable_services">Enable Cloudlog/Wavelog/Nextlog, QRZ, or World Radio League in Settings, then try again.</string>
     <string name="log_sync_progress_count">%1$d of %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d accepted</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d already in logbook</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d downloaded</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d accepted</string>
     <string name="log_sync_wrl_accepted">World Radio League: %1$d accepted</string>
     <string name="log_sync_nothing_to_upload">No QSOs in the logbook to upload yet.</string>
     <string name="log_sync_working">Working…</string>
+    <!-- Rejected-upload lines in the catch-up sync dialog; %1$s = the server's own reason -->
+    <string name="log_sync_cloudlog_rejected">Cloudlog / Wavelog / Nextlog rejected uploads: %1$s</string>
+    <string name="log_sync_qrz_rejected">QRZ rejected uploads: %1$s</string>
+    <string name="log_sync_wrl_rejected">World Radio League rejected uploads: %1$s</string>
+    <!-- Toast after a logged QSO (or a background catch-up) is refused by the logbook server -->
+    <string name="cloudlog_upload_rejected">Cloudlog / Wavelog rejected the QSO: %1$s</string>
+    <string name="cloudlog_hint_station_id">Check the Station ID in Settings › Logging › Cloudlog / Wavelog: tap Test Connection and pick it from the list. It must belong to the same user that created the API key.</string>
+    <string name="cloudlog_hint_api_key">Check the API key in Settings › Logging › Cloudlog / Wavelog. It must be enabled and have read/write rights.</string>
     <string name="log_cd_import_qsos">Import ADIF log</string>
     <string name="log_import_title_importing">IMPORTING ADIF LOG…</string>
     <string name="log_import_title_complete">IMPORT COMPLETE</string>
@@ -384,6 +396,7 @@
     <string name="log_import_added">Added: %1$d new QSOs</string>
     <string name="log_import_updated">Updated: %1$d existing QSOs</string>
     <string name="log_import_invalid">Skipped: %1$d invalid records</string>
+    <string name="log_import_warnings">Imported with a dropped field: %1$d records</string>
     <string name="log_import_none_found">No ADIF records found in the selected file. Choose a .adi log file exported from WSJT-X or another logging app.</string>
     <string name="log_import_open_failed">Could not open the selected file.</string>
 
@@ -714,6 +727,9 @@
     <string name="settings_per_band_volume">Save Output Level per Band</string>
     <string name="settings_per_band_volume_desc">Remember the TX volume separately for each band and restore it on band change</string>
     <string name="per_band_volume_restored">TX volume %1$d%% restored for %2$s</string>
+    <string name="settings_per_band_input_volume">Save Input Volume per Band</string>
+    <string name="settings_per_band_input_volume_desc">Remember the RX input volume separately for each band and restore it on band change</string>
+    <string name="per_band_input_volume_restored">Input volume %1$d%% restored for %2$s</string>
 
     <!-- ===== Settings: transmission ===== -->
     <string name="settings_tx_rx_split">TX/RX Split</string>
@@ -868,6 +884,9 @@
     <string name="settings_qrz_profile_lookup_desc">Username + password for QRZ XML API (avatars)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">Auto-upload QSOs to a Cloudlog, Wavelog, or Nextlog instance</string>
+    <string name="settings_cloudlog_download">Download QSOs from Wavelog when syncing</string>
+    <string name="settings_cloudlog_download_desc">Sync also adds QSOs that are in your Wavelog logbook but not in this log. They aren\'t sent on to QRZ or World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">Needs Wavelog: this server can\'t list its QSOs.</string>
     <string name="settings_wrl" translatable="false">World Radio League</string>
     <string name="settings_wrl_desc">Auto-upload QSOs to your World Radio League logbook (requires a Developer API key)</string>
     <string name="settings_wrl_dialog_desc">Generate a key in World Radio League under Integrations → Developer API. One key covers your whole account.</string>
@@ -891,8 +910,8 @@
     <string name="settings_section_power">POWER &amp; HEAT</string>
     <string name="settings_keep_screen_on">Keep screen on</string>
     <string name="settings_keep_screen_on_desc">Hold the display awake while the app is open. Turn off for long portable sessions — receive keeps running in the background and the phone runs much cooler</string>
-    <string name="settings_deep_decode">Deep decode</string>
-    <string name="settings_deep_decode_desc" formatted="false">Subtract-and-redecode pass that digs weak signals out from under strong ones. Uses up to 75% of every slot at full CPU — the biggest single heat source. Turn off to run cooler at the cost of some weak decodes</string>
+    <string name="settings_deep_decode">Decode depth</string>
+    <string name="settings_deep_decode_desc" formatted="false">Balanced adds a deeper pass that tries harder on weak signals. Deep also subtracts and redecodes to dig out signals hidden under stronger ones — up to 75% of every slot at full CPU, the biggest single heat source. Fast runs coolest at the cost of weak decodes</string>
     <string name="late_start_deferred">Too late this cycle (need %d ms clip) — waiting for next slot</string>
 
     <!-- ===== Settings: about ===== -->
@@ -994,17 +1013,21 @@
     <string name="settings_api_key">API Key</string>
     <string name="settings_api_key_hint">Your Cloudlog API key</string>
     <string name="settings_loading_stations">Loading stations...</string>
-    <string name="settings_station_id">Station ID</string>
-    <string name="settings_station_id_hint">e.g. 1</string>
+    <string name="settings_station_id">Station Location ID</string>
+    <string name="settings_station_id_hint">Number from Wavelog/Cloudlog, e.g. 1</string>
+    <string name="settings_station_id_invalid">Digits only: the Station Location ID number from Wavelog/Cloudlog, not a callsign or name.</string>
+    <string name="settings_station_id_missing">No Station Location ID entered. Every upload will be rejected without one.</string>
+    <string name="settings_station_id_not_on_server">Station Location ID %1$s isn\'t in the list the server returned for this API key (Wavelog may list only the active logbook\'s stations). If uploads are rejected, pick one from the list.</string>
     <string name="settings_select_a_station">Select a station</string>
     <string name="settings_enter_manually">Enter manually</string>
     <string name="settings_choose_from_server">Choose from server</string>
-    <string name="settings_station_profile">Station Profile</string>
+    <string name="settings_station_profile">Station Location</string>
     <string name="settings_qrz_creds_desc">Used to fetch profile photos for decoded callsigns via the QRZ XML API. Requires a QRZ XML subscription.</string>
     <string name="settings_username">Username</string>
     <string name="settings_username_hint">Your QRZ.com username</string>
     <string name="settings_password">Password</string>
     <string name="settings_enabled_bands_dialog_desc">Hidden bands won\'t appear in the frequency pickers.</string>
+    <string name="settings_enabled_bands_keep_one">At least one band must stay enabled.</string>
     <string name="settings_select_serial_port">Select Serial Port</string>
     <string name="serial_port_label_port_of">Port %1$d of %2$d</string>
     <string name="serial_port_picker_dual_port_hint">Dual-port chip: Yaesu rigs use the Enhanced port for CAT, Kenwood TS-890S/TS-990S use the Standard port. The other port is for RTS/DTR keying.</string>
@@ -1018,6 +1041,8 @@
     <string name="settings_tx_channel">Transmit Audio Channel</string>
     <string name="settings_tx_channel_desc">Which side of a stereo output carries the transmitted audio. Use Left or Right to drive one radio on a splitter cable.</string>
     <string name="settings_tx_channel_both">Both</string>
+    <string name="settings_qmx_cat_tones">QMX: Send Tones over CAT</string>
+    <string name="settings_qmx_cat_tones_desc">QRP Labs QMX only. Transmit by sending each tone as a CAT command, so the radio makes the signal itself and no audio is needed. Use this when the radio\'s audio input level stays too low to transmit.</string>
     <string name="settings_channel_left">Left</string>
     <string name="settings_channel_right">Right</string>
     <string name="settings_channel_mono_device">This device has only one audio channel, so there is no side to choose.</string>
@@ -1072,6 +1097,8 @@
     <string name="cq_offset_moved">CQ offset moved to a clear spot: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Auto clear TX offset</string>
     <string name="settings_auto_clear_tx_desc">When calling CQ, pick a clear spot from recent band activity and move away if it becomes occupied</string>
+    <string name="settings_auto_clear_tx_min">Lowest auto offset</string>
+    <string name="settings_auto_clear_tx_min_desc">Auto clear never picks an offset below this. Raise it to keep audio harmonics out of the passband</string>
     <string name="tune_button" translatable="false">TUNE</string>
     <string name="tune_content_description">Tune — start the rig\'s tuner or transmit a steady carrier for antenna tuning</string>
     <string name="tune_stopped_timeout">Tune stopped after %1$d s</string>

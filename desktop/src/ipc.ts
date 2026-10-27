@@ -54,7 +54,7 @@ export interface ClockSyncEvent {
   offset_ms: number;
   /** true once an NTP sync has succeeded (or a saved offset was restored). */
   synced: boolean;
-  /** auto-calibrated audio-capture latency compensation (ms) applied to the RX window. */
+  /** Compatibility field; fixed at zero since unsafe RX auto-calibration was disabled. */
   rx_offset_ms: number;
 }
 
@@ -127,7 +127,7 @@ export interface WaterfallConfig {
   avg: number;
 }
 
-export type RigBackend = "none" | "flrig" | "hamlib";
+export type RigBackend = "none" | "flrig" | "hamlib" | "g106";
 
 export interface RigConfig {
   backend: RigBackend;

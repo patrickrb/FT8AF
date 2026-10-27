@@ -45,6 +45,7 @@ public class XieGuRig extends BaseRig {
                         return; // skip this tick; timer stays alive for reconnect
                     }
                     if (isPttOn()) {
+                        onPollingWhileTransmitting();
                         readSWRMeter();
                     } else {
                         readFreqFromRig();
@@ -57,6 +58,11 @@ public class XieGuRig extends BaseRig {
         };
     }
 
+    /** Hook for Xiegu models that require a command while each TX poll runs. */
+    protected void onPollingWhileTransmitting() {
+        // Default Xiegu radios need no additional action.
+    }
+
 
     @Override
     public void setPTT(boolean on) {
@@ -65,8 +71,7 @@ public class XieGuRig extends BaseRig {
         if (getConnector() != null) {
             switch (getControlMode()) {
                 case ControlMode.CAT://via CAT command
-                    getConnector().setPttOn(IcomRigConstant.setPTTState(ctrAddress, getCivAddress()
-                            , on ? IcomRigConstant.PTT_ON : IcomRigConstant.PTT_OFF));
+                    getConnector().setPttOn(catPttFrame(on));
                     break;
                 case ControlMode.RTS:
                 case ControlMode.DTR:
@@ -74,6 +79,12 @@ public class XieGuRig extends BaseRig {
                     break;
             }
         }
+    }
+
+    /** The CI-V PTT on/off frame for this rig's address. */
+    protected byte[] catPttFrame(boolean on) {
+        return IcomRigConstant.setPTTState(ctrAddress, getCivAddress()
+                , on ? IcomRigConstant.PTT_ON : IcomRigConstant.PTT_OFF);
     }
 
     @Override
@@ -266,11 +277,16 @@ public class XieGuRig extends BaseRig {
         return BaseRigOperation.getFrequencyStr(getFreq());
     }
 
-    public XieGuRig(int civAddress) {
+    protected XieGuRig(int civAddress, long pollingIntervalMs) {
         Log.d(TAG, "XieGuRig 6100: Create.");
         setCivAddress(civAddress);
 
-        readFreqTimer.schedule(readTask(), START_QUERY_FREQ_DELAY, QUERY_FREQ_TIMEOUT);
+        long initialDelayMs = Math.min(START_QUERY_FREQ_DELAY, pollingIntervalMs);
+        readFreqTimer.schedule(readTask(), initialDelayMs, pollingIntervalMs);
         //readFreqTimer.schedule(readTask(),START_QUERY_FREQ_DELAY,1000);
+    }
+
+    public XieGuRig(int civAddress) {
+        this(civAddress, QUERY_FREQ_TIMEOUT);
     }
 }

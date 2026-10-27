@@ -74,4 +74,20 @@ final class TxConnectionStateTests: XCTestCase {
             XCTAssertFalse(s.needsConnect)
         }
     }
+
+    // MARK: - Engine-cycle-after-connect decision
+
+    /// The silent-TX regression: a (re)connect forms the player → mixer →
+    /// output chain on the already-running capture engine, which the render
+    /// thread won't pull, so `play()` must cycle the engine to make it render.
+    func testMustCycleEngineAfterAFreshConnect() {
+        XCTAssertTrue(TxConnectionState.mustCycleEngineAfterConnect(didConnect: true))
+    }
+
+    /// Steady-state TX (already connected, nothing reconnected) must NOT cycle
+    /// the engine — otherwise every transmit slot would stutter the RX capture
+    /// tap for no reason.
+    func testDoesNotCycleEngineWhenAlreadyConnected() {
+        XCTAssertFalse(TxConnectionState.mustCycleEngineAfterConnect(didConnect: false))
+    }
 }

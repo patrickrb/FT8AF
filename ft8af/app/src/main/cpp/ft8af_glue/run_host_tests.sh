@@ -168,7 +168,9 @@ rat_out="$tmp/ft8_rational_test"
 # FT8SignalListener + ft8_decode_jni.cpp) and scores against WSJT-X jt9 truth
 # sidecars. Fails if any corpus file matches fewer truth messages than its
 # committed floor (testdata/ft8/floors.txt) — the floors ratchet up as decoder
-# improvements land. See decode_bench.c's header for flags and output format.
+# improvements land. Also fails if the matched decodes' ft8_snr() drifts from
+# jt9's SNR beyond testdata/ft8/snr_bounds.txt (issue #937). See
+# decode_bench.c's header for flags and output format.
 bench_srcs=(
     "$here/decode_bench.c"
     "$here/gfsk.c"
@@ -196,7 +198,8 @@ bench_out="$tmp/ft8_decode_bench"
     -I "$ft8" "${bench_srcs[@]}" -lm -o "$bench_out"
 
 "$bench_out" --self-test
-"$bench_out" --assert-floor "$here/testdata/ft8/floors.txt" "$here"/testdata/ft8/*.wav
+"$bench_out" --assert-floor "$here/testdata/ft8/floors.txt" \
+    --assert-snr "$here/testdata/ft8/snr_bounds.txt" "$here"/testdata/ft8/*.wav
 
 # Subtraction unit tests: waterfall-domain (tone replacement) and coherent
 # time-domain deep-decode subtraction properties (removal, neighbor
@@ -348,3 +351,16 @@ hamlib_feed_out="$tmp/ft8_hamlib_feed_test"
     -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
     -I "$here" "${hamlib_feed_srcs[@]}" -lpthread -o "$hamlib_feed_out"
 "$hamlib_feed_out"
+
+# Grid-shape tests: the shared check (ft8_grid_shape.h) behind a real-device
+# finding -- "RR73" (the protocol's reply token, never a locator) passed the
+# old per-file checks by coincidence, so every RR73 reply earned a false
+# "NEW GRID" badge. Header-only, no ft8_lib deps.
+grid_shape_srcs=(
+    "$here/test_grid_shape.c"
+)
+grid_shape_out="$tmp/ft8_grid_shape_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$here" "${grid_shape_srcs[@]}" -o "$grid_shape_out"
+"$grid_shape_out"

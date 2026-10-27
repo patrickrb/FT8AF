@@ -1,0 +1,16 @@
+# SNR-agreement bounds for decode_bench --assert-snr (issue #937).
+# Every truth message the bench matches pairs jt9's SNR with our ft8_snr();
+# decode_bench fits ours on jt9's and fails if the fit leaves these bounds.
+# Like floors.txt this is a ratchet: tighten as the estimate improves, never
+# loosen without a documented decision.
+#
+# 2026-10-20 off-signal baseline noise (#937), cal 30.5 dB:
+#   n=462 slope=1.00 r=0.89 mae=3.87 bias=-0.08 strong(jt9>=+10) mean=+14.1
+#   (before: slope=0.19 r=0.49 mae=8.10 bias=-5.50 strong mean=-6.3)
+slope_min 0.90
+slope_max 1.10
+r_min 0.85
+mae_max 4.5
+bias_min -1.5
+bias_max 1.5
+strong_mean_min 10.0
