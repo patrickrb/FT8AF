@@ -14,9 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -189,9 +187,11 @@ fun FrequencyPickerSheet(
 
 /**
  * The picker's body: band tiles, the show/hide-alternates toggle, and the
- * alternates list. Scrolls vertically, because with alternates shown (and
- * wrapping onto extra lines on narrow screens, #930) it can be taller than a
- * short or landscape screen, and the sheet itself doesn't scroll.
+ * alternates list. With alternates shown (and wrapping onto extra lines on
+ * narrow screens, #930) it can be taller than a short or landscape screen;
+ * [FT8AFBottomSheet] already wraps its content in a vertical scroll, so this
+ * body must not add its own. A second verticalScroll nested inside the sheet's
+ * is measured with an infinite max height and crashes on open (#972).
  */
 @Composable
 internal fun FrequencyPickerContent(
@@ -204,7 +204,6 @@ internal fun FrequencyPickerContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
             .padding(top = 8.dp, bottom = 24.dp),
     ) {

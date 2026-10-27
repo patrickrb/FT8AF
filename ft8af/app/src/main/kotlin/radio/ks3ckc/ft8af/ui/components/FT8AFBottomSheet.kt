@@ -48,6 +48,18 @@ import androidx.compose.animation.core.animateFloatAsState
 import com.k1af.ft8af.R
 import radio.ks3ckc.ft8af.theme.*
 
+/**
+ * The app's modal bottom sheet: scrim, drag-to-dismiss handle, close button,
+ * and [content] below them.
+ *
+ * Scroll contract: the sheet wraps [content] in a `Column(Modifier.verticalScroll())`,
+ * so content taller than the screen scrolls on its own. [content] must therefore
+ * NOT add its own `verticalScroll`, nor a `LazyColumn`/`LazyVerticalGrid` without a
+ * bounded height (`heightIn(max = ...)`): a vertical scrollable nested inside the
+ * sheet's is measured with an infinite max height and Compose throws
+ * `IllegalStateException` on the first layout pass, i.e. the sheet crashes on
+ * open (#972, the "All bands & custom frequency" picker).
+ */
 @Composable
 fun FT8AFBottomSheet(
     visible: Boolean,
@@ -211,6 +223,8 @@ fun FT8AFBottomSheet(
                     }
                 }
 
+                // The one and only vertical scroll for the sheet; see the
+                // scroll contract in the KDoc above before adding another.
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
