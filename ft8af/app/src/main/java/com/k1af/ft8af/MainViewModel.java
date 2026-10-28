@@ -182,6 +182,10 @@ public class MainViewModel extends ViewModel {
 
     //public int decoded_counter = 0;//total decoded count
     public final ArrayList<Ft8Message> ft8Messages = new ArrayList<>();//message list
+    // "Clear every cycle": a wipe marked at the cycle start and applied with that
+    // cycle's first decodes (see beforeListen / appendToMessageList). Guarded by
+    // ft8Messages.
+    private boolean pendingCycleClear = false;
     public UtcTimer utcTimer;//timer for sync-triggered actions.
 
     // Self-syncing clock (opt-in): per-slot median-DT estimator that trims
@@ -673,12 +677,23 @@ public class MainViewModel extends ViewModel {
                 // Deep decodes later in this same cycle augment the cleared list instead of
                 // re-wiping it.
                 if (GeneralVariables.clearDecodesEveryCycle) {
+                    // The wipe is deferred to this cycle's first decodes
+                    // (appendToMessageList), so the list goes straight from the old slot to
+                    // the new one: clearing here left it empty until decodes arrived, and
+                    // the screen flashed "No signals decoded" every slot. If last cycle's
+                    // clear is still pending, that slot decoded nothing: clear now, so a
+                    // silent slot still empties the list.
+                    boolean clearedNow = false;
                     synchronized (ft8Messages) {
-                        ft8Messages.clear();
+                        if (pendingCycleClear) {
+                            ft8Messages.clear();
+                            clearedNow = true;
+                        }
+                        pendingCycleClear = true;
                     }
                     decodeCycleState.resetCount();
                     mutable_Decoded_Counter.postValue(0);
-                    publishFt8MessageList();
+                    if (clearedNow) publishFt8MessageList();
                 }
                 // Backstop for the unkey latch. The reconnect path is the fast
                 // route (~2s), but it only fires when the USB attach broadcast
@@ -1442,9 +1457,10 @@ public class MainViewModel extends ViewModel {
      * Append one decode pass's messages to the displayed list, trimming it back
      * to the display cap under the same lock.
      *
-     * <p>"Clear every cycle" mode does its wipe in {@code beforeListen} (start of
-     * the cycle), so by the time a pass gets here the list is already fresh —
-     * this only ever appends. The excess-trim must hold the same monitor: it
+     * <p>"Clear every cycle" mode marks a clear as pending in {@code beforeListen}
+     * (start of the cycle); the first pass to get here applies it, wiping the old
+     * slot and adding the new one under the same lock, so the UI never sees an
+     * empty list in between. The excess-trim must hold the same monitor: it
      * removes from the list, and an unguarded removal can race the snapshot copy
      * in {@link #publishFt8MessageList()}.
      *
@@ -1455,6 +1471,10 @@ public class MainViewModel extends ViewModel {
      */
     private void appendToMessageList(ArrayList<Ft8Message> messages) {
         synchronized (ft8Messages) {
+            if (pendingCycleClear) {
+                pendingCycleClear = false;
+                if (GeneralVariables.clearDecodesEveryCycle) ft8Messages.clear();
+            }
             ft8Messages.addAll(messages);
             //remove excess messages; FT8CN limits the total displayable messages
             GeneralVariables.trimToMessageCount(ft8Messages);
