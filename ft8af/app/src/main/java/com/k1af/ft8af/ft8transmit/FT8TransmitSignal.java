@@ -1647,9 +1647,8 @@ public class FT8TransmitSignal {
         if (order == 1) {
             resetTargetReport();// reset signal reports
         }
-        if (order == 4 || order == 5) {
-            updateQSlRecordList(order, toCallsign);
-        }
+        // Moving to RR73/73 no longer logs the QSO here: it's logged when that message is
+        // actually transmitted (DoTransmitRunnable), or when the partner sends RR73/73.
         mutableFunctions.postValue(snapshotForUi(functionList));
     }
 
@@ -3816,6 +3815,16 @@ public class FT8TransmitSignal {
 //            if (transmitSignal.onDoTransmitted != null) {//process audio data for ICOM network mode transmission
 //                transmitSignal.onDoTransmitted.onAfterGenerate(buffer);
 //            }
+                // Our side of the QSO completes when our RR73/RRR (order 4) or 73 (order 5)
+                // actually goes out, so log it here, not when the sequencer merely advances
+                // to that step: a late R+report arriving after TX had stopped (no-reply
+                // limit, or the operator stopped it) used to log a QSO whose RR73 was never
+                // sent. A replayed over can't log twice (QSLRecord.saved).
+                if (transmitSignal.functionOrder == 4 || transmitSignal.functionOrder == 5) {
+                    transmitSignal.updateQSlRecordList(transmitSignal.functionOrder,
+                            transmitSignal.toCallsign);
+                }
+
                 // play audio
                 //transmitSignal.playFT8Signal(buffer);
                 transmitSignal.playFT8Signal(msg);
