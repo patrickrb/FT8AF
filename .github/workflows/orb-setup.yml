@@ -1,0 +1,58 @@
+name: Orb readiness
+
+on:
+  pull_request:
+    paths:
+      - '.agents/**'
+      - 'AGENTS.md'
+      - '.github/workflows/orb-setup.yml'
+      - 'ft8af/*.gradle'
+      - 'ft8af/app/build.gradle'
+      - 'ft8af/gradle/wrapper/**'
+      - 'ham-radio-core/**'
+      - 'desktop/package*.json'
+      - 'desktop/src-tauri/Cargo.*'
+  push:
+    branches: [dev, staging, main]
+    paths:
+      - '.agents/**'
+      - '.github/workflows/orb-setup.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # Deliberately no dependency cache: exercise the fresh-machine path.
+      - name: Bootstrap and rerun (idempotence)
+        run: |
+          test -x .agents/setup
+          bash -n .agents/setup
+          .agents/setup
+          .agents/setup
+          shellcheck .agents/setup
+      - name: Check persisted environment and host suites in a clean login shell
+        run: |
+          env -i HOME="$HOME" USER="$USER" PATH="$PATH" /bin/bash -l <<'CHECK'
+            set -euo pipefail
+            test "$(javac -version 2>&1 | cut -d. -f1)" = "javac 17"
+            command -v sdkmanager
+            command -v cargo
+            bash .github/scripts/check-agents-md.sh --self-test
+            bash .github/scripts/check-agents-md.sh
+            bash ft8af/app/src/main/cpp/ft8af_glue/run_host_tests.sh
+            npm --prefix desktop test
+            npm --prefix desktop run build
+            cargo test --locked --manifest-path desktop/src-tauri/Cargo.toml -j 2
+            cargo build --locked --manifest-path desktop/src-tauri/Cargo.toml -j 2
+            ./ft8af/gradlew -p ft8af --no-daemon --max-workers=1 \
+              -Pkotlin.compiler.execution.strategy=in-process \
+              '-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8' :ham-radio-core:test testDebugUnitTest assembleDebug
+          CHECK

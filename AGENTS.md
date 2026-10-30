@@ -16,7 +16,7 @@
 
 ## Development environments
 
-Contributors work from two kinds of checkout; the commands differ, so figure
+Contributors work from three kinds of checkout; the commands differ, so figure
 out which one you're on first (`uname` / the primary working directory) and
 follow the matching path throughout:
 
@@ -24,8 +24,10 @@ follow the matching path throughout:
   `cmd.exe /c "gradlew.bat …"` wrapper, which picks up the Android Studio JBR.
 - **macOS** (`<mac-checkout>`) — builds and runs unit tests natively
   (`./gradlew …`, needs JDK 17).
+- **Linux / Amp orb** — run `.agents/setup` from the repository root, then
+  start a new login shell (`bash -lc 'java -version'`). See the orb quickstart below.
 
-Either kind of machine can build, test, install, and drive a real device when
+Local machines can build, test, install, and drive a real device when
 an Android phone is attached over USB debugging (an emulator is often attached
 alongside it). The gradle invocation is the main difference (`gradlew.bat`
 wrapper vs. `./gradlew` with JDK 17); where a section below gives a command for
@@ -35,6 +37,82 @@ On some devices `screencap` can come back all-black during the splash
 animation or when a hardware overlay is active; wait for the app to settle and
 retry, and use the accessibility tree only as a fallback (`uiautomator dump`
 often can't reach idle because the UI animates continuously).
+
+### Fresh Amp orb quickstart (Linux x86-64)
+
+Amp runs the executable `.agents/setup` when preparing a fresh orb (an exact
+cached snapshot may skip it). It installs JDK 17, Android SDK platform 36,
+build-tools 35.0.0, NDK 27.0.12077973, CMake 3.22.1, Clang/C++, Rust stable,
+and the Tauri WebKit/GTK/ALSA/udev development packages. It restores npm and
+Cargo dependencies from lockfiles and downloads the pinned Gradle wrapper.
+Node 20+ and npm come from the orb image. No signing keys, API credentials,
+radio, database service, or Android Studio are needed for these checks.
+
+Setup is non-interactive and rerunnable. It persists toolchain exports in
+`~/.config/ft8af/orb-env.sh`, loaded by `~/.bash_profile` for subsequent Amp
+login shells, including shells in new worktrees. Do not copy `local.properties`
+from another machine. To bootstrap manually:
+
+```bash
+.agents/setup
+bash -lc 'java -version; cargo --version; command -v sdkmanager'
+```
+
+**Repository map:** `ft8af/` is the Android Gradle project; `desktop/` is
+React/TypeScript + Tauri/Rust; `ios/` is SwiftUI + SwiftPM. All three reference
+the tracked C DSP core in `ft8af/app/src/main/cpp/`; don't duplicate it or edit
+the vendored `ft8_lib` without checking its pin and native regression tests.
+
+**Fast headless checks** (run from the repository root after setup, in a new
+login shell; these require no device, display, or external service):
+
+```bash
+bash .github/scripts/check-agents-md.sh --self-test
+bash .github/scripts/check-agents-md.sh
+shellcheck .agents/setup
+bash ft8af/app/src/main/cpp/ft8af_glue/run_host_tests.sh
+npm --prefix desktop test
+npm --prefix desktop run build
+```
+
+The native suite includes committed WAV decode floors, encode/hash goldens,
+FFT, resampling, and decoder regression tests. Never lower the corpus floors
+or regenerate goldens just to make a test pass. Frontend tests use Vitest's
+non-watch mode. For a **complete Linux build/test check**, also run:
+
+```bash
+cargo test --locked --manifest-path desktop/src-tauri/Cargo.toml -j 2
+cargo build --locked --manifest-path desktop/src-tauri/Cargo.toml -j 2
+./ft8af/gradlew -p ft8af --no-daemon --max-workers=1 \
+  -Pkotlin.compiler.execution.strategy=in-process \
+  '-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8' :ham-radio-core:test testDebugUnitTest assembleDebug
+```
+
+The `ham-radio-core` Java-library module has its own test task, included above
+and in `.github/workflows/orb-setup.yml`. Android's `testDebugUnitTest` does not
+run Java-library tests. See `docs/shared-radio-core.md` for the shared-core
+contract and checksum-pinned consumer update procedure.
+
+Build the frontend **before** Cargo: Tauri embeds `desktop/dist`, and plain
+`cargo test`/`cargo build` do not run `beforeBuildCommand`. The Gradle unit
+suite runs JUnit/Truth/Robolectric on the host without an emulator. Reports:
+`ft8af/app/build/reports/tests/testDebugUnitTest/index.html`; APK:
+`ft8af/app/build/outputs/apk/debug/app-debug.apk`. First builds download more
+Maven/Cargo artifacts and compile native dependencies; setup does not build
+the apps. The orb workload memory limit can be lower than the host memory
+shown by `free`; the command above bounds the Gradle heap and avoids a second
+Kotlin compiler daemon. Default daemon settings exhausted the 6 GiB workload
+limit during Robolectric startup in validation. Avoid concurrent Rust and
+Android builds. Rerun `.agents/setup` after changing dependency manifests.
+
+**Limits:** Linux orbs cannot build the iOS app or run Apple-framework Swift
+tests; use a macOS/Xcode runner or `.github/workflows/ios.yml`. Orbs have no
+KVM: do not install an Android emulator here. Android UI/instrumentation needs
+a connected Android runner/device or the existing CI emulator job. RF/PTT,
+USB audio/serial, and radio timing require real hardware; a passing host suite
+is not hardware validation. Never run transmit/tune tests against a live rig
+without explicit authorization. No `.agents/resume` is needed: these toolchains
+and caches persist, and no background service or login must be renewed.
 
 ## Workflow
 
@@ -161,7 +239,7 @@ cmd.exe /c "gradlew.bat testDebugUnitTest"
 cmd.exe /c "gradlew.bat testDebugUnitTest --tests <fully.qualified.ClassName>"
 ```
 
-**macOS** (needs JDK 17 — see Build & Deploy):
+**macOS / Linux** (needs JDK 17 — see Build & Deploy; orbs get it from setup):
 
 ```
 export JAVA_HOME=<jdk17-home>
@@ -228,15 +306,19 @@ Frontend logic lives in plain modules like `desktop/src/rig.ts` with vitest
 tests next to them (`*.test.ts`). Rust unit tests are `#[cfg(test)]` modules in
 `desktop/src-tauri/src/`, and integration tests are in `desktop/src-tauri/tests/`.
 
+From the repository root:
+
 ```
-cd desktop && npm ci && npm test          # vitest
-cd desktop && npm run build               # build.rs needs the frontend dist
-cd desktop/src-tauri && cargo test
+npm --prefix desktop ci
+npm --prefix desktop test
+npm --prefix desktop run build  # build.rs needs the frontend dist
+cargo test --locked --manifest-path desktop/src-tauri/Cargo.toml -j 2
 ```
 
 On Linux, `cargo test` needs the system packages listed in
-`.github/workflows/desktop.yml`. CI runs `cargo test` only in the non-gating
-coverage job and doesn't run vitest yet, so run both locally.
+`.github/workflows/desktop.yml` (installed by `.agents/setup` in orbs).
+The desktop build job runs Vitest; Rust coverage is non-gating, so run
+`cargo test --locked` locally before handing off backend changes.
 
 ## Build & Deploy
 
@@ -251,7 +333,7 @@ Studio JBR automatically:
 cd ft8af && cmd.exe /c "gradlew.bat installDebug"
 ```
 
-**macOS:** AGP 8.7.3 / Gradle 8.9 need **JDK 17**; if your system JDK is older,
+**macOS / Linux:** AGP 8.9.1 / Gradle 8.11.1 need **JDK 17**; if your system JDK is older,
 builds fail without pointing `JAVA_HOME` at a 17. A user-local install (e.g. a
 Temurin 17 archive unpacked under your home directory — no sudo needed, unlike
 the Homebrew cask) works fine; wherever it lives is your `<jdk17-home>`. The

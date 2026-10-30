@@ -1,5 +1,7 @@
 package com.k1af.ft8af.rigs;
 
+import radio.core.cat.CatLiveness;
+
 /**
  * State for the CAT liveness watchdog, kept pure (no Android, no timers) so the whole
  * arm / trip / recover lifecycle is unit-testable. {@link CatLiveness} holds the

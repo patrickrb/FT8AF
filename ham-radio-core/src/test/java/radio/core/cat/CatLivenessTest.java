@@ -1,4 +1,4 @@
-package com.k1af.ft8af.rigs;
+package radio.core.cat;
 
 import static com.google.common.truth.Truth.assertThat;
 
