@@ -162,16 +162,16 @@ id first in the slug, e.g. `fix/bur-12-cq-button-stuck`.
   (`.github/pull_request_template.md`): the debug APK link, a 3-6 step
   manual test checklist with expected results, what changed, risks, and what was
   tested automatically.
-- **The debug APK comes from CI.** For any PR that touches `ft8af/**`,
+- **The debug APK comes from CI.** For any PR that touches `ft8af/**` or `ham-radio-core/**`,
   `.github/workflows/pr-debug-apk.yml` builds `FT8AF-pr<N>-<sha>-debug.apk`
   and posts (or updates) one "Debug APK" comment on the PR with the download
   link. Before you hand off, wait for that comment and link it in the
   description. If the job fails, the PR isn't ready. PRs that don't touch
-  `ft8af/**` get no debug APK; write "n/a" in that section. On fork PRs the
+  either source directory get no debug APK; write "n/a" in that section. On fork PRs the
   job builds the APK but can't comment (read-only token), so link the
   artifact from the run's summary page instead.
 - **CI must be green.** That means `android-gate` (unit tests and the release
-  build) plus, on PRs that touch `ft8af/**`, `Debug APK for manual testing`.
+  build) plus, on PRs that touch `ft8af/**` or `ham-radio-core/**`, `Debug APK for manual testing`.
 - **Get a code review before QA.** Once CI is green, request a Copilot review
   first. If Copilot doesn't respond (it can run out of credits), run Claude's
   `code-review` skill on the PR instead. Address or answer every finding before
