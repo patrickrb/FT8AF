@@ -1,0 +1,15 @@
+services:
+  band-advisor:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      PSK_CONTACT_EMAIL: dev@ft8af.app # replace with a real contact address
+      SUNSPOT_NUMBER: "68"
+    volumes:
+      # feature flags are a mounted document so ops can flip them without a deploy
+      - ./feature-config.example.json:/etc/band-advisor/feature-config.json:ro
+      - baseline-data:/var/lib/band-advisor
+
+volumes:
+  baseline-data:
