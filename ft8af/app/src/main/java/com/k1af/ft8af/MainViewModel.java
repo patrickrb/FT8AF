@@ -99,7 +99,7 @@ import com.k1af.ft8af.rigs.CatConnectionState;
 import com.k1af.ft8af.rigs.CivAddressConfig;
 import com.k1af.ft8af.rigs.RetunePolicy;
 import com.k1af.ft8af.rigs.RigDialTarget;
-import com.k1af.ft8af.rigs.CatLiveness;
+import radio.core.cat.CatLiveness;
 import com.k1af.ft8af.rigs.CatLivenessTracker;
 import com.k1af.ft8af.rigs.DiscoveryTX500Rig;
 import com.k1af.ft8af.rigs.ElecraftRig;

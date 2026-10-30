@@ -1,10 +1,10 @@
-package com.k1af.ft8af.wave;
+package radio.core.audio;
 
 /**
  * Streaming polyphase rational (L/M) resampler — Java port of
  * {@code cpp/rational_resampler.h} (same Blackman windowed-sinc kernel, cutoff, per-branch
  * normalization, and streaming behavior), for the {@code UsbRequest} fallback capture path in
- * {@link UsbAudioDevice}.
+ * the Android USB adapter.
  *
  * <p>Why it exists (issue #364): both USB capture paths used to floor the decimation ratio, so
  * a device that only streams 44.1 kHz got {@code 44100/12000 -> 3} and actually produced

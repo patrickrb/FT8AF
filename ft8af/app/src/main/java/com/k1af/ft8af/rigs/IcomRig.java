@@ -20,6 +20,8 @@ import com.k1af.ft8af.ui.ToastMessage;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import radio.core.cat.CatLiveness;
+
 public class IcomRig extends BaseRig {
     private static final String TAG = "IcomRig";
 
