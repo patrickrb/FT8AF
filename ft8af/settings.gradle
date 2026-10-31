@@ -14,3 +14,5 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Ft8AF"
 include ':app'
+include ':ham-radio-core'
+project(':ham-radio-core').projectDir = file('../ham-radio-core')

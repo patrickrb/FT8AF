@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Fresh Debian 12 Amp orb bootstrap. Safe to rerun on restored snapshots.
+set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SECONDS=0
+
+echo '==> Installing Android, native-test and Tauri Linux prerequisites'
+packages=(ca-certificates curl unzip build-essential pkg-config clang shellcheck
+    openjdk-17-jdk-headless libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev
+    libayatana-appindicator3-dev libudev-dev libasound2-dev)
+missing=()
+for package in "${packages[@]}"; do
+    if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -qx 'install ok installed'; then
+        missing+=("$package")
+    fi
+done
+if ((${#missing[@]})); then
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get update -o DPkg::Lock::Timeout=120
+    sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        -o DPkg::Lock::Timeout=120 "${missing[@]}"
+fi
+
+# Orbs supply Node/npm. Fail clearly rather than installing a second Node.
+node -e 'if (Number(process.versions.node.split(".")[0]) < 20) process.exit(1)'
+
+echo "==> Configuring persistent toolchain environment (${SECONDS}s)"
+mkdir -p "$HOME/.config/ft8af"
+cat > "$HOME/.config/ft8af/orb-env.sh" <<'ENV'
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+export ANDROID_HOME="$HOME/.local/share/ft8af/android-sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+case ":$PATH:" in
+    *":$ANDROID_HOME/platform-tools:"*) ;;
+    *) export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$HOME/.cargo/bin:$PATH" ;;
+esac
+ENV
+# Expand HOME when the future login shell reads the hook, not during setup.
+# shellcheck disable=SC2016
+hook='[ ! -f "$HOME/.config/ft8af/orb-env.sh" ] || . "$HOME/.config/ft8af/orb-env.sh"'
+if ! grep -Fqx "$hook" "$HOME/.bash_profile" 2>/dev/null; then
+    printf '\n# FT8AF orb toolchains\n%s\n' "$hook" >> "$HOME/.bash_profile"
+fi
+# Also configure this setup process; later Amp shells use the profile above.
+# shellcheck source=/dev/null
+source "$HOME/.config/ft8af/orb-env.sh"
+
+echo "==> Installing Android SDK (${SECONDS}s)"
+if [[ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]]; then
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    curl --fail --location --retry 3 --connect-timeout 30 \
+        https://dl.google.com/android/repository/commandlinetools-linux-13114758_latest.zip \
+        -o "$tmp/tools.zip"
+    unzip -q "$tmp/tools.zip" -d "$tmp"
+    mkdir -p "$ANDROID_HOME/cmdline-tools"
+    mv "$tmp/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+    rm -rf "$tmp"
+    trap - EXIT
+fi
+# Avoid yes's SIGPIPE becoming a false failure under pipefail; retain sdkmanager's status.
+set +o pipefail
+yes | sdkmanager --licenses > /dev/null
+set -o pipefail
+# Match compileSdk / AGP defaults / CMake version in ft8af/app/build.gradle.
+sdkmanager --install 'platform-tools' 'platforms;android-36' 'build-tools;35.0.0' \
+    'ndk;27.0.12077973' 'cmake;3.22.1'
+
+echo "==> Installing Rust stable (${SECONDS}s)"
+if ! command -v rustup > /dev/null; then
+    curl --fail --location --retry 3 https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+else
+    rustup toolchain install stable --profile minimal --no-self-update
+    rustup default stable
+fi
+
+echo "==> Restoring locked desktop dependencies (${SECONDS}s)"
+npm --prefix "$root/desktop" ci --no-audit --no-fund
+cargo fetch --locked --manifest-path "$root/desktop/src-tauri/Cargo.toml"
+echo "==> Warming Gradle wrapper (${SECONDS}s)"
+"$root/ft8af/gradlew" -p "$root/ft8af" --version
+echo "==> FT8AF setup complete (${SECONDS}s). See AGENTS.md for verification commands."
