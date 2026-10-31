@@ -142,11 +142,16 @@ internal data class BandGroup(
  *   - Group entries by waveLength (file order preserved).
  *   - Primary = first entry with marked == true; fall back to first entry in group.
  *   - Alternates = every other entry in the group, in file order.
+ *   - The ad-hoc slot for an off-plan rig frequency is skipped: the picker lists
+ *     configured dials, and the TxStrip pill already shows where the rig is.
+ *     Before #978 that slot was one entry per Hz tuned, so a minute of SSB
+ *     tuning filled the 20m row with hundreds of 14.xxx chips.
  */
-private fun buildBandGroups(): List<BandGroup> {
+internal fun buildBandGroups(): List<BandGroup> {
     val order = LinkedHashMap<String, MutableList<Pair<Int, OperationBand.Band>>>()
     for (i in 0 until OperationBand.bandList.size) {
         val b = OperationBand.bandList[i]
+        if (b.adHoc) continue
         // Only the current operating mode's dials (FT8 vs FT4 use different frequencies).
         if (b.mode != GeneralVariables.operatingMode) continue
         if (GeneralVariables.isBandExcluded(b.waveLength)) continue
@@ -362,7 +367,9 @@ internal fun AlternatesList(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         for (g in groups) {
             if (g.alternates.isEmpty()) continue
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Top-aligned so the band label sits beside its first chip line when
+            // the chips wrap, rather than centred on a tall row (#978).
+            Row(verticalAlignment = Alignment.Top) {
                 Text(
                     text = g.waveLength,
                     color = TextMuted,
@@ -371,8 +378,10 @@ internal fun AlternatesList(
                     fontFamily = GeistMonoFamily,
                     maxLines = 1,
                     // Grow past 44.dp rather than wrap "160m" per character at
-                    // large font scales (same defect as the chips, #930).
-                    modifier = Modifier.widthIn(min = 44.dp),
+                    // large font scales (same defect as the chips, #930). The top
+                    // padding matches the chip's, so the label lines up with the
+                    // first line of chip text.
+                    modifier = Modifier.widthIn(min = 44.dp).padding(top = 6.dp),
                 )
                 // FlowRow so a band with more alternates than fit on a narrow
                 // screen wraps whole chips onto the next line instead of

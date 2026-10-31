@@ -369,9 +369,10 @@ public class MainViewModel extends ViewModel {
                     , BaseRigOperation.getFrequencyAllInfo(freq)));
             //write frequency changes back to global variables
             // Compare the meter (wavelength) band, not the band-list index:
-            // OperationBand.getIndexByFreq() appends a new entry for any previously-
-            // unseen frequency, so a small in-band dial move changes the index even
-            // though the band is the same. Wavelength only changes on a real band hop.
+            // an off-plan frequency maps to OperationBand's single ad-hoc slot, so the
+            // index can stay put across a real band hop (14.2 -> 7.1 MHz, both off-plan)
+            // and changes on in-band moves between dials. Wavelength only changes on a
+            // real band hop.
             String oldWaveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
             GeneralVariables.band = freq;
             // Observing a frequency is not the same as choosing one. Adopt it as the dial
@@ -400,6 +401,7 @@ public class MainViewModel extends ViewModel {
             }
             GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(freq);
             GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
+            GeneralVariables.mutableBandFreq.postValue(freq);
             String newWaveLength = BaseRigOperation.getMeterFromFreq(freq);
 
             // A real band hop invalidates the clear-CQ-slot occupancy history —
@@ -1305,8 +1307,8 @@ public class MainViewModel extends ViewModel {
      * True only when the auto-clear option is on AND the meter (wavelength) band
      * actually changed, so a no-op band re-select or a small in-band dial report from
      * the rig doesn't clear. Compares wavelength rather than the band-list index
-     * because {@link OperationBand#getIndexByFreq} appends a new entry for any unseen
-     * frequency, so the index can change within a single band. Pure decision logic,
+     * because {@link OperationBand#getIndexByFreq} reuses one ad-hoc slot for every
+     * off-plan frequency, so the index doesn't track the band. Pure decision logic,
      * unit-tested without the Android runtime.
      */
     public static boolean shouldClearOnBandChange(boolean enabled, String oldWaveLength, String newWaveLength) {
