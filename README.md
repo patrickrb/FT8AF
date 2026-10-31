@@ -53,6 +53,13 @@ cd ft8af
 
 Workflow, testing and build rules for humans and coding agents alike are in [AGENTS.md](AGENTS.md).
 
+For a fresh Linux Amp orb, run `.agents/setup` from the repository root, then
+follow the [headless build/test quickstart](AGENTS.md#fresh-amp-orb-quickstart-linux-x86-64).
+It installs JDK 17, the Android SDK/NDK, and native/desktop prerequisites.
+No device or secrets are needed for host tests or `assembleDebug`;
+`installDebug` requires an attached Android device. The [desktop app](desktop/README.md)
+also builds on Linux; the [iOS app](ios/README.md) requires macOS/Xcode.
+
 ---
 
 ## Native code
