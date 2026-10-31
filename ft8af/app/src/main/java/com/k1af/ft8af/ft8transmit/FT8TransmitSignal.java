@@ -200,6 +200,13 @@ public class FT8TransmitSignal {
 
     private final OnDoTransmitted onDoTransmitted;// typically used for opening/closing PTT
     private final ExecutorService doTransmitThreadPool = Executors.newCachedThreadPool();
+    // Serialises every QSO log-completion. The QSO is now logged from the TX worker
+    // (DoTransmitRunnable, when our RR73/73 actually goes out) as well as the decode
+    // thread (parseMessageToFunctionInner, when the partner's RR73/73 is parsed) and
+    // the force-log UI path, so the lookup-create-complete sequence in
+    // updateQSlRecordList must run under one lock or the same partner can be saved
+    // to the database twice.
+    private final Object qslUpdateLock = new Object();
     private final DoTransmitRunnable doTransmitRunnable = new DoTransmitRunnable(this);
 
     static {
@@ -944,7 +951,14 @@ public class FT8TransmitSignal {
         return out;
     }
 
-    private void playFT8Signal(Ft8Message msg) {
+    /**
+     * Play (or hand off) one over's waveform. Returns {@code true} when the over was
+     * actually transmitted (network/CAT/QMX/sound-card paths), {@code false} when it
+     * bailed without putting anything on the air — currently the failed-generation
+     * ({@code buffer == null}) path. The TX worker uses this to avoid logging a QSO
+     * whose RR73/73 was never sent.
+     */
+    private boolean playFT8Signal(Ft8Message msg) {
 
         if (GeneralVariables.connectMode == ConnectMode.NETWORK) {// network mode does not play audio locally
             Log.d(TAG, "playFT8Signal: Entering network transmit mode, waiting for audio to send.");
@@ -970,7 +984,7 @@ public class FT8TransmitSignal {
             }
             Log.d(TAG, "playFT8Signal: Exiting network audio transmission.");
             afterPlayAudio();
-            return;
+            return true;
         }
 
         // enter CAT serial port audio transmission mode
@@ -997,7 +1011,7 @@ public class FT8TransmitSignal {
                     }
                     Log.d(TAG, "playFT8Signal: transmitting over CAT is finished.");
                     afterPlayAudio();
-                    return;
+                    return true;
                 }
             }
         }
@@ -1009,7 +1023,7 @@ public class FT8TransmitSignal {
             // a stale flag from the previous over would skip every symbol.
             txAudioCancelled = false;
             runPlaybackWithTeardown(() -> playViaQmxCatTones(msg), this::afterPlayAudio);
-            return;
+            return true;
         }
 
         // enter sound card mode
@@ -1017,8 +1031,10 @@ public class FT8TransmitSignal {
         buffer = GenerateFT8.generateFt8(msg, GeneralVariables.getBaseFrequency()
                 , GeneralVariables.audioSampleRate);
         if (buffer == null) {
+            // Waveform generation failed: nothing goes on the air, so the caller must
+            // not log this as a completed QSO.
             afterPlayAudio();
-            return;
+            return false;
         }
 
         // Fresh cancel state for this cycle's playback (consumed by the chunked
@@ -1043,7 +1059,7 @@ public class FT8TransmitSignal {
                 && GeneralVariables.usbAudioOutputVendorId != 0) {
             GeneralVariables.fileLog("playFT8Signal: using USB audio (direct) output");
             playViaUsbAudio(buffer);
-            return;
+            return true;
         }
         GeneralVariables.fileLog(
                 "playFT8Signal: using AudioTrack output (Android default sink)");
@@ -1056,6 +1072,7 @@ public class FT8TransmitSignal {
         // crash the app AND strand PTT keyed + audio focus held. Mirrors
         // playTuneTone's try/catch/finally.
         runPlaybackWithTeardown(() -> playViaAudioTrack(buffer), this::afterPlayAudio);
+        return true;
     }
 
     /**
@@ -1964,6 +1981,12 @@ public class FT8TransmitSignal {
         if (toCall == null) return;
         if (toCall.callsign.equals("CQ")) return;
 
+        // Lock the whole lookup-create-complete sequence: with the order-4/5 log now
+        // firing from the TX worker thread as well as the decode thread, two threads
+        // could otherwise both find record==null (double addQSLRecord) or both pass
+        // the !record.saved gate (double doComplete) for the same partner — saving
+        // the QSO to the database twice. See qslUpdateLock.
+        synchronized (qslUpdateLock) {
         QSLRecord record = GeneralVariables.qslRecordList.getRecordByCallsign(toCall.callsign);
         if (record == null) {
             toMaidenheadGrid = GeneralVariables.getGridByCallsign(toCallsign.callsign, databaseOpr);
@@ -2005,6 +2028,7 @@ public class FT8TransmitSignal {
                 }
 
                 break;
+        }
         }
 
     }
@@ -2975,6 +2999,19 @@ public class FT8TransmitSignal {
         return functionOrder >= 3 && functionOrder != 6;
     }
 
+    /**
+     * Whether a just-finished over should be logged as a completed QSO from the TX
+     * worker. True only when the over was actually transmitted (not a failed
+     * waveform generation or a skipped send), was not a free-text macro (free text
+     * never completes a QSO even if the sequencer is parked at order 4/5), and the
+     * sequencer is at our RR73/RRR (order 4) or 73 (order 5) step.
+     *
+     * <p>Package-visible for testing.
+     */
+    static boolean shouldLogCompletedQso(boolean transmitted, boolean freeText, int functionOrder) {
+        return transmitted && !freeText && (functionOrder == 4 || functionOrder == 5);
+    }
+
     // ==================== Caller Queue Methods ====================
 
     /**
@@ -3730,7 +3767,15 @@ public class FT8TransmitSignal {
                 transmitSignal.messageStartTime = UtcTimer.getSystemTime();
             }
 
-            // for displaying the message content to be transmitted
+            // for displaying the message content to be transmitted.
+            // Capture the order and free-text state of THIS over at message-selection
+            // time, not after the ~12.6 s transmit: a late decode can advance
+            // functionOrder mid-over (e.g. 3 -> 4 on a non-restartable path that doesn't
+            // replay), and reading it afterwards would log a completed QSO for an over
+            // that only sent the report. A one-shot free-text send also clears
+            // transmitFreeText inside currentTransmitMessage(), so capture it first too.
+            boolean freeTextThisOver = transmitSignal.transmitFreeText;
+            int orderThisOver = transmitSignal.functionOrder;
             Ft8Message msg = transmitSignal.currentTransmitMessage();
 
             // A real over is about to key: any SWR reading from here on is its own,
@@ -3793,6 +3838,8 @@ public class FT8TransmitSignal {
                 // flags, plays the OLD over in full, and only then replays the new one
                 // ~13 s into the slot, where the clip math strips nearly all of it.
                 if (transmitSignal.consumeTxRestart()) {
+                    freeTextThisOver = transmitSignal.transmitFreeText;
+                    orderThisOver = transmitSignal.functionOrder;
                     msg = transmitSignal.currentTransmitMessage();
                     transmitSignal.orderAtKeyUp = transmitSignal.functionOrder;
                     transmitSignal.postTransmittingMessage(msg);
@@ -3815,24 +3862,31 @@ public class FT8TransmitSignal {
 //            if (transmitSignal.onDoTransmitted != null) {//process audio data for ICOM network mode transmission
 //                transmitSignal.onDoTransmitted.onAfterGenerate(buffer);
 //            }
-                // Our side of the QSO completes when our RR73/RRR (order 4) or 73 (order 5)
-                // actually goes out, so log it here, not when the sequencer merely advances
-                // to that step: a late R+report arriving after TX had stopped (no-reply
-                // limit, or the operator stopped it) used to log a QSO whose RR73 was never
-                // sent. A replayed over can't log twice (QSLRecord.saved).
-                if (transmitSignal.functionOrder == 4 || transmitSignal.functionOrder == 5) {
-                    transmitSignal.updateQSlRecordList(transmitSignal.functionOrder,
-                            transmitSignal.toCallsign);
-                }
 
                 // play audio
                 //transmitSignal.playFT8Signal(buffer);
-                transmitSignal.playFT8Signal(msg);
+                boolean transmitted = transmitSignal.playFT8Signal(msg);
+
+                // Our side of the QSO completes when our RR73/RRR (order 4) or 73 (order 5)
+                // actually goes out, so log it here — AFTER the over was transmitted — not
+                // when the sequencer merely advances to that step and not merely when TX was
+                // attempted. A late R+report arriving after TX had stopped (no-reply limit,
+                // or the operator stopped it) used to log a QSO whose RR73 was never sent; a
+                // failed generation (buffer==null -> transmitted==false) must not log either;
+                // and a free-text over never completes a QSO even if the sequencer sits at
+                // order 4/5. A replayed over can't log twice (QSLRecord.saved), and the save
+                // is serialised against the decode thread's completion path (qslUpdateLock).
+                if (shouldLogCompletedQso(transmitted, freeTextThisOver, orderThisOver)) {
+                    transmitSignal.updateQSlRecordList(orderThisOver,
+                            transmitSignal.toCallsign);
+                }
 
                 // isTransmitting re-checked alongside the flag: a STOP racing the swap
                 // request could otherwise replay an over the operator just cancelled.
                 if (!transmitSignal.consumeTxRestart() || !transmitSignal.isTransmitting) break;
                 // Swap: pick up whatever the sequencer settled on and replay this over.
+                freeTextThisOver = transmitSignal.transmitFreeText;
+                orderThisOver = transmitSignal.functionOrder;
                 msg = transmitSignal.currentTransmitMessage();
                 transmitSignal.orderAtKeyUp = transmitSignal.functionOrder;
                 transmitSignal.postTransmittingMessage(msg);
