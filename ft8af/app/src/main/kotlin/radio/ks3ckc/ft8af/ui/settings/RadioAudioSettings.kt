@@ -86,6 +86,7 @@ fun RadioAudioSettings(
     val bandIndexLive by GeneralVariables.mutableBandChange.observeAsState(
         GeneralVariables.bandListIndex,
     )
+    val bandFreqLive by GeneralVariables.mutableBandFreq.observeAsState(GeneralVariables.band)
     val baseFreqLive by GeneralVariables.mutableBaseFrequency.observeAsState(
         GeneralVariables.getBaseFrequency(),
     )
@@ -182,7 +183,8 @@ fun RadioAudioSettings(
 
     // Derived display strings
     val connectModeStr = ConnectMode.getModeStr(connectMode)
-    val bandStr = remember(bandIndexLive) {
+    // Keyed on the reported dial too: off-plan reports keep the same index (#978).
+    val bandStr = remember(bandIndexLive, bandFreqLive) {
         BaseRigOperation.getFrequencyAllInfo(GeneralVariables.band)
     }
     val baseFreqStr = remember(baseFreqLive) { GeneralVariables.getBaseFrequencyStr() }

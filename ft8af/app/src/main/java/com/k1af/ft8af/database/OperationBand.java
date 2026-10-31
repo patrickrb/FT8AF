@@ -76,25 +76,36 @@ public class OperationBand {
     }
 
     /**
-     * Checks if the frequency is in the frequency list; if not, adds this frequency to the band list
-     * @param freq
-     * @return
+     * Index of the band-list entry at exactly {@code freq}. An off-plan frequency
+     * goes into a single {@link Band#adHoc} slot: appended the first time, then
+     * overwritten (band and waveLength) for every later off-plan frequency, so the
+     * returned index stays stable while the operator tunes freely. Appending one
+     * entry per frequency grew the list by one per Hz the rig reported while
+     * tuning SSB, and the frequency picker listed every one (issue #978).
+     * @param freq dial frequency in Hz
+     * @return index into {@link #bandList}
      */
     public static int getIndexByFreq(long freq){
-        int result=-1;
+        int adHocIndex=-1;
         for (int i = 0; i < bandList.size(); i++) {
-            if (bandList.get(i).band==freq){
-                result=i;
-                break;
+            Band b = bandList.get(i);
+            if (b.band==freq){
+                return i;
+            }
+            if (b.adHoc && adHocIndex==-1){
+                adHocIndex=i;
             }
         }
-        if (result==-1){
-            Band b = new Band(freq, BaseRigOperation.getMeterFromFreq(freq));
-            b.adHoc = true;
-            bandList.add(b);
-            result=bandList.size()-1;
+        if (adHocIndex!=-1){
+            Band slot = bandList.get(adHocIndex);
+            slot.band = freq;
+            slot.waveLength = BaseRigOperation.getMeterFromFreq(freq);
+            return adHocIndex;
         }
-        return result;
+        Band b = new Band(freq, BaseRigOperation.getMeterFromFreq(freq));
+        b.adHoc = true;
+        bandList.add(b);
+        return bandList.size()-1;
     }
     /**
      * Reads the FT8 signal list from the bands.txt file, then appends the
@@ -379,12 +390,15 @@ public class OperationBand {
      * hidden, in file order. Used by the band pickers so excluded bands (e.g. 6m,
      * 60m in regions where they're prohibited) don't appear. Also filtered to the
      * current operating mode so the picker shows the right dials (FT8 vs FT4).
+     * The {@link Band#adHoc} slot for an off-plan rig frequency is left out: it's
+     * where the rig is, not a dial to pick (issue #978).
      */
     public static java.util.List<Integer> getVisibleBandIndices(){
         java.util.ArrayList<Integer> out = new java.util.ArrayList<>();
         int mode = com.k1af.ft8af.GeneralVariables.operatingMode;
         for (int i = 0; i < bandList.size(); i++) {
             Band b = bandList.get(i);
+            if (b.adHoc) continue;
             if (b.mode == mode && !com.k1af.ft8af.GeneralVariables.isBandExcluded(b.waveLength)) {
                 out.add(i);
             }

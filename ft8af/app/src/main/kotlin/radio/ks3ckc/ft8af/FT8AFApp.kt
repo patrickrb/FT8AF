@@ -301,7 +301,12 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     // Pill label combines MHz frequency and band name, e.g. "14.074 MHz · 20m".
     // bandIndex is observed so the pill recomposes when the user retunes.
     val bandIndex by GeneralVariables.mutableBandChange.observeAsState(GeneralVariables.bandListIndex)
-    val freq = GeneralVariables.band
+    // Off-plan rig reports all reuse one band-list slot (#978), so bandIndex stays put
+    // while the operator tunes off-plan; reading the reported dial keeps the pill
+    // following it. GeneralVariables.band stays the source of truth, because picker
+    // taps and the config load set it without posting a rig report.
+    val reportedFreq by GeneralVariables.mutableBandFreq.observeAsState(GeneralVariables.band)
+    val freq = if (reportedFreq == GeneralVariables.band) reportedFreq else GeneralVariables.band
     val bandName = OperationBand.bandList.getOrNull(bandIndex)?.waveLength
         ?: OperationBand.bandList.firstOrNull { it.band == freq }?.waveLength
         ?: BaseRigOperation.getMeterFromFreq(freq)

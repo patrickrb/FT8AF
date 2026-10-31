@@ -29,7 +29,7 @@ public class ClearOnBandChangeTest {
     @Test
     public void enabledSameWavelengthDifferentFreq_doesNotClear() {
         // A small in-band dial move keeps the same wavelength even though the
-        // band-list index can change (getIndexByFreq appends unseen frequencies).
+        // band-list index can change (moving between a dial and the ad-hoc slot).
         // This is the case the index-based check got wrong: it must NOT clear.
         assertThat(MainViewModel.shouldClearOnBandChange(true, "20m", "20m")).isFalse();
     }

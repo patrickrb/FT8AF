@@ -575,6 +575,10 @@ public class GeneralVariables {
     public static int instructionSet = 0;//Instruction set: 0=ICOM, 1=Yaesu gen 2, 2=Yaesu gen 3
     public static int bandListIndex = -1;//Radio band index value
     public static MutableLiveData<Integer> mutableBandChange = new MutableLiveData<>();//Band index change
+    //Dial frequency (Hz) the rig last reported. Every off-plan frequency shares one ad-hoc
+    //band-list slot (issue #978), so mutableBandChange keeps the same index while the
+    //operator tunes off-plan; observe this too wherever the displayed dial must follow.
+    public static MutableLiveData<Long> mutableBandFreq = new MutableLiveData<>();
     //Band names (e.g. "6m","60m") the user has hidden from the band pickers. Empty = show all.
     //Persisted in config as a comma-separated list under the key "excludedBands".
     public static volatile java.util.HashSet<String> excludedBands = new java.util.HashSet<>();
