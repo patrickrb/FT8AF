@@ -16,6 +16,10 @@ package com.k1af.ft8af.ft8transmit;
  *       a double start is refused.</li>
  *   <li><b>Deterministic stop reason</b>: the first stop cause wins and is
  *       reported for logging/toasts.</li>
+ *   <li><b>Session scoping</b>: each {@link #tryStartSession} returns a new id.
+ *       A worker passes its id to the scoped calls, so a stopped worker still
+ *       tearing down can't stop, time out, or re-arm the session that replaced
+ *       it (issue #982: stop, then a quick re-tap, killed the new tune).</li>
  * </ul>
  *
  * The audio worker owns the actual teardown (PTT off, track release) in a
@@ -35,6 +39,9 @@ public final class TuneController {
     public static final String STOP_TIMEOUT = "timeout";
     public static final String STOP_TX = "tx-start";
     public static final String STOP_ERROR = "error";
+
+    /** Returned by {@link #tryStartSession} when a session is already active. */
+    public static final long NO_SESSION = 0;
 
     /**
      * How long setup (thread start, PTT key-down, audio focus, AudioTrack build)
@@ -59,6 +66,12 @@ public final class TuneController {
     private long maxOnMs;
     private boolean carrierOn = false;
     private String stopReason = null;
+    // Current session id; bumped by every successful start.
+    private long session = NO_SESSION;
+    // The session before the current one, and how it ended. A stopped worker
+    // reads its reason after the operator may already have started a new one.
+    private long previousSession = NO_SESSION;
+    private String previousStopReason = null;
 
     /**
      * How long after PTT drops a tune still exempts SWR readings from the halt.
@@ -89,6 +102,26 @@ public final class TuneController {
     // Set when an FT8 over keys; cleared by the next tryStart.
     private boolean swrExemptionRevoked = false;
 
+    /**
+     * Wait up to {@code timeoutMs} for the previous tune worker to finish its
+     * teardown (ramp-out, track release, PTT key-up), so a re-tap keys only
+     * after the old carrier is off: keyUp(old) always precedes keyDown(new).
+     * Returns true when it finished (or there was none); false on timeout or
+     * interrupt, in which case the caller must not key.
+     */
+    public static boolean awaitPreviousWorker(Thread previous, long timeoutMs) {
+        if (previous == null || previous == Thread.currentThread()) {
+            return true;
+        }
+        try {
+            previous.join(timeoutMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+        return !previous.isAlive();
+    }
+
     public TuneController(Clock clock) {
         this.clock = clock;
     }
@@ -101,16 +134,25 @@ public final class TuneController {
         return Math.min(seconds, MAX_MAX_ON_SECONDS);
     }
 
-    /**
-     * Atomically claim the tune session. Returns false when a session is
-     * already active (double start is a no-op for the caller). Arms only the
-     * provisional setup deadline (max-on plus {@link #SETUP_GRACE_MS}); the
-     * max-on clock itself starts at {@link #markCarrierOn()}.
-     */
+    /** {@link #tryStartSession} for callers that don't need the session id. */
     public synchronized boolean tryStart(int maxOnSeconds) {
+        return tryStartSession(maxOnSeconds) != NO_SESSION;
+    }
+
+    /**
+     * Atomically claim a new tune session and return its id, or
+     * {@link #NO_SESSION} when one is already active (double start is a no-op
+     * for the caller). Arms only the provisional setup deadline (max-on plus
+     * {@link #SETUP_GRACE_MS}); the max-on clock itself starts at
+     * {@link #markCarrierOn()}.
+     */
+    public synchronized long tryStartSession(int maxOnSeconds) {
         if (active) {
-            return false;
+            return NO_SESSION;
         }
+        previousSession = session;
+        previousStopReason = stopReason;
+        session++;
         sessionStartMs = clock.nowMs();
         startedAtMs = sessionStartMs;
         maxOnMs = clampMaxOnSeconds(maxOnSeconds) * 1000L;
@@ -119,7 +161,12 @@ public final class TuneController {
         stopReason = null;
         swrExemptionRevoked = false;
         active = true;
-        return true;
+        return session;
+    }
+
+    /** Whether {@code id} is the latest session (active or not). */
+    public synchronized boolean ownsSession(long id) {
+        return id != NO_SESSION && id == session;
     }
 
     /**
@@ -133,7 +180,12 @@ public final class TuneController {
      * the keyed session past max-on plus the grace.
      */
     public synchronized long markCarrierOn() {
-        if (!active || carrierOn) {
+        return markCarrierOn(session);
+    }
+
+    /** {@link #markCarrierOn()} for session {@code id}; -1 if it isn't current. */
+    public synchronized long markCarrierOn(long id) {
+        if (id != session || !active || carrierOn) {
             return -1;
         }
         long now = clock.nowMs();
@@ -153,7 +205,12 @@ public final class TuneController {
      * the code-level guarantee that a forgotten tune cannot run past the cap.
      */
     public synchronized boolean shouldContinue() {
-        if (!active) {
+        return shouldContinue(session);
+    }
+
+    /** {@link #shouldContinue()} for session {@code id}; false once it's been replaced. */
+    public synchronized boolean shouldContinue(long id) {
+        if (id != session || !active) {
             return false;
         }
         if (clock.nowMs() >= deadlineMs) {
@@ -168,7 +225,15 @@ public final class TuneController {
      * The first reason wins; later calls are no-ops. Safe when not active.
      */
     public synchronized void requestStop(String reason) {
-        if (active) {
+        requestStop(session, reason);
+    }
+
+    /**
+     * {@link #requestStop(String)} for session {@code id}. A no-op when a newer
+     * session has replaced it: a worker's teardown must never stop its successor.
+     */
+    public synchronized void requestStop(long id, String reason) {
+        if (id == session && active) {
             stopInternal(reason);
         }
     }
@@ -237,6 +302,17 @@ public final class TuneController {
     /** Why the last session ended, or null if none ended yet. */
     public synchronized String lastStopReason() {
         return stopReason;
+    }
+
+    /**
+     * Why session {@code id} ended: null while it's still running, or when it's
+     * older than the previous session (a worker that never keyed).
+     */
+    public synchronized String stopReason(long id) {
+        if (id == session) {
+            return stopReason;
+        }
+        return id == previousSession ? previousStopReason : null;
     }
 
     /**

@@ -2,6 +2,11 @@ package com.k1af.ft8af.ft8transmit;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+
 import org.junit.Test;
 
 /**
@@ -397,5 +402,181 @@ public class TuneControllerTest {
         TuneController c = new TuneController(clock);
         c.markUnkeyed();
         assertThat(c.suppressesSwrHalt(false)).isFalse();
+    }
+
+    // --- Session scoping (issue #982 part 2: stop, then a quick re-tap) ---
+
+    @Test
+    public void sessions_getDistinctIds_andDoubleStartGetsNone() {
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        long a = c.tryStartSession(10);
+        assertThat(a).isNotEqualTo(TuneController.NO_SESSION);
+        assertThat(c.tryStartSession(10)).isEqualTo(TuneController.NO_SESSION);
+        c.requestStop(TuneController.STOP_USER);
+        long b = c.tryStartSession(10);
+        assertThat(b).isNotEqualTo(TuneController.NO_SESSION);
+        assertThat(b).isNotEqualTo(a);
+        assertThat(c.ownsSession(b)).isTrue();
+        assertThat(c.ownsSession(a)).isFalse();
+        assertThat(c.ownsSession(TuneController.NO_SESSION)).isFalse();
+    }
+
+    @Test
+    public void staleStop_isANoOpOnTheNewSession() {
+        // The old worker's finally runs requestStop(ERROR) after the re-tap.
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        long a = c.tryStartSession(5);
+        c.markCarrierOn(a);
+        c.requestStop(TuneController.STOP_USER);
+        long b = c.tryStartSession(5);
+
+        c.requestStop(a, TuneController.STOP_ERROR);
+
+        assertThat(c.isActive()).isTrue();
+        assertThat(c.shouldContinue(b)).isTrue();
+        assertThat(c.lastStopReason()).isNull();
+        assertThat(c.stopReason(a)).isEqualTo(TuneController.STOP_USER);
+        assertThat(c.stopReason(b)).isNull();
+    }
+
+    @Test
+    public void staleWorker_cannotContinueOrMarkCarrierOn() {
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        long a = c.tryStartSession(5);
+        c.requestStop(TuneController.STOP_USER);
+        long b = c.tryStartSession(5);
+
+        // The old worker, still ramping out, must see "stop", not B's session.
+        assertThat(c.shouldContinue(a)).isFalse();
+        assertThat(c.markCarrierOn(a)).isEqualTo(-1L);
+        // ...and it didn't start B's clock: B still gets its own carrier-on.
+        clock.now += 300;
+        assertThat(c.markCarrierOn(b)).isEqualTo(300L);
+    }
+
+    @Test
+    public void restart_getsTheFullMaxOnFromItsOwnCarrierOn() {
+        // The reporter's case: 5 s set, stop at ~2 s, re-tap within 0.5 s.
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        long a = c.tryStartSession(5);
+        clock.now += 200;
+        c.markCarrierOn(a);
+        clock.now += 2_000;
+        c.requestStop(TuneController.STOP_USER);
+        clock.now += 400;
+        long b = c.tryStartSession(5);
+        c.requestStop(a, TuneController.STOP_ERROR); // old teardown, late
+        clock.now += 300;
+        c.markCarrierOn(b);
+        long carrierOn = clock.now;
+
+        clock.now = carrierOn + 4_999;
+        assertThat(c.shouldContinue(b)).isTrue();
+        clock.now = carrierOn + 5_000;
+        assertThat(c.shouldContinue(b)).isFalse();
+        assertThat(c.stopReason(b)).isEqualTo(TuneController.STOP_TIMEOUT);
+    }
+
+    @Test
+    public void unscopedStop_stillStopsTheCurrentSession() {
+        // Operator stop and FT8-TX stop target whatever session is running.
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        long a = c.tryStartSession(5);
+        c.requestStop(TuneController.STOP_USER);
+        long b = c.tryStartSession(5);
+        c.requestStop(TuneController.STOP_TX);
+        assertThat(c.shouldContinue(b)).isFalse();
+        assertThat(c.stopReason(b)).isEqualTo(TuneController.STOP_TX);
+        assertThat(c.stopReason(a)).isEqualTo(TuneController.STOP_USER);
+    }
+
+    @Test
+    public void stopReason_isNullForASessionTwoBack() {
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        long a = c.tryStartSession(5);
+        c.requestStop(TuneController.STOP_USER);
+        c.tryStartSession(5);
+        c.requestStop(TuneController.STOP_USER);
+        c.tryStartSession(5);
+        assertThat(c.stopReason(a)).isNull();
+    }
+
+    @Test
+    public void awaitPreviousWorker_noPreviousOrSelf_returnsTrue() {
+        assertThat(TuneController.awaitPreviousWorker(null, 10)).isTrue();
+        assertThat(TuneController.awaitPreviousWorker(Thread.currentThread(), 10)).isTrue();
+    }
+
+    @Test
+    public void awaitPreviousWorker_stuckWorker_timesOut() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        Thread stuck = new Thread(() -> {
+            try {
+                release.await();
+            } catch (InterruptedException ignored) {
+            }
+        });
+        stuck.start();
+        try {
+            assertThat(TuneController.awaitPreviousWorker(stuck, 50)).isFalse();
+        } finally {
+            release.countDown();
+            stuck.join(1_000);
+        }
+    }
+
+    @Test
+    public void restartRace_newWorkerKeysOnlyAfterOldWorkerUnkeys() throws Exception {
+        // Real threads, same order as FT8TransmitSignal.playTuneTone: the old
+        // worker is stopped but still tearing down when the re-tap starts B.
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        List<String> wire = Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch rampOut = new CountDownLatch(1);
+
+        long a = c.tryStartSession(5);
+        c.markKeyed();
+        wire.add("keyDown A");
+        Thread oldWorker = new Thread(() -> {
+            try {
+                rampOut.await(); // blocked in the ramp-out write
+            } catch (InterruptedException ignored) {
+            }
+            c.requestStop(a, TuneController.STOP_ERROR);
+            wire.add("keyUp A");
+            c.markUnkeyed();
+        });
+        oldWorker.start();
+
+        c.requestStop(TuneController.STOP_USER); // operator stop
+        long b = c.tryStartSession(5); // quick re-tap, A still alive
+        assertThat(b).isNotEqualTo(TuneController.NO_SESSION);
+
+        Thread newWorker = new Thread(() -> {
+            if (TuneController.awaitPreviousWorker(oldWorker, 2_000)
+                    && c.shouldContinue(b)) {
+                c.markKeyed();
+                wire.add("keyDown B");
+            }
+        });
+        newWorker.start();
+        Thread.sleep(50);
+        assertThat(wire).containsExactly("keyDown A"); // B waits for A
+
+        rampOut.countDown();
+        newWorker.join(2_000);
+        oldWorker.join(2_000);
+
+        assertThat(wire).containsExactly("keyDown A", "keyUp A", "keyDown B").inOrder();
+        assertThat(c.isActive()).isTrue();
+        assertThat(c.ownsSession(b)).isTrue();
+        assertThat(c.stopReason(a)).isEqualTo(TuneController.STOP_USER);
+        assertThat(c.suppressesSwrHalt(false)).isTrue();
     }
 }

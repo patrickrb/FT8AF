@@ -196,6 +196,8 @@ public class FT8TransmitSignal {
     // wall-clock step (NTP, self-sync) must not stretch or shrink them (#943).
     private final TuneController tuneController = new TuneController(SystemClock::elapsedRealtime);
     public final MutableLiveData<Boolean> mutableIsTuning = new MutableLiveData<>();
+    // Latest tune worker; the next one waits for it to unkey before keying.
+    private Thread tuneWorker;
     public final MutableLiveData<Integer> mutableTuneRemainingSec = new MutableLiveData<>();
 
     private final OnDoTransmitted onDoTransmitted;// typically used for opening/closing PTT
@@ -3323,10 +3325,15 @@ public class FT8TransmitSignal {
             default:
                 break;
         }
-        if (!tuneController.tryStart(GeneralVariables.tuneMaxOnSeconds)) {
+        long session = tuneController.tryStartSession(GeneralVariables.tuneMaxOnSeconds);
+        if (session == TuneController.NO_SESSION) {
             return false; // already tuning
         }
-        Thread worker = new Thread(this::playTuneTone, "TuneTone");
+        // A quick stop-then-tune lands while the last worker is still ramping
+        // out; the new one waits for it to unkey (issue #982).
+        Thread previous = tuneWorker;
+        Thread worker = new Thread(() -> playTuneTone(session, previous), "TuneTone");
+        tuneWorker = worker;
         worker.start();
         return true;
     }
@@ -3341,14 +3348,14 @@ public class FT8TransmitSignal {
      * tune controller says stop, then {@code TA0;}. No audio, so the tune
      * level setting does not apply.
      */
-    private void runQmxCatTune(float offsetHz) {
+    private void runQmxCatTune(long session, float offsetHz) {
         GeneralVariables.fileLog(String.format(java.util.Locale.ROOT,
                 "TUNE: QMX CAT tone %.1f Hz", offsetHz));
         onDoTransmitted.sendQmxCatCommand(QmxCatTones.taCommand(offsetHz));
-        markTuneCarrierOn();
+        markTuneCarrierOn(session);
         int lastPostedSec = -1;
         try {
-            while (tuneController.shouldContinue()) {
+            while (tuneController.shouldContinue(session)) {
                 int remainingSec = (int) Math.ceil(tuneController.remainingMs() / 1000.0);
                 if (remainingSec != lastPostedSec) {
                     lastPostedSec = remainingSec;
@@ -3380,8 +3387,8 @@ public class FT8TransmitSignal {
      * doesn't eat into the operator's tune time (issue #982). Logs the setup
      * latency and shows the full timeout on the chip straight away.
      */
-    private void markTuneCarrierOn() {
-        long setupMs = tuneController.markCarrierOn();
+    private void markTuneCarrierOn(long session) {
+        long setupMs = tuneController.markCarrierOn(session);
         if (setupMs < 0) {
             return; // already on, or setup outran its grace and the session timed out
         }
@@ -3400,11 +3407,16 @@ public class FT8TransmitSignal {
      * Tune audio worker. Owns keying and the AudioTrack for its whole life;
      * every exit path (stop, timeout, write error, exception) releases PTT and
      * the track via the finally block — a stuck carrier is never acceptable.
+     *
+     * <p>{@code session} scopes every controller call, so this worker's
+     * teardown can't end a session started after it was stopped. It keys only
+     * once {@code previous} (the last worker) has unkeyed.
      */
-    private void playTuneTone() {
+    private void playTuneTone(long session, Thread previous) {
         long startedAt = System.currentTimeMillis();
         float offsetHz = GeneralVariables.getBaseFrequency();
         AudioTrack track = null;
+        boolean countedKeyed = false;
         boolean keyed = false;
         // Own instance (not the TX field): tune and FT8 playback teardowns
         // must not release each other's focus.
@@ -3415,7 +3427,18 @@ public class FT8TransmitSignal {
                     offsetHz, radio.ks3ckc.ft8af.TuneLevelKt.currentTuneLevel(),
                     TuneController.clampMaxOnSeconds(GeneralVariables.tuneMaxOnSeconds),
                     GeneralVariables.audioSampleRate));
+            if (!TuneController.awaitPreviousWorker(previous, TuneController.KEYUP_TAIL_MAX_MS)) {
+                // The old worker never unkeyed; keying on top of it is worse
+                // than refusing this tune.
+                Log.e(TAG, "Tune: previous worker still keyed, not starting");
+                tuneController.requestStop(session, TuneController.STOP_ERROR);
+                return; // finally below cleans up
+            }
+            if (!tuneController.shouldContinue(session)) {
+                return; // stopped while waiting; never keyed
+            }
             tuneController.markKeyed();
+            countedKeyed = true;
             onDoTransmitted.onTuneKeyDown();
             keyed = true;
             // Full max-on (the clock hasn't started), not the last tune's value.
@@ -3424,7 +3447,7 @@ public class FT8TransmitSignal {
             mutableIsTuning.postValue(true);
 
             if (onDoTransmitted.supportQmxCatTones()) {
-                runQmxCatTune(offsetHz);
+                runQmxCatTune(session, offsetHz);
                 return; // finally below unkeys
             }
 
@@ -3483,7 +3506,7 @@ public class FT8TransmitSignal {
             int lastPostedSec = -1;
             boolean carrierOn = false;
             while (true) {
-                if (!tuneController.shouldContinue()) {
+                if (!tuneController.shouldContinue(session)) {
                     generator.requestStop(); // final chunk(s) ramp to zero
                 }
                 // Level read fresh per chunk so a settings change lands mid-tune,
@@ -3503,14 +3526,17 @@ public class FT8TransmitSignal {
                 }
                 if (writeResult < 0) {
                     Log.e(TAG, "Tune playback error: " + writeResult);
-                    tuneController.requestStop(TuneController.STOP_ERROR);
+                    tuneController.requestStop(session, TuneController.STOP_ERROR);
                     break;
                 }
                 // play() on an empty stream track renders nothing, and a write
                 // only buffers; the carrier is on once the head starts moving.
                 if (!carrierOn && tuneToneReachedOutput(track.getPlaybackHeadPosition())) {
                     carrierOn = true;
-                    markTuneCarrierOn();
+                    markTuneCarrierOn(session);
+                }
+                if (!tuneController.ownsSession(session)) {
+                    continue; // ramping out; the chip belongs to the new session
                 }
                 int remainingSec = (int) Math.ceil(tuneController.remainingMs() / 1000.0);
                 if (remainingSec != lastPostedSec) {
@@ -3520,11 +3546,12 @@ public class FT8TransmitSignal {
             }
         } catch (Exception e) {
             Log.e(TAG, "Tune worker failed: " + e);
-            tuneController.requestStop(TuneController.STOP_ERROR);
+            tuneController.requestStop(session, TuneController.STOP_ERROR);
         } finally {
             // Single point of teardown: whatever happened above, the carrier
-            // stops and PTT drops here.
-            tuneController.requestStop(TuneController.STOP_ERROR);
+            // stops and PTT drops here. Scoped: a no-op if the operator has
+            // already started the next tune.
+            tuneController.requestStop(session, TuneController.STOP_ERROR);
             if (track != null) {
                 try {
                     track.stop();
@@ -3540,11 +3567,16 @@ public class FT8TransmitSignal {
                     Log.e(TAG, "Tune key-up failed: " + e);
                 }
             }
-            // Starts the SWR settle window; unconditional because markKeyed()
-            // runs before onTuneKeyDown(), which may have thrown.
-            tuneController.markUnkeyed();
-            mutableIsTuning.postValue(false);
-            String reason = tuneController.lastStopReason();
+            // Starts the SWR settle window; keyed on countedKeyed, not keyed,
+            // because markKeyed() runs before onTuneKeyDown(), which may throw.
+            if (countedKeyed) {
+                tuneController.markUnkeyed();
+            }
+            // A newer session owns the UI state once it's been started.
+            if (tuneController.ownsSession(session)) {
+                mutableIsTuning.postValue(false);
+            }
+            String reason = tuneController.stopReason(session);
             GeneralVariables.fileLog(String.format(
                     "TUNE: stop reason=%s durationMs=%d offset=%.0fHz",
                     reason, System.currentTimeMillis() - startedAt, offsetHz));
