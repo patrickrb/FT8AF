@@ -10,7 +10,8 @@ package com.k1af.ft8af.ft8transmit;
  *   <li><b>Hard max-on timeout</b>: {@link #shouldContinue()} goes false once
  *       the deadline passes even if the operator does nothing. The deadline
  *       counts from {@link #markCarrierOn()}; before that, setup is bounded by
- *       max-on plus {@link #SETUP_GRACE_MS}.</li>
+ *       max-on plus {@link #SETUP_GRACE_MS}, and the carrier deadline never
+ *       extends past that.</li>
  *   <li><b>Single flight</b>: {@link #tryStart} is an atomic check-and-claim;
  *       a double start is refused.</li>
  *   <li><b>Deterministic stop reason</b>: the first stop cause wins and is
@@ -126,7 +127,10 @@ public final class TuneController {
      * setup latency (ms since {@link #tryStart}) for logging, or -1 when nothing
      * changed: no active session, or the carrier was already marked on (a second
      * call never pushes the deadline out). If setup outran the provisional
-     * deadline, the session times out here instead of getting a fresh cap.
+     * deadline, the session times out here instead of getting a fresh cap. The
+     * carrier deadline never moves past the provisional one, so a setup slower
+     * than {@link #SETUP_GRACE_MS} shortens the carrier rather than stretching
+     * the keyed session past max-on plus the grace.
      */
     public synchronized long markCarrierOn() {
         if (!active || carrierOn) {
@@ -139,7 +143,7 @@ public final class TuneController {
         }
         carrierOn = true;
         startedAtMs = now;
-        deadlineMs = now + maxOnMs;
+        deadlineMs = Math.min(now + maxOnMs, deadlineMs);
         return now - sessionStartMs;
     }
 

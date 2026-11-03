@@ -162,6 +162,35 @@ public class TuneControllerTest {
     }
 
     @Test
+    public void slowSetupWithinTheProvisionalDeadline_neverExtendsTheSession() {
+        // Setup took longer than the grace but carrier-on still beat the
+        // provisional deadline: the carrier gets what is left of it, never a
+        // fresh max-on that would keep PTT keyed past max-on plus the grace.
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        long t0 = clock.now;
+        c.tryStart(5);
+        clock.now = t0 + 6_900;
+        assertThat(c.markCarrierOn()).isEqualTo(6_900L);
+        assertThat(c.remainingMs()).isEqualTo(100L);
+        clock.now = t0 + 5_000 + TuneController.SETUP_GRACE_MS - 1;
+        assertThat(c.shouldContinue()).isTrue();
+        clock.now = t0 + 5_000 + TuneController.SETUP_GRACE_MS;
+        assertThat(c.shouldContinue()).isFalse();
+        assertThat(c.lastStopReason()).isEqualTo(TuneController.STOP_TIMEOUT);
+    }
+
+    @Test
+    public void setupAtTheGraceLimit_stillGetsTheFullMaxOn() {
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        c.tryStart(5);
+        clock.now += TuneController.SETUP_GRACE_MS;
+        c.markCarrierOn();
+        assertThat(c.remainingMs()).isEqualTo(5_000L);
+    }
+
+    @Test
     public void remaining_isTheFullMaxOnRightAfterCarrierOn() {
         FakeClock clock = new FakeClock();
         TuneController c = new TuneController(clock);
