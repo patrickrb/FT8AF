@@ -420,6 +420,16 @@ public class FT8TransmitSignalTest {
         assertThat(FT8TransmitSignal.isCallsignReadyToTransmit(null)).isFalse();
     }
 
+    // ---- tuneToneReachedOutput (issue #982) ----------------------------------
+
+    @Test
+    public void tuneTone_notOnUntilThePlaybackHeadMoves() {
+        // play() and buffered writes alone don't put a tone on the air.
+        assertThat(FT8TransmitSignal.tuneToneReachedOutput(0)).isFalse();
+        assertThat(FT8TransmitSignal.tuneToneReachedOutput(1)).isTrue();
+        assertThat(FT8TransmitSignal.tuneToneReachedOutput(4_800)).isTrue();
+    }
+
     // ---- tuneBlockReason (issue #408) ----------------------------------------
     // The gate for starting the tune carrier. Ordered by severity: TX beats the
     // protections, protections beat route support — and tune must never become

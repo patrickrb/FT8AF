@@ -3345,6 +3345,7 @@ public class FT8TransmitSignal {
         GeneralVariables.fileLog(String.format(java.util.Locale.ROOT,
                 "TUNE: QMX CAT tone %.1f Hz", offsetHz));
         onDoTransmitted.sendQmxCatCommand(QmxCatTones.taCommand(offsetHz));
+        markTuneCarrierOn();
         int lastPostedSec = -1;
         try {
             while (tuneController.shouldContinue()) {
@@ -3363,6 +3364,31 @@ public class FT8TransmitSignal {
         } finally {
             onDoTransmitted.sendQmxCatCommand(QmxCatTones.KEY_UP);
         }
+    }
+
+    /**
+     * Whether the tune tone has started playing out, from the track's playback
+     * head (frames rendered since {@code play()}). Buffered samples don't count:
+     * until the head moves, no tone has reached the rig.
+     */
+    static boolean tuneToneReachedOutput(int playbackHeadFrames) {
+        return playbackHeadFrames > 0;
+    }
+
+    /**
+     * The tune carrier is up: start the max-on clock now, so PTT/audio setup
+     * doesn't eat into the operator's tune time (issue #982). Logs the setup
+     * latency and shows the full timeout on the chip straight away.
+     */
+    private void markTuneCarrierOn() {
+        long setupMs = tuneController.markCarrierOn();
+        if (setupMs < 0) {
+            return; // already on, or setup outran its grace and the session timed out
+        }
+        GeneralVariables.fileLog(String.format(java.util.Locale.ROOT,
+                "TUNE: carrier on after %d ms", setupMs));
+        mutableTuneRemainingSec.postValue(
+                (int) Math.ceil(tuneController.remainingMs() / 1000.0));
     }
 
     /** The tune level (0..100) resolved from settings, as an amplitude 0..1. */
@@ -3392,6 +3418,9 @@ public class FT8TransmitSignal {
             tuneController.markKeyed();
             onDoTransmitted.onTuneKeyDown();
             keyed = true;
+            // Full max-on (the clock hasn't started), not the last tune's value.
+            mutableTuneRemainingSec.postValue(
+                    (int) Math.ceil(tuneController.remainingMs() / 1000.0));
             mutableIsTuning.postValue(true);
 
             if (onDoTransmitted.supportQmxCatTones()) {
@@ -3452,6 +3481,7 @@ public class FT8TransmitSignal {
             final float[] stereoScratch =
                     layout.isStereo() ? new float[layout.samplesForFrames(chunkSamples)] : null;
             int lastPostedSec = -1;
+            boolean carrierOn = false;
             while (true) {
                 if (!tuneController.shouldContinue()) {
                     generator.requestStop(); // final chunk(s) ramp to zero
@@ -3475,6 +3505,12 @@ public class FT8TransmitSignal {
                     Log.e(TAG, "Tune playback error: " + writeResult);
                     tuneController.requestStop(TuneController.STOP_ERROR);
                     break;
+                }
+                // play() on an empty stream track renders nothing, and a write
+                // only buffers; the carrier is on once the head starts moving.
+                if (!carrierOn && tuneToneReachedOutput(track.getPlaybackHeadPosition())) {
+                    carrierOn = true;
+                    markTuneCarrierOn();
                 }
                 int remainingSec = (int) Math.ceil(tuneController.remainingMs() / 1000.0);
                 if (remainingSec != lastPostedSec) {
