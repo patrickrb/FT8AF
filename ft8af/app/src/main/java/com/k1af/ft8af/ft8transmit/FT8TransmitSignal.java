@@ -195,9 +195,8 @@ public class FT8TransmitSignal {
     // Monotonic: the max-on timeout and the SWR settle window are intervals, and a
     // wall-clock step (NTP, self-sync) must not stretch or shrink them (#943).
     private final TuneController tuneController = new TuneController(SystemClock::elapsedRealtime);
+    // Posted only through tuneController.publishTuningState, scoped to the session.
     public final MutableLiveData<Boolean> mutableIsTuning = new MutableLiveData<>();
-    // Latest tune worker; the next one waits for it to unkey before keying.
-    private Thread tuneWorker;
     public final MutableLiveData<Integer> mutableTuneRemainingSec = new MutableLiveData<>();
 
     private final OnDoTransmitted onDoTransmitted;// typically used for opening/closing PTT
@@ -3330,10 +3329,11 @@ public class FT8TransmitSignal {
             return false; // already tuning
         }
         // A quick stop-then-tune lands while the last worker is still ramping
-        // out; the new one waits for it to unkey (issue #982).
-        Thread previous = tuneWorker;
+        // out; the new one waits for every unfinished worker to unkey (issue #982).
+        // Filled before start(), which publishes it to the worker.
+        final List<Thread> previous = new ArrayList<>();
         Thread worker = new Thread(() -> playTuneTone(session, previous), "TuneTone");
-        tuneWorker = worker;
+        previous.addAll(tuneController.registerWorker(worker));
         worker.start();
         return true;
     }
@@ -3410,9 +3410,9 @@ public class FT8TransmitSignal {
      *
      * <p>{@code session} scopes every controller call, so this worker's
      * teardown can't end a session started after it was stopped. It keys only
-     * once {@code previous} (the last worker) has unkeyed.
+     * once every worker in {@code previous} has unkeyed.
      */
-    private void playTuneTone(long session, Thread previous) {
+    private void playTuneTone(long session, List<Thread> previous) {
         long startedAt = System.currentTimeMillis();
         float offsetHz = GeneralVariables.getBaseFrequency();
         AudioTrack track = null;
@@ -3427,7 +3427,7 @@ public class FT8TransmitSignal {
                     offsetHz, radio.ks3ckc.ft8af.TuneLevelKt.currentTuneLevel(),
                     TuneController.clampMaxOnSeconds(GeneralVariables.tuneMaxOnSeconds),
                     GeneralVariables.audioSampleRate));
-            if (!TuneController.awaitPreviousWorker(previous, TuneController.KEYUP_TAIL_MAX_MS)) {
+            if (!TuneController.awaitPreviousWorkers(previous, TuneController.KEYUP_TAIL_MAX_MS)) {
                 // The old worker never unkeyed; keying on top of it is worse
                 // than refusing this tune.
                 Log.e(TAG, "Tune: previous worker still keyed, not starting");
@@ -3442,9 +3442,13 @@ public class FT8TransmitSignal {
             onDoTransmitted.onTuneKeyDown();
             keyed = true;
             // Full max-on (the clock hasn't started), not the last tune's value.
-            mutableTuneRemainingSec.postValue(
-                    (int) Math.ceil(tuneController.remainingMs() / 1000.0));
-            mutableIsTuning.postValue(true);
+            // Skipped if this session was stopped (and maybe replaced) while
+            // key-down blocked: the button must not flip back to Stop.
+            tuneController.publishTuningState(session, true, () -> {
+                mutableTuneRemainingSec.postValue(
+                        (int) Math.ceil(tuneController.remainingMs() / 1000.0));
+                mutableIsTuning.postValue(true);
+            });
 
             if (onDoTransmitted.supportQmxCatTones()) {
                 runQmxCatTune(session, offsetHz);
@@ -3573,9 +3577,8 @@ public class FT8TransmitSignal {
                 tuneController.markUnkeyed();
             }
             // A newer session owns the UI state once it's been started.
-            if (tuneController.ownsSession(session)) {
-                mutableIsTuning.postValue(false);
-            }
+            tuneController.publishTuningState(session, false,
+                    () -> mutableIsTuning.postValue(false));
             String reason = tuneController.stopReason(session);
             GeneralVariables.fileLog(String.format(
                     "TUNE: stop reason=%s durationMs=%d offset=%.0fHz",

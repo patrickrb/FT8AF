@@ -1,5 +1,10 @@
 package com.k1af.ft8af.ft8transmit;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+
 /**
  * Lifecycle + safety state machine for the Tune function (issue #408).
  *
@@ -101,6 +106,8 @@ public final class TuneController {
     private long unkeyedAtMs = Long.MIN_VALUE;
     // Set when an FT8 over keys; cleared by the next tryStart.
     private boolean swrExemptionRevoked = false;
+    // Tune worker threads, oldest first, until seen terminated; see registerWorker.
+    private final List<Thread> workers = new ArrayList<>();
 
     /**
      * Wait up to {@code timeoutMs} for the previous tune worker to finish its
@@ -110,16 +117,52 @@ public final class TuneController {
      * interrupt, in which case the caller must not key.
      */
     public static boolean awaitPreviousWorker(Thread previous, long timeoutMs) {
-        if (previous == null || previous == Thread.currentThread()) {
-            return true;
+        return awaitPreviousWorkers(
+                previous == null ? Collections.emptyList() : Collections.singletonList(previous),
+                timeoutMs);
+    }
+
+    /**
+     * {@link #awaitPreviousWorker} for every worker {@link #registerWorker}
+     * returned, within one shared {@code timeoutMs} bound.
+     */
+    public static boolean awaitPreviousWorkers(List<Thread> previous, long timeoutMs) {
+        long deadlineNs = System.nanoTime() + timeoutMs * 1_000_000L;
+        for (Thread t : previous) {
+            if (t == Thread.currentThread()) {
+                continue;
+            }
+            long leftMs = (deadlineNs - System.nanoTime()) / 1_000_000L;
+            try {
+                if (leftMs > 0) {
+                    t.join(leftMs);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+            if (t.isAlive()) {
+                return false;
+            }
         }
-        try {
-            previous.join(timeoutMs);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            return false;
+        return true;
+    }
+
+    /**
+     * Record {@code worker} as the newest tune worker and return the earlier
+     * ones that haven't finished, for it to wait on before keying. All of them,
+     * not just the last: a re-tap refused because worker A hung leaves A alive,
+     * and the next re-tap must still wait for A, not just for the refused one.
+     */
+    public synchronized List<Thread> registerWorker(Thread worker) {
+        for (Iterator<Thread> it = workers.iterator(); it.hasNext(); ) {
+            if (it.next().getState() == Thread.State.TERMINATED) {
+                it.remove();
+            }
         }
-        return !previous.isAlive();
+        List<Thread> previous = new ArrayList<>(workers);
+        workers.add(worker);
+        return previous;
     }
 
     public TuneController(Clock clock) {
@@ -167,6 +210,22 @@ public final class TuneController {
     /** Whether {@code id} is the latest session (active or not). */
     public synchronized boolean ownsSession(long id) {
         return id != NO_SESSION && id == session;
+    }
+
+    /**
+     * Run {@code publish} (posting the Tune button state) only if session
+     * {@code id} may still set it: {@code tuning=true} needs the session still
+     * running, {@code false} needs it still the latest. Checked under this
+     * lock, so a start or stop can't slip in between check and post, and a
+     * worker whose key-down returned after it was stopped and replaced can't
+     * flip the button back to Stop.
+     */
+    public synchronized boolean publishTuningState(long id, boolean tuning, Runnable publish) {
+        boolean current = tuning ? shouldContinue(id) : ownsSession(id);
+        if (current) {
+            publish.run();
+        }
+        return current;
     }
 
     /**

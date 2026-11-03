@@ -579,4 +579,121 @@ public class TuneControllerTest {
         assertThat(c.stopReason(a)).isEqualTo(TuneController.STOP_USER);
         assertThat(c.suppressesSwrHalt(false)).isTrue();
     }
+
+    @Test
+    public void registerWorker_returnsUnfinishedEarlierWorkers() throws Exception {
+        TuneController c = new TuneController(new FakeClock());
+        Thread done = new Thread(() -> { });
+        assertThat(c.registerWorker(done)).isEmpty();
+        done.start();
+        done.join(1_000);
+        Thread notYetStarted = new Thread(() -> { });
+        assertThat(c.registerWorker(notYetStarted)).isEmpty(); // finished one dropped
+        Thread next = new Thread(() -> { });
+        // Registered but not started yet still counts: it's about to key.
+        assertThat(c.registerWorker(next)).containsExactly(notYetStarted);
+    }
+
+    @Test
+    public void restartRace_refusedRetryDoesNotHideAStuckWorker() throws Exception {
+        // A hangs in teardown; B gives up waiting and is refused. C must still
+        // wait for A, not just for B (Copilot review on PR #984).
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        List<String> wire = Collections.synchronizedList(new ArrayList<>());
+        CountDownLatch release = new CountDownLatch(1);
+
+        long a = c.tryStartSession(5);
+        wire.add("keyDown A");
+        Thread workerA = new Thread(() -> {
+            try {
+                release.await(); // stuck in key-up
+            } catch (InterruptedException ignored) {
+            }
+            wire.add("keyUp A");
+        });
+        List<Thread> beforeA = c.registerWorker(workerA);
+        assertThat(beforeA).isEmpty();
+        workerA.start();
+        c.requestStop(a, TuneController.STOP_USER);
+
+        long b = c.tryStartSession(5);
+        Thread workerB = new Thread(() -> { });
+        List<Thread> beforeB = c.registerWorker(workerB);
+        workerB.start();
+        assertThat(TuneController.awaitPreviousWorkers(beforeB, 50)).isFalse(); // B refused
+        c.requestStop(b, TuneController.STOP_ERROR);
+        workerB.join(1_000);
+
+        long cSession = c.tryStartSession(5);
+        List<Thread> beforeC = c.registerWorker(new Thread(() -> { }));
+        assertThat(beforeC).contains(workerA);
+        assertThat(TuneController.awaitPreviousWorkers(beforeC, 50)).isFalse(); // A still live
+
+        release.countDown();
+        assertThat(TuneController.awaitPreviousWorkers(beforeC, 2_000)).isTrue();
+        if (c.shouldContinue(cSession)) {
+            wire.add("keyDown C");
+        }
+        assertThat(wire).containsExactly("keyDown A", "keyUp A", "keyDown C").inOrder();
+    }
+
+    @Test
+    public void awaitPreviousWorkers_sharesOneTimeout() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        List<Thread> stuck = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            Thread t = new Thread(() -> {
+                try {
+                    release.await();
+                } catch (InterruptedException ignored) {
+                }
+            });
+            t.start();
+            stuck.add(t);
+        }
+        try {
+            long t0 = System.nanoTime();
+            assertThat(TuneController.awaitPreviousWorkers(stuck, 100)).isFalse();
+            // One shared bound, not 100 ms per worker.
+            assertThat((System.nanoTime() - t0) / 1_000_000L).isLessThan(250L);
+        } finally {
+            release.countDown();
+            for (Thread t : stuck) {
+                t.join(1_000);
+            }
+        }
+    }
+
+    @Test
+    public void publishTuningState_lateKeyDownOfAReplacedSessionIsDropped() {
+        // A is stopped while key-down blocks; B is started and refused (posts
+        // false). A's key-down then returns: its "tuning" post must be dropped,
+        // or the button sticks on Stop (Copilot review on PR #984).
+        TuneController c = new TuneController(new FakeClock());
+        List<Boolean> button = new ArrayList<>();
+
+        long a = c.tryStartSession(5);
+        c.requestStop(TuneController.STOP_USER);
+        long b = c.tryStartSession(5);
+        c.requestStop(b, TuneController.STOP_ERROR);
+        assertThat(c.publishTuningState(b, false, () -> button.add(false))).isTrue();
+
+        assertThat(c.publishTuningState(a, true, () -> button.add(true))).isFalse();
+        assertThat(c.publishTuningState(a, false, () -> button.add(false))).isFalse();
+        assertThat(button).containsExactly(false);
+    }
+
+    @Test
+    public void publishTuningState_stoppedButNotReplaced() {
+        TuneController c = new TuneController(new FakeClock());
+        List<Boolean> button = new ArrayList<>();
+        long a = c.tryStartSession(5);
+        assertThat(c.publishTuningState(a, true, () -> button.add(true))).isTrue();
+        c.requestStop(TuneController.STOP_USER);
+        // Stopped before key-down returned: no late "tuning", but it still clears.
+        assertThat(c.publishTuningState(a, true, () -> button.add(true))).isFalse();
+        assertThat(c.publishTuningState(a, false, () -> button.add(false))).isTrue();
+        assertThat(button).containsExactly(true, false).inOrder();
+    }
 }
