@@ -44,6 +44,7 @@ public class TuneControllerTest {
         FakeClock clock = new FakeClock();
         TuneController c = new TuneController(clock);
         c.tryStart(10);
+        c.markCarrierOn();
 
         clock.now += 9_999;
         assertThat(c.shouldContinue()).isTrue();
@@ -96,6 +97,7 @@ public class TuneControllerTest {
         clock.now += 5_000;
         assertThat(c.tryStart(20)).isTrue();
         assertThat(c.remainingMs()).isEqualTo(20_000L);
+        c.markCarrierOn();
         clock.now += 20_000;
         assertThat(c.shouldContinue()).isFalse();
         assertThat(c.lastStopReason()).isEqualTo(TuneController.STOP_TIMEOUT);
@@ -106,12 +108,108 @@ public class TuneControllerTest {
         FakeClock clock = new FakeClock();
         TuneController c = new TuneController(clock);
         c.tryStart(10);
+        c.markCarrierOn();
         clock.now += 3_000;
         assertThat(c.elapsedMs()).isEqualTo(3_000L);
         assertThat(c.remainingMs()).isEqualTo(7_000L);
         c.requestStop(TuneController.STOP_USER);
         assertThat(c.elapsedMs()).isEqualTo(0L);
         assertThat(c.remainingMs()).isEqualTo(0L);
+    }
+
+    @Test
+    public void deadline_countsFromCarrierOnNotFromStart() {
+        // #982: PTT/audio setup must not eat into the operator's tune time.
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        long t0 = clock.now;
+        c.tryStart(5);
+        clock.now = t0 + 1_500;
+        assertThat(c.markCarrierOn()).isEqualTo(1_500L);
+
+        clock.now = t0 + 6_400;
+        assertThat(c.shouldContinue()).isTrue();
+        clock.now = t0 + 6_500; // 5 s after carrier on
+        assertThat(c.shouldContinue()).isFalse();
+        assertThat(c.lastStopReason()).isEqualTo(TuneController.STOP_TIMEOUT);
+    }
+
+    @Test
+    public void setupGrace_boundsASessionThatNeverReachesCarrierOn() {
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        long t0 = clock.now;
+        c.tryStart(5);
+        clock.now = t0 + 5_000 + TuneController.SETUP_GRACE_MS - 1;
+        assertThat(c.shouldContinue()).isTrue();
+        clock.now = t0 + 5_000 + TuneController.SETUP_GRACE_MS;
+        assertThat(c.shouldContinue()).isFalse();
+        assertThat(c.lastStopReason()).isEqualTo(TuneController.STOP_TIMEOUT);
+    }
+
+    @Test
+    public void carrierOnAfterTheSetupGrace_timesOutInsteadOfRearming() {
+        // The worker doesn't poll during setup; a late carrier-on must not
+        // hand a hung setup a fresh max-on.
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        c.tryStart(5);
+        clock.now += 5_000 + TuneController.SETUP_GRACE_MS;
+        assertThat(c.markCarrierOn()).isEqualTo(-1L);
+        assertThat(c.isActive()).isFalse();
+        assertThat(c.shouldContinue()).isFalse();
+        assertThat(c.lastStopReason()).isEqualTo(TuneController.STOP_TIMEOUT);
+    }
+
+    @Test
+    public void remaining_isTheFullMaxOnRightAfterCarrierOn() {
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        c.tryStart(5);
+        clock.now += 1_200;
+        // Setup time never shows on the chip, and the grace never inflates it.
+        assertThat(c.remainingMs()).isEqualTo(5_000L);
+        c.markCarrierOn();
+        assertThat(c.remainingMs()).isEqualTo(5_000L);
+        assertThat(c.elapsedMs()).isEqualTo(0L);
+    }
+
+    @Test
+    public void secondCarrierOn_doesNotPushTheDeadlineOut() {
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        long t0 = clock.now;
+        c.tryStart(5);
+        c.markCarrierOn();
+        clock.now = t0 + 3_000;
+        assertThat(c.markCarrierOn()).isEqualTo(-1L);
+        assertThat(c.remainingMs()).isEqualTo(2_000L);
+        clock.now = t0 + 5_000;
+        assertThat(c.shouldContinue()).isFalse();
+        assertThat(c.lastStopReason()).isEqualTo(TuneController.STOP_TIMEOUT);
+    }
+
+    @Test
+    public void carrierOn_whenIdleIsANoOp() {
+        TuneController c = new TuneController(new FakeClock());
+        assertThat(c.markCarrierOn()).isEqualTo(-1L);
+        assertThat(c.isActive()).isFalse();
+    }
+
+    @Test
+    public void restart_needsItsOwnCarrierOn() {
+        // A new session must not inherit the previous session's carrier-on.
+        FakeClock clock = new FakeClock();
+        TuneController c = new TuneController(clock);
+        c.tryStart(5);
+        c.markCarrierOn();
+        c.requestStop(TuneController.STOP_USER);
+        long t1 = clock.now;
+        c.tryStart(5);
+        clock.now = t1 + 500;
+        assertThat(c.markCarrierOn()).isEqualTo(500L);
+        clock.now = t1 + 5_499;
+        assertThat(c.shouldContinue()).isTrue();
     }
 
     @Test
@@ -186,6 +284,7 @@ public class TuneControllerTest {
         TuneController c = new TuneController(clock);
         c.tryStart(10);
         c.markKeyed();
+        c.markCarrierOn();
         clock.now += 10_000;
         assertThat(c.shouldContinue()).isFalse(); // timeout fired
         assertThat(c.suppressesSwrHalt(false)).isTrue();

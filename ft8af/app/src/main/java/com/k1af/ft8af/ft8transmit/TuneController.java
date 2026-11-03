@@ -8,7 +8,9 @@ package com.k1af.ft8af.ft8transmit;
  * plain class with an injected clock:
  * <ul>
  *   <li><b>Hard max-on timeout</b>: {@link #shouldContinue()} goes false once
- *       the deadline passes even if the operator does nothing.</li>
+ *       the deadline passes even if the operator does nothing. The deadline
+ *       counts from {@link #markCarrierOn()}; before that, setup is bounded by
+ *       max-on plus {@link #SETUP_GRACE_MS}.</li>
  *   <li><b>Single flight</b>: {@link #tryStart} is an atomic check-and-claim;
  *       a double start is refused.</li>
  *   <li><b>Deterministic stop reason</b>: the first stop cause wins and is
@@ -33,6 +35,15 @@ public final class TuneController {
     public static final String STOP_TX = "tx-start";
     public static final String STOP_ERROR = "error";
 
+    /**
+     * How long setup (thread start, PTT key-down, audio focus, AudioTrack build)
+     * may take before the carrier comes up. The max-on clock starts at
+     * {@link #markCarrierOn()}, so setup doesn't eat into the operator's tune
+     * time (issue #982); until then the session is bounded by max-on plus this
+     * grace, so a hung setup still can't keep a session alive.
+     */
+    public static final long SETUP_GRACE_MS = 2000;
+
     /** Millisecond clock; injected so tests drive time explicitly. */
     public interface Clock {
         long nowMs();
@@ -41,8 +52,11 @@ public final class TuneController {
     private final Clock clock;
 
     private boolean active = false;
+    private long sessionStartMs;
     private long startedAtMs;
     private long deadlineMs;
+    private long maxOnMs;
+    private boolean carrierOn = false;
     private String stopReason = null;
 
     /**
@@ -87,19 +101,46 @@ public final class TuneController {
     }
 
     /**
-     * Atomically claim the tune session and arm the timeout. Returns false when
-     * a session is already active (double start is a no-op for the caller).
+     * Atomically claim the tune session. Returns false when a session is
+     * already active (double start is a no-op for the caller). Arms only the
+     * provisional setup deadline (max-on plus {@link #SETUP_GRACE_MS}); the
+     * max-on clock itself starts at {@link #markCarrierOn()}.
      */
     public synchronized boolean tryStart(int maxOnSeconds) {
         if (active) {
             return false;
         }
-        startedAtMs = clock.nowMs();
-        deadlineMs = startedAtMs + clampMaxOnSeconds(maxOnSeconds) * 1000L;
+        sessionStartMs = clock.nowMs();
+        startedAtMs = sessionStartMs;
+        maxOnMs = clampMaxOnSeconds(maxOnSeconds) * 1000L;
+        deadlineMs = sessionStartMs + maxOnMs + SETUP_GRACE_MS;
+        carrierOn = false;
         stopReason = null;
         swrExemptionRevoked = false;
         active = true;
         return true;
+    }
+
+    /**
+     * The carrier is on the air: start the max-on clock from now. Returns the
+     * setup latency (ms since {@link #tryStart}) for logging, or -1 when nothing
+     * changed: no active session, or the carrier was already marked on (a second
+     * call never pushes the deadline out). If setup outran the provisional
+     * deadline, the session times out here instead of getting a fresh cap.
+     */
+    public synchronized long markCarrierOn() {
+        if (!active || carrierOn) {
+            return -1;
+        }
+        long now = clock.nowMs();
+        if (now >= deadlineMs) {
+            stopInternal(STOP_TIMEOUT);
+            return -1;
+        }
+        carrierOn = true;
+        startedAtMs = now;
+        deadlineMs = now + maxOnMs;
+        return now - sessionStartMs;
     }
 
     /**
@@ -194,15 +235,19 @@ public final class TuneController {
         return stopReason;
     }
 
-    /** Milliseconds until the deadline; 0 when inactive or already past it. */
+    /**
+     * Milliseconds until the deadline; 0 when inactive or already past it.
+     * Before the carrier is on, never more than the full max-on: the setup
+     * grace is a safety bound, not tune time to show the operator.
+     */
     public synchronized long remainingMs() {
         if (!active) {
             return 0;
         }
-        return Math.max(0, deadlineMs - clock.nowMs());
+        return Math.max(0, Math.min(maxOnMs, deadlineMs - clock.nowMs()));
     }
 
-    /** Milliseconds since the session started; 0 when inactive. */
+    /** Milliseconds since the carrier came on (or the session started); 0 when inactive. */
     public synchronized long elapsedMs() {
         if (!active) {
             return 0;
