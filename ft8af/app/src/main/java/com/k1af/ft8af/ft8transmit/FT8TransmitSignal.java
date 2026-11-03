@@ -3367,6 +3367,15 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Whether the tune tone has started playing out, from the track's playback
+     * head (frames rendered since {@code play()}). Buffered samples don't count:
+     * until the head moves, no tone has reached the rig.
+     */
+    static boolean tuneToneReachedOutput(int playbackHeadFrames) {
+        return playbackHeadFrames > 0;
+    }
+
+    /**
      * The tune carrier is up: start the max-on clock now, so PTT/audio setup
      * doesn't eat into the operator's tune time (issue #982). Logs the setup
      * latency and shows the full timeout on the chip straight away.
@@ -3464,7 +3473,6 @@ public class FT8TransmitSignal {
             }
             track.play();
             track.setVolume(1.0f);
-            markTuneCarrierOn();
 
             TuneToneGenerator generator = new TuneToneGenerator(offsetHz, sampleRate,
                     Math.max(1, sampleRate / 200)); // ~5ms ramp
@@ -3473,6 +3481,7 @@ public class FT8TransmitSignal {
             final float[] stereoScratch =
                     layout.isStereo() ? new float[layout.samplesForFrames(chunkSamples)] : null;
             int lastPostedSec = -1;
+            boolean carrierOn = false;
             while (true) {
                 if (!tuneController.shouldContinue()) {
                     generator.requestStop(); // final chunk(s) ramp to zero
@@ -3496,6 +3505,12 @@ public class FT8TransmitSignal {
                     Log.e(TAG, "Tune playback error: " + writeResult);
                     tuneController.requestStop(TuneController.STOP_ERROR);
                     break;
+                }
+                // play() on an empty stream track renders nothing, and a write
+                // only buffers; the carrier is on once the head starts moving.
+                if (!carrierOn && tuneToneReachedOutput(track.getPlaybackHeadPosition())) {
+                    carrierOn = true;
+                    markTuneCarrierOn();
                 }
                 int remainingSec = (int) Math.ceil(tuneController.remainingMs() / 1000.0);
                 if (remainingSec != lastPostedSec) {
