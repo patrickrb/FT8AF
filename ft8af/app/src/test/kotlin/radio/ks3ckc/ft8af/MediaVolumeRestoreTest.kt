@@ -32,7 +32,18 @@ class MediaVolumeRestoreTest {
     @After
     fun tearDown() {
         GeneralVariables.restoreMediaVolume = false
-        GeneralVariables.restoreMediaVolumeLevel = -1
+        MediaVolumeRestore.saveLevel(-1)
+    }
+
+    @Test
+    fun `saveLevel updates the restore target and the observed level`() {
+        MediaVolumeRestore.saveLevel(9)
+        assertThat(GeneralVariables.restoreMediaVolumeLevel).isEqualTo(9)
+        assertThat(MediaVolumeRestore.savedLevel.value).isEqualTo(9)
+
+        // A second writer (the hardware volume keys) must reach the Settings row too.
+        MediaVolumeRestore.saveLevel(4)
+        assertThat(MediaVolumeRestore.savedLevel.value).isEqualTo(4)
     }
 
     private val max get() = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)

@@ -803,7 +803,7 @@ class ComposeMainActivity : AppCompatActivity() {
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, systemVol, 0)
                 // The keys set the level on purpose, so that's now the one to restore.
                 if (GeneralVariables.restoreMediaVolume) {
-                    GeneralVariables.restoreMediaVolumeLevel = systemVol
+                    MediaVolumeRestore.saveLevel(systemVol)
                     mainViewModel.databaseOpr.writeConfig(
                         MediaVolumeRestore.CONFIG_LEVEL, systemVol.toString(), null,
                     )

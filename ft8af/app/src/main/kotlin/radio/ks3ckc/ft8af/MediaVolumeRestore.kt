@@ -7,6 +7,9 @@ import android.os.Looper
 import android.widget.Toast
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.R
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * "Restore media volume" (issue #985): put the phone's media volume back to the
@@ -37,6 +40,26 @@ object MediaVolumeRestore {
     // over, and the fix (accept the system warning once) doesn't change per over.
     @Volatile
     private var cappedToastShown = false
+
+    private val _savedLevel = MutableStateFlow(GeneralVariables.restoreMediaVolumeLevel)
+
+    /**
+     * The saved level as observable state, so the Settings row follows changes
+     * made elsewhere (hardware volume keys) instead of showing a stale copy
+     * (Copilot review on #986).
+     */
+    @JvmStatic
+    val savedLevel: StateFlow<Int> = _savedLevel.asStateFlow()
+
+    /**
+     * Set the level to restore to. The one writer for
+     * [GeneralVariables.restoreMediaVolumeLevel]; callers persist it to the DB.
+     */
+    @JvmStatic
+    fun saveLevel(level: Int) {
+        GeneralVariables.restoreMediaVolumeLevel = level
+        _savedLevel.value = level
+    }
 
     /**
      * The media volume index to raise to, or null to leave it alone.

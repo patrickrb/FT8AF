@@ -25,6 +25,7 @@ import com.k1af.ft8af.FT8Common;
 import com.k1af.ft8af.Ft8Message;
 import com.k1af.ft8af.FullDuplexMonitor;
 import com.k1af.ft8af.GeneralVariables;
+import radio.ks3ckc.ft8af.MediaVolumeRestore;
 import radio.ks3ckc.ft8af.ui.settings.SettingsBackup;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.callsign.CallsignDatabase;
@@ -3023,7 +3024,7 @@ public class DatabaseOpr extends SQLiteOpenHelper {
                     GeneralVariables.restoreMediaVolume = "1".equals(result);
                 }
                 if (name.equalsIgnoreCase("restoreMediaVolumeLevel")) {//Saved media volume index for the above, -1 = none
-                    GeneralVariables.restoreMediaVolumeLevel = parseConfigInt(result, -1);
+                    MediaVolumeRestore.saveLevel(parseConfigInt(result, -1));
                 }
                 if (name.equalsIgnoreCase("perBandInputLevel")) {//Save RX input volume per band (issue #927), defaults off
                     GeneralVariables.savePerBandInputLevel = "1".equals(result);
