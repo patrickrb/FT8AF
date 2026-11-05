@@ -2,9 +2,11 @@ package radio.ks3ckc.ft8af
 
 import android.content.Context
 import android.media.AudioManager
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.R
-import com.k1af.ft8af.ui.ToastMessage
 
 /**
  * "Restore media volume" (issue #985): put the phone's media volume back to the
@@ -100,10 +102,15 @@ object MediaVolumeRestore {
             )
             if (outcome == Outcome.CAPPED && !cappedToastShown) {
                 cappedToastShown = true
-                ToastMessage.show(
-                    GeneralVariables.getStringFromResource(R.string.restore_media_volume_capped)
-                        .format(after, max),
-                )
+                // A real toast, not ToastMessage: that only feeds the legacy
+                // debug-message LiveData, which the Compose launcher doesn't
+                // observe (Copilot review on #986). This runs on the TX worker
+                // too, so post to the main looper.
+                val appContext = context.applicationContext
+                val text = appContext.getString(R.string.restore_media_volume_capped).format(after, max)
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(appContext, text, Toast.LENGTH_LONG).show()
+                }
             }
             outcome
         } catch (e: RuntimeException) {

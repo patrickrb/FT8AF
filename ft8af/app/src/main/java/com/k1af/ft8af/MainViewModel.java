@@ -1009,10 +1009,6 @@ public class MainViewModel extends ViewModel {
                 boolean keysViaControlPath = GeneralVariables.controlMode == ControlMode.CAT
                         || GeneralVariables.controlMode == ControlMode.RTS
                         || GeneralVariables.controlMode == ControlMode.DTR;
-                // Put back media volume the phone lowered (issue #985) before the
-                // TX audio opens, so the over doesn't under-drive the rig.
-                radio.ks3ckc.ft8af.MediaVolumeRestore.restore(
-                        GeneralVariables.getMainContext(), tune ? "tune" : "tx");
                 // Two different questions (Copilot review on #790):
                 //  - needControlSco(): is this a Bluetooth RIG whose TX audio must
                 //    not ride SCO? That decides whether the TX path may steer
