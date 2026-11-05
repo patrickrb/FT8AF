@@ -38,7 +38,7 @@ name: Android CI & Release
 # "what's new"; the chosen version is stashed in the prerelease body as a hidden
 # marker so the later main push ships the SAME version production-side instead
 # of re-rolling the decision. A staging/main push whose diff since the last
-# production tag touches nothing under ft8af/ (an iOS- or desktop-only
+# production tag touches nothing under ft8af/ or ham-radio-core/ (an iOS- or desktop-only
 # promotion) builds but does not cut a release, so no empty versions are made.
 # Requires the ANTHROPIC_API_KEY repository secret; without it (or on an API
 # failure) the run warns, falls back to a patch bump, and uses the PR titles as
@@ -46,7 +46,8 @@ name: Android CI & Release
 #
 # PATH-FILTERED: on pull requests and dev pushes this whole pipeline only runs
 # when Android-relevant files change (ft8af/** — which includes the shared
-# native C core at ft8af/app/src/main/cpp/ — or this workflow file). Pushes to
+# native C core at ft8af/app/src/main/cpp/ — ham-radio-core/**, or this workflow
+# file). Pushes to
 # staging/main, android-v* tags, and manual runs on such a tag always build (a
 # full release snapshot, regardless of what changed). The always-run
 # `android-gate` job is the single required status check so branch protection
@@ -116,6 +117,7 @@ jobs:
           filters: |
             android:
               - 'ft8af/**'
+              - 'ham-radio-core/**'
               - '.github/workflows/android.yml'
               - '.github/scripts/release_notes.py'
               - '.github/scripts/test_release_notes.py'
@@ -196,7 +198,7 @@ jobs:
 
       - name: Run unit tests
         working-directory: ft8af
-        run: ./gradlew testDebugUnitTest --stacktrace
+        run: ./gradlew :ham-radio-core:test testDebugUnitTest --stacktrace
 
       - name: Generate coverage report
         working-directory: ft8af
@@ -214,7 +216,7 @@ jobs:
           flags: android
 
       - name: Upload test reports on failure
-        if: steps.codecov.outcome == 'failure'
+        if: failure() || steps.codecov.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
           name: unit-test-reports
@@ -222,6 +224,8 @@ jobs:
             ft8af/app/build/reports/tests/
             ft8af/app/build/test-results/
             ft8af/app/build/reports/jacoco/
+            ham-radio-core/build/reports/tests/
+            ham-radio-core/build/test-results/
 
   instrumented:
     name: Instrumented tests (emulator)
@@ -512,12 +516,12 @@ jobs:
 
           ALL=$(git diff --name-only "$RANGE")
           # Only files that end up in the APK count: ft8af/ (which includes the
-          # shared native core under ft8af/app/src/main/cpp). ios/, desktop/,
-          # docs and CI don't — a promotion touching none of ft8af/ builds but
-          # cuts no release.
-          ANDROID_FILES=$(printf '%s\n' "$ALL" | grep -E '^ft8af/' || true)
+          # shared native core under ft8af/app/src/main/cpp) and ham-radio-core/.
+          # ios/, desktop/, docs and CI don't — a promotion touching neither
+          # Android source directory builds but cuts no release.
+          ANDROID_FILES=$(printf '%s\n' "$ALL" | grep -E '^(ft8af|ham-radio-core)/' || true)
           if [[ -z "$ANDROID_FILES" ]]; then
-            echo "::notice::Nothing under ft8af/ changed since ${PREV_TAG:-the baseline} — building only, not cutting a release."
+            echo "::notice::No Android app or core changes since ${PREV_TAG:-the baseline} — building only, not cutting a release."
             android_changed=false
           else
             android_changed=true
@@ -546,7 +550,7 @@ jobs:
             PRS+="- ${num_branch}${title:+: $title}"$'\n'
           done < <(git rev-list --merges "$RANGE")
           COUNT=$LOG_TOTAL
-          STAT=$(git diff --shortstat "$RANGE" -- ft8af/ | sed 's/^ *//')
+          STAT=$(git diff --shortstat "$RANGE" -- ft8af/ ham-radio-core/ | sed 's/^ *//')
           TOTAL=$(printf '%s\n' "$ALL" | grep -c . || true)
           ANDROID=$(printf '%s\n' "$ANDROID_FILES" | grep -c . || true)
           AREAS=$(set +o pipefail; printf '%s\n' "$ALL" \
@@ -565,7 +569,7 @@ jobs:
             echo "${PRS:-(no pull-request merges in range)}"
             echo "PRS_EOF"
             echo "size<<SIZE_EOF"
-            echo "$COUNT commits; ${STAT:-no file changes under ft8af/}; $ANDROID of $TOTAL changed files are in the Android app (ft8af/)"
+            echo "$COUNT commits; ${STAT:-no Android app or core file changes}; $ANDROID of $TOTAL changed files are in the Android app or shared core"
             echo ""
             echo "Changed files by area:"
             echo "$AREAS"

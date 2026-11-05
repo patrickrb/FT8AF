@@ -1,4 +1,4 @@
-package com.k1af.ft8af.wave;
+package radio.core.audio;
 
 import static com.google.common.truth.Truth.assertThat;
 

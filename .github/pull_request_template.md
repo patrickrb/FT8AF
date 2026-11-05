@@ -2,7 +2,7 @@
 
 <!-- CI posts a "Debug APK" comment with the download link once the build
 finishes. Paste that link here, or write "see the Debug APK comment".
-Write "n/a" if the PR doesn't touch ft8af/**. On a fork PR there is no
+Write "n/a" if the PR touches neither ft8af/** nor ham-radio-core/**. On a fork PR there is no
 comment; link the artifact from the workflow run's summary instead. -->
 
 ## Device test
@@ -51,4 +51,3 @@ ran (instrumented tests, lint). -->
 
 <!-- Filled in by QA: screenshots or a short screen recording of the checklist
 run on the emulator. -->
-

@@ -16,6 +16,7 @@ on:
     branches: [main, staging, dev]
     paths:
       - 'ft8af/**'
+      - 'ham-radio-core/**'
       - '.github/workflows/pr-debug-apk.yml'
       - '.github/debug.keystore'
 

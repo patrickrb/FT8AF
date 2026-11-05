@@ -15,3 +15,12 @@ hamlib-4.7.2/
 # Python bytecode (.github/scripts unit tests)
 __pycache__/
 *.pyc
+
+# Amp runtime portal metadata (not project configuration)
+.amp/portals/*
+
+# Kotlin compiler sessions created by a fresh Gradle build
+.kotlin/
+
+# Tauri generates this platform schema on the first Linux build
+/desktop/src-tauri/gen/schemas/linux-schema.json

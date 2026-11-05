@@ -1,9 +1,9 @@
-package com.k1af.ft8af.wave;
+package radio.core.audio;
 
 /**
  * Fixed-ratio FIR low-pass decimator — Java port of {@code cpp/fir_decimator.h} (same
  * Blackman windowed-sinc kernel, cutoff, and streaming behavior), for the {@code UsbRequest}
- * fallback capture path in {@link UsbAudioDevice}. That path still used the old box-filter
+ * fallback capture path in the Android USB adapter. That path still used the old box-filter
  * average (~12 dB stopband), so on any device where the native libusb capture fails to start,
  * RX sensitivity silently regressed to the pre-FIR noise floor: broadband hiss above the 6 kHz
  * output Nyquist folded back into the 0-3 kHz FT8 passband.

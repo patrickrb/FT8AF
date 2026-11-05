@@ -5,7 +5,8 @@ import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
@@ -22,8 +23,8 @@ class RatePromptStoreTest {
     private val scopes = mutableListOf<CoroutineScope>()
 
     @After
-    fun tearDown() {
-        scopes.forEach { it.cancel() }
+    fun tearDown() = runBlocking {
+        scopes.forEach { it.coroutineContext.job.cancelAndJoin() }
     }
 
     private fun storeAt(file: File): RatePromptStore {
@@ -52,7 +53,8 @@ class RatePromptStoreTest {
     fun `state survives reopening the file`() = runBlocking {
         val file = File(tmp.root, "rate_prompt.preferences_pb")
         storeAt(file).update { it.afterDecline(qsoCount = 9) }
-        scopes.forEach { it.cancel() }
+        // Cancellation is asynchronous; wait until DataStore releases the file.
+        scopes.forEach { it.coroutineContext.job.cancelAndJoin() }
         scopes.clear()
 
         assertThat(storeAt(file).read())

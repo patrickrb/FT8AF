@@ -1,12 +1,14 @@
-package com.k1af.ft8af.wave;
+package radio.core.usb;
 
 import java.util.ArrayList;
 import java.util.List;
 
+import radio.core.audio.RationalResampler;
+
 /**
  * USB Audio Class 1.0 format-descriptor parsing and alt-setting selection (issue #364).
  *
- * <p>{@link UsbAudioDevice} used to assume every capture device streams 48 kHz/16-bit. Most
+ * <p>The Android USB adapter used to assume every capture device streams 48 kHz/16-bit. Most
  * CM108-class codecs do, but a device that only offers 44.1 kHz got captured at the wrong rate
  * and nothing decoded. The fix has two halves; this class is the first: parse the raw
  * configuration descriptors ({@code UsbDeviceConnection.getRawDescriptors()}) for the

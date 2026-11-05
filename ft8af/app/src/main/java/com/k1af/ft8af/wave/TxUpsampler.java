@@ -1,5 +1,7 @@
 package com.k1af.ft8af.wave;
 
+import radio.core.audio.RationalResampler;
+
 /**
  * Band-limited one-shot resampler for the USB-direct (libusb) TX output path in
  * {@link UsbAudioDevice#writeAudio}.

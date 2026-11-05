@@ -33,7 +33,10 @@ desktop/
 ## Prerequisites
 
 - **Rust** (stable, MSVC toolchain on Windows): `winget install Rustlang.Rustup`
-- **Node.js 18+** and npm
+- **Node.js 20+** and npm
+- **Amp Linux orbs:** run `.agents/setup` from the repository root and start a
+  new login shell. It installs the prerequisites below; see
+  [AGENTS.md](../AGENTS.md#fresh-amp-orb-quickstart-linux-x86-64).
 - **Debian / Ubuntu / Linux Mint:** install Tauri's native WebKit/GTK build
   dependencies plus the ALSA and udev headers used by audio and serial support:
 
@@ -55,7 +58,7 @@ desktop/
 
 ```
 cd desktop
-npm install
+npm ci
 npm run tauri dev      # starts Vite + builds the Rust app + opens the window
 ```
 
@@ -126,13 +129,20 @@ no longer shift later windows and cut off the leading FT8 sync block.
 
 ## Build / test
 
+From the repository root (no radio, audio device, or display needed):
+
 ```
-cd desktop/src-tauri
-cargo test            # DSP round-trip, QSO state machine, rig commands, DB/ADIF
-cargo build --release # optimized binary (loads the bundled frontend in ../dist)
+npm --prefix desktop ci
+npm --prefix desktop test       # Vitest, single run (not watch mode)
+npm --prefix desktop run build  # TypeScript + Vite; produces desktop/dist
+cargo test --locked --manifest-path desktop/src-tauri/Cargo.toml -j 2
+cargo build --locked --manifest-path desktop/src-tauri/Cargo.toml -j 2
 ```
 
-The frontend builds independently with `npm run build` (emits to `desktop/dist`).
+Build the frontend **before** running Cargo in a fresh clone: Tauri embeds
+`desktop/dist`, but plain Cargo does not run `beforeBuildCommand`. Rust tests
+cover DSP round-trip, QSO sequencing, rig protocol formatting, DB/ADIF, and
+other host logic; they do not validate USB/RF or real-time audio hardware.
 
 ### 32-bit Windows (i686) build
 
