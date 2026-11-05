@@ -54,6 +54,7 @@ import com.k1af.ft8af.wave.AudioChannelCapability
 import com.k1af.ft8af.wave.AudioChannelSelect
 import com.k1af.ft8af.ft8transmit.QmxCatTones
 import com.k1af.ft8af.wave.UsbAudioDevice
+import radio.ks3ckc.ft8af.MediaVolumeRestore
 import radio.ks3ckc.ft8af.PER_BAND_INPUT_LEVEL_KEY
 import radio.ks3ckc.ft8af.PER_BAND_OUTPUT_LEVEL_KEY
 import radio.ks3ckc.ft8af.inputLevelChangedInDialog
@@ -912,6 +913,35 @@ fun RadioAudioSettings(
                                 GeneralVariables.mutableShowTxVolumeSlider.postValue(enabled)
                                 mainViewModel.databaseOpr.writeConfig(
                                     "showTxVolumeSlider", if (enabled) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
+                    SectionDivider()
+                    run {
+                        val context = LocalContext.current
+                        var restoreVolume by remember { mutableStateOf(GeneralVariables.restoreMediaVolume) }
+                        var savedLevel by remember { mutableIntStateOf(GeneralVariables.restoreMediaVolumeLevel) }
+                        val maxLevel = remember { MediaVolumeRestore.maxLevel(context) }
+                        val baseDesc = stringResource(R.string.settings_restore_media_volume_desc)
+                        val savedDesc = stringResource(R.string.settings_restore_media_volume_saved, savedLevel, maxLevel)
+                        SettingsRow(
+                            label = stringResource(R.string.settings_restore_media_volume),
+                            description = MediaVolumeRestore.description(baseDesc, savedDesc, restoreVolume, savedLevel),
+                            toggle = restoreVolume,
+                            onToggleChange = { enabled ->
+                                restoreVolume = enabled
+                                if (enabled) {
+                                    // Turning it on saves the level it should hold.
+                                    savedLevel = MediaVolumeRestore.currentLevel(context)
+                                    GeneralVariables.restoreMediaVolumeLevel = savedLevel
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        MediaVolumeRestore.CONFIG_LEVEL, savedLevel.toString(), null,
+                                    )
+                                }
+                                GeneralVariables.restoreMediaVolume = enabled
+                                mainViewModel.databaseOpr.writeConfig(
+                                    MediaVolumeRestore.CONFIG_ENABLED, if (enabled) "1" else "0", null,
                                 )
                             },
                         )

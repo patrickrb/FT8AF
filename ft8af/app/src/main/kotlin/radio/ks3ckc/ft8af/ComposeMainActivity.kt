@@ -147,7 +147,12 @@ class ComposeMainActivity : AppCompatActivity() {
         // value lands. Lifecycle-bound and delivered on the main thread, so the
         // window flag is set safely.
         mainViewModel.mutableConfigLoaded.observe(this) { loaded ->
-            if (loaded == true) ScreenWake.apply(window, GeneralVariables.keepScreenOn)
+            if (loaded == true) {
+                ScreenWake.apply(window, GeneralVariables.keepScreenOn)
+                // Startup restore (issue #985): the setting is only known once
+                // config lands, so the first onResume can't do it.
+                MediaVolumeRestore.restore(this, "startup")
+            }
         }
 
         // Register back press handler. Priority: dismiss the QSO sheet if
@@ -659,6 +664,9 @@ class ComposeMainActivity : AppCompatActivity() {
         // hydration, so the stored value may differ from the default it applied;
         // this also covers returning from the settings screen.
         ScreenWake.apply(window, GeneralVariables.keepScreenOn)
+        // Coming back to the app is when a phone that lowered the volume in the
+        // background gets put right (issue #985). No-op while config is unloaded.
+        MediaVolumeRestore.restore(this, "resume")
     }
 
     override fun onStop() {
@@ -793,6 +801,13 @@ class ComposeMainActivity : AppCompatActivity() {
                 val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                 val systemVol = (newVol * maxVol).toInt().coerceIn(0, maxVol)
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, systemVol, 0)
+                // The keys set the level on purpose, so that's now the one to restore.
+                if (GeneralVariables.restoreMediaVolume) {
+                    GeneralVariables.restoreMediaVolumeLevel = systemVol
+                    mainViewModel.databaseOpr.writeConfig(
+                        MediaVolumeRestore.CONFIG_LEVEL, systemVol.toString(), null,
+                    )
+                }
 
                 // Show volume toast
                 volumeToast?.cancel()
