@@ -719,6 +719,10 @@
     <string name="settings_tx_volume_desc" formatted="false">Transmit audio level (hardware buttons ±5%)</string>
     <string name="settings_show_volume_slider">Show Volume Slider</string>
     <string name="settings_show_volume_slider_desc">Display TX volume slider on main screen</string>
+    <string name="settings_restore_media_volume">Restore Media Volume</string>
+    <string name="settings_restore_media_volume_desc">For phones that lower the volume on their own. Saves the current media volume when turned on and raises it back at startup and before each TX. Turn off and on to save a new level.</string>
+    <string name="settings_restore_media_volume_saved">Saved media volume: %1$d of %2$d</string>
+    <string name="restore_media_volume_capped">Android limited media volume to %1$d of %2$d. Raise it once from Android\'s volume panel, outside FT8AF, and accept the hearing warning.</string>
     <string name="settings_controls_drawer">Controls Drawer</string>
     <string name="settings_controls_drawer_desc">Collapse the operate controls into a bottom sheet you pull up. Off shows the full control strip at all times.</string>
     <string name="controls_drawer_expand">Expand controls</string>
