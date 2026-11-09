@@ -101,6 +101,29 @@ internal fun qsoPanelOverlaysContent(tab: FT8AFTab): Boolean = tab == FT8AFTab.W
 internal fun shouldArmHuntOnStartup(huntEnabled: Boolean, callsign: String?): Boolean =
     huntEnabled && !callsign.isNullOrEmpty()
 
+/**
+ * Band name (wavelength) for the TxStrip pill at the current dial [freq].
+ *
+ * Prefers the band-list entry at [bandIndex], but ONLY when that entry's frequency
+ * still matches [freq]. Editing a custom dial rebuilds the band list
+ * ([OperationBand.getBandsFromFile]), which drops the in-memory ad-hoc slot and can
+ * shift indices; while the rig sits off-plan the cached [bandIndex] can then point at a
+ * now-valid-but-wrong entry, so trusting it blindly would show the correct MHz next to
+ * the wrong band name (#979). When the indexed entry no longer matches, fall back to an
+ * entry that matches the dial, then to the wavelength computed from [freq].
+ *
+ * Pure decision logic, unit-tested without the Compose/Android runtime.
+ */
+internal fun txPillBandName(
+    bandList: List<OperationBand.Band>,
+    bandIndex: Int,
+    freq: Long,
+): String {
+    val byIndex = bandList.getOrNull(bandIndex)?.takeIf { it.band == freq }?.waveLength
+    val byFreq = bandList.firstOrNull { it.band == freq }?.waveLength
+    return byIndex ?: byFreq ?: BaseRigOperation.getMeterFromFreq(freq) ?: ""
+}
+
 @Composable
 fun FT8AFApp(mainViewModel: MainViewModel) {
     val context = LocalContext.current
@@ -301,11 +324,16 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     // Pill label combines MHz frequency and band name, e.g. "14.074 MHz · 20m".
     // bandIndex is observed so the pill recomposes when the user retunes.
     val bandIndex by GeneralVariables.mutableBandChange.observeAsState(GeneralVariables.bandListIndex)
-    val freq = GeneralVariables.band
-    val bandName = OperationBand.bandList.getOrNull(bandIndex)?.waveLength
-        ?: OperationBand.bandList.firstOrNull { it.band == freq }?.waveLength
-        ?: BaseRigOperation.getMeterFromFreq(freq)
-        ?: ""
+    // Off-plan rig reports all reuse one band-list slot (#978), so bandIndex stays put
+    // while the operator tunes off-plan; reading the reported dial keeps the pill
+    // following it. GeneralVariables.band stays the source of truth, because picker
+    // taps and the config load set it without posting a rig report.
+    val reportedFreq by GeneralVariables.mutableBandFreq.observeAsState(GeneralVariables.band)
+    val freq = if (reportedFreq == GeneralVariables.band) reportedFreq else GeneralVariables.band
+    // Resolve via a helper that ignores a stale bandIndex (one that no longer matches the
+    // dial after a band-list rebuild while off-plan, #979) rather than trusting the index
+    // blindly.
+    val bandName = txPillBandName(OperationBand.bandList, bandIndex, freq)
     val frequencyLabel = buildString {
         append(formatMhz(freq))
         append(" MHz")

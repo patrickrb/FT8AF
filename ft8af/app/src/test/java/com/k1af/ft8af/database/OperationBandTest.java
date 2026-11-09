@@ -73,13 +73,81 @@ public class OperationBandTest {
     }
 
     @Test
-    public void getIndexByFreq_appendsUnknownBand() {
+    public void getIndexByFreq_appendsUnknownBandAsAdHocSlot() {
         OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
         int idx = OperationBand.getIndexByFreq(21_074_000L);
         assertThat(idx).isEqualTo(1);
         assertThat(OperationBand.bandList).hasSize(2);
+        assertThat(OperationBand.bandList.get(1).adHoc).isTrue();
         // The wavelength is derived via BaseRigOperation.getMeterFromFreq.
         assertThat(OperationBand.bandList.get(1).waveLength).isEqualTo("15m");
+    }
+
+    // --- one reusable ad-hoc slot (issue #978) -------------------------------
+
+    @Test
+    public void getIndexByFreq_manyUnknownFrequencies_addOnlyOneEntry() {
+        // Tuning the VFO across 20m in SSB reports a new Hz value every step; each
+        // one used to append an entry, filling the picker with 14.xxx chips.
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        OperationBand.bandList.add(new OperationBand.Band(7_074_000L, "40m"));
+        int before = OperationBand.bandList.size();
+        for (int i = 0; i < 500; i++) {
+            OperationBand.getIndexByFreq(14_150_000L + i * 10L);
+        }
+        assertThat(OperationBand.bandList).hasSize(before + 1);
+    }
+
+    @Test
+    public void getIndexByFreq_adHocSlotIndexIsStableAndFollowsLatestFreq() {
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        int first = OperationBand.getIndexByFreq(14_200_000L);
+        int second = OperationBand.getIndexByFreq(14_230_500L);
+        assertThat(second).isEqualTo(first);
+        assertThat(OperationBand.bandList.get(first).band).isEqualTo(14_230_500L);
+        assertThat(OperationBand.bandList.get(first).waveLength).isEqualTo("20m");
+
+        // An off-plan band hop reuses the same slot and relabels it.
+        int third = OperationBand.getIndexByFreq(7_100_000L);
+        assertThat(third).isEqualTo(first);
+        OperationBand.Band slot = OperationBand.bandList.get(first);
+        assertThat(slot.band).isEqualTo(7_100_000L);
+        assertThat(slot.waveLength).isEqualTo("40m");
+        assertThat(slot.adHoc).isTrue();
+    }
+
+    @Test
+    public void getIndexByFreq_configuredEntriesAreNeverOverwritten() {
+        OperationBand.Band ft8 = new OperationBand.Band(14_074_000L, "20m");
+        ft8.marked = true;
+        OperationBand.Band custom = new OperationBand.Band(14_090_000L, "3B9 DX");
+        custom.custom = true;
+        OperationBand.bandList.add(ft8);
+        OperationBand.bandList.add(custom);
+
+        int slot = OperationBand.getIndexByFreq(14_200_000L);
+        OperationBand.getIndexByFreq(7_100_000L);
+        // Landing on a configured dial returns that entry, not the slot.
+        assertThat(OperationBand.getIndexByFreq(14_090_000L)).isEqualTo(1);
+        assertThat(OperationBand.getIndexByFreq(14_074_000L)).isEqualTo(0);
+        // ...and leaving it again goes back to the same slot.
+        assertThat(OperationBand.getIndexByFreq(14_250_000L)).isEqualTo(slot);
+
+        assertThat(OperationBand.bandList).hasSize(3);
+        assertThat(ft8.band).isEqualTo(14_074_000L);
+        assertThat(ft8.waveLength).isEqualTo("20m");
+        assertThat(ft8.adHoc).isFalse();
+        assertThat(custom.band).isEqualTo(14_090_000L);
+        assertThat(custom.waveLength).isEqualTo("3B9 DX");
+        assertThat(custom.adHoc).isFalse();
+    }
+
+    @Test
+    public void getIndexByFreq_sameUnknownFreqTwice_returnsSlot() {
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        int idx = OperationBand.getIndexByFreq(14_200_000L);
+        assertThat(OperationBand.getIndexByFreq(14_200_000L)).isEqualTo(idx);
+        assertThat(OperationBand.bandList).hasSize(2);
     }
 
     @Test
