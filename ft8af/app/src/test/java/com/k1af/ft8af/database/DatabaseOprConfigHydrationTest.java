@@ -13,6 +13,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
+import radio.ks3ckc.ft8af.MediaVolumeRestore;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -522,6 +524,63 @@ public class DatabaseOprConfigHydrationTest {
             assertThat(GeneralVariables.cloudlogDownloadQsos).isFalse();
         } finally {
             GeneralVariables.cloudlogDownloadQsos = saved;
+        }
+    }
+
+    // ---- restore media volume (issue #985) ------------------------------------
+    // Startup restore depends on both keys surviving a relaunch, and the Settings
+    // row observes MediaVolumeRestore.savedLevel, so hydration must update the
+    // static field AND the StateFlow.
+
+    @Test
+    public void restoreMediaVolume_hydratesEnabledStateAndSavedLevel() {
+        boolean origEnabled = GeneralVariables.restoreMediaVolume;
+        int origLevel = GeneralVariables.restoreMediaVolumeLevel;
+        try {
+            GeneralVariables.restoreMediaVolume = false;
+            MediaVolumeRestore.saveLevel(-1);
+
+            Map<String, String> config = new LinkedHashMap<>();
+            config.put("restoreMediaVolume", "1");
+            config.put("restoreMediaVolumeLevel", "11");
+            opr.writeConfigSync(config);
+            hydrate();
+
+            assertThat(GeneralVariables.restoreMediaVolume).isTrue();
+            assertThat(GeneralVariables.restoreMediaVolumeLevel).isEqualTo(11);
+            assertThat(MediaVolumeRestore.getSavedLevel().getValue()).isEqualTo(11);
+
+            config.put("restoreMediaVolume", "0");
+            opr.writeConfigSync(config);
+            hydrate();
+
+            assertThat(GeneralVariables.restoreMediaVolume).isFalse();
+        } finally {
+            GeneralVariables.restoreMediaVolume = origEnabled;
+            MediaVolumeRestore.saveLevel(origLevel);
+        }
+    }
+
+    @Test
+    public void restoreMediaVolume_malformedLevelFallsBackToNone() {
+        boolean origEnabled = GeneralVariables.restoreMediaVolume;
+        int origLevel = GeneralVariables.restoreMediaVolumeLevel;
+        try {
+            GeneralVariables.restoreMediaVolume = true;
+            MediaVolumeRestore.saveLevel(9);
+
+            Map<String, String> config = new LinkedHashMap<>();
+            config.put("restoreMediaVolume", "yes"); // only "1" is on
+            config.put("restoreMediaVolumeLevel", "loud");
+            opr.writeConfigSync(config);
+            hydrate(); // must not throw
+
+            assertThat(GeneralVariables.restoreMediaVolume).isFalse();
+            assertThat(GeneralVariables.restoreMediaVolumeLevel).isEqualTo(-1);
+            assertThat(MediaVolumeRestore.getSavedLevel().getValue()).isEqualTo(-1);
+        } finally {
+            GeneralVariables.restoreMediaVolume = origEnabled;
+            MediaVolumeRestore.saveLevel(origLevel);
         }
     }
 }

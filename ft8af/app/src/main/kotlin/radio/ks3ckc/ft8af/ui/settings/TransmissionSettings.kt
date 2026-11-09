@@ -585,8 +585,8 @@ fun TransmissionSettings(
                     )
                     SectionDivider()
                     SettingsRow(
-                        label = "Tune timeout",
-                        description = "Hard cap on the tune carrier — it always stops by itself",
+                        label = stringResource(R.string.settings_tune_timeout),
+                        description = stringResource(R.string.settings_tune_timeout_desc),
                         value = "${tuneMaxOnSeconds}s",
                     )
                     Row(

@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableIntStateOf
@@ -54,6 +55,7 @@ import com.k1af.ft8af.wave.AudioChannelCapability
 import com.k1af.ft8af.wave.AudioChannelSelect
 import com.k1af.ft8af.ft8transmit.QmxCatTones
 import com.k1af.ft8af.wave.UsbAudioDevice
+import radio.ks3ckc.ft8af.MediaVolumeRestore
 import radio.ks3ckc.ft8af.PER_BAND_INPUT_LEVEL_KEY
 import radio.ks3ckc.ft8af.PER_BAND_OUTPUT_LEVEL_KEY
 import radio.ks3ckc.ft8af.inputLevelChangedInDialog
@@ -86,6 +88,7 @@ fun RadioAudioSettings(
     val bandIndexLive by GeneralVariables.mutableBandChange.observeAsState(
         GeneralVariables.bandListIndex,
     )
+    val bandFreqLive by GeneralVariables.mutableBandFreq.observeAsState(GeneralVariables.band)
     val baseFreqLive by GeneralVariables.mutableBaseFrequency.observeAsState(
         GeneralVariables.getBaseFrequency(),
     )
@@ -182,7 +185,8 @@ fun RadioAudioSettings(
 
     // Derived display strings
     val connectModeStr = ConnectMode.getModeStr(connectMode)
-    val bandStr = remember(bandIndexLive) {
+    // Keyed on the reported dial too: off-plan reports keep the same index (#978).
+    val bandStr = remember(bandIndexLive, bandFreqLive) {
         BaseRigOperation.getFrequencyAllInfo(GeneralVariables.band)
     }
     val baseFreqStr = remember(baseFreqLive) { GeneralVariables.getBaseFrequencyStr() }
@@ -912,6 +916,36 @@ fun RadioAudioSettings(
                                 GeneralVariables.mutableShowTxVolumeSlider.postValue(enabled)
                                 mainViewModel.databaseOpr.writeConfig(
                                     "showTxVolumeSlider", if (enabled) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
+                    SectionDivider()
+                    run {
+                        val context = LocalContext.current
+                        var restoreVolume by remember { mutableStateOf(GeneralVariables.restoreMediaVolume) }
+                        // Observed, not remembered: the volume keys also change it.
+                        val savedLevel by MediaVolumeRestore.savedLevel.collectAsState()
+                        val maxLevel = remember { MediaVolumeRestore.maxLevel(context) }
+                        val baseDesc = stringResource(R.string.settings_restore_media_volume_desc)
+                        val savedDesc = stringResource(R.string.settings_restore_media_volume_saved, savedLevel, maxLevel)
+                        SettingsRow(
+                            label = stringResource(R.string.settings_restore_media_volume),
+                            description = MediaVolumeRestore.description(baseDesc, savedDesc, restoreVolume, savedLevel),
+                            toggle = restoreVolume,
+                            onToggleChange = { enabled ->
+                                restoreVolume = enabled
+                                if (enabled) {
+                                    // Turning it on saves the level it should hold.
+                                    val level = MediaVolumeRestore.currentLevel(context)
+                                    MediaVolumeRestore.saveLevel(level)
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        MediaVolumeRestore.CONFIG_LEVEL, level.toString(), null,
+                                    )
+                                }
+                                GeneralVariables.restoreMediaVolume = enabled
+                                mainViewModel.databaseOpr.writeConfig(
+                                    MediaVolumeRestore.CONFIG_ENABLED, if (enabled) "1" else "0", null,
                                 )
                             },
                         )
