@@ -1146,6 +1146,11 @@ public class FT8TransmitSignal {
         // gain is what actually controls the rig's drive.
         audioTrack.play();
         audioTrack.setVolume(1.0f);
+        // Put back media volume the phone lowered (issue #985). Media volume is
+        // per output device, so this waits until the track is playing on its TX
+        // route (SCO dropped, A2DP/preferred device applied) and runs before the
+        // first sample is written (Copilot review on #986).
+        radio.ks3ckc.ft8af.MediaVolumeRestore.restore(GeneralVariables.getMainContext(), "tx");
 
         // Stream the waveform in chunks, re-reading volumePercent each chunk so a
         // slider move ramps the on-air level within ~1 chunk + buffer depth.
@@ -3444,6 +3449,9 @@ public class FT8TransmitSignal {
             }
             track.play();
             track.setVolume(1.0f);
+            // Same as the FT8 over: restore media volume on the routed track,
+            // before the carrier starts (issue #985).
+            radio.ks3ckc.ft8af.MediaVolumeRestore.restore(GeneralVariables.getMainContext(), "tune");
 
             TuneToneGenerator generator = new TuneToneGenerator(offsetHz, sampleRate,
                     Math.max(1, sampleRate / 200)); // ~5ms ramp
