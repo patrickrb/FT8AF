@@ -7,6 +7,7 @@ tag push, and the marker structure.
 """
 import contextlib
 import io
+import json
 import os
 from pathlib import Path
 import shutil
@@ -76,6 +77,7 @@ class PaidGenerationTest(unittest.TestCase):
                 root = Path(tmp)
                 curl = root / "curl"
                 curl.write_text("#!/bin/sh\necho called >> calls\n"
+                                'printf "%s\\n" "$@" > curl-args\n'
                                 "echo '{\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\","
                                 "\"text\":\"{\\\"bump\\\":\\\"minor\\\",\\\"notes\\\":\\\"New rig support.\\\"}\"}]}'\n")
                 curl.chmod(0o755)
@@ -96,6 +98,8 @@ class PaidGenerationTest(unittest.TestCase):
                     self.assertIn("bump=minor\nsource=claude\n", output)
                     self.assertEqual(notes, "New rig support.\n")
                     self.assertFalse(fallback)
+                    self.assertNotIn("fallbacks", json.loads((root / "request.json").read_text()))
+                    self.assertNotIn("server-side-fallback", (root / "curl-args").read_text())
                 else:
                     self.assertIn("bump=patch\nsource=fallback\n", output)
                     self.assertEqual(notes, "Preserve rig selection\n")
