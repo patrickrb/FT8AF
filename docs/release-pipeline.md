@@ -1,10 +1,11 @@
 # Release pipeline
 
-Three platforms (Android, desktop, iOS) build and release **independently** —
+Two platforms (Android and desktop) build and release **independently** —
 each has its own workflow, its own path filter, its own tag namespace, and its
 own required status-check gate. A change to one platform never rebuilds the
 others (except a change to the shared native C core under
-`ft8af/app/src/main/cpp/**`, which all three depend on).
+`ft8af/app/src/main/cpp/**`, which both depend on). The retired iOS target and
+its CI workflow have been removed; iOS/iPadOS is not a release target.
 
 ## Branch lifecycle
 
@@ -52,16 +53,12 @@ Per-platform prefixes keep the Releases page unambiguous:
 |----------|-----------------------|---------------------------|----------------------|
 | Android  | `android-v<x.y.z>`    | `android-dev.<run#>`      | push to `staging` / `main` |
 | Desktop  | `desktop-v<x.y.z>`    | `desktop-dev.<run#>`      | push to `staging` / `main` |
-| iOS      | _(no release yet)_    | _(no release yet)_        | —                    |
 
 - Production tags are deliberate; branch pushes never auto-bump or create them.
 - Android versions are chosen by Claude (see below). Older Android tags are the
   two-part `android-v0.149` form; they normalise to `0.149.0` so numbering stays
   continuous. Android seeds from a legacy bare `v*` tag if no `android-v*`
   exists yet.
-- iOS is CI-only: it builds the FT8AFKit test suite and an unsigned simulator
-  build to prove it compiles. A distributable `.ipa` needs an Apple Developer
-  cert + provisioning profile / TestFlight, which are not wired up yet.
 
 ## Android versioning + release notes (AI-assisted)
 
@@ -71,7 +68,7 @@ Ported from Sorrel's `play-beta.yml`. On a push to `staging` the Android
 1. Takes the latest `android-v*` tag as the baseline and collects everything
    from there to `HEAD`: merged PRs (number, branch, title), the commit log,
    and size signals (commit count, `ft8af/` diff stat, changed files by area).
-2. If nothing under `ft8af/` changed (an iOS- or desktop-only promotion) it
+2. If nothing under `ft8af/` changed (a desktop-only promotion) it
    builds but **cuts no release** — no empty versions.
 3. On the first workflow attempt only, asks Claude (`claude-opus-5`, structured output) for the semver
    bump — `major` / `minor` / `patch`, judged from both content and size, with
@@ -135,7 +132,12 @@ These cannot be done from a workflow file — do them in the repo settings:
    `git checkout dev && git pull && git checkout -b staging && git push -u origin staging`.
 2. **Branch protection for `staging`** → Require status checks →
    add `Staging branch source gate / enforce-source-is-dev` (plus the platform
-   gates `android-gate`, `desktop-gate`, `ios-gate` as desired).
+   gates `android-gate`, `desktop-gate` as desired). After the iOS-removal PR
+   merges, retire the required `ios-gate` context (shown as `iOS CI / ios-gate`)
+   from effective protection/rulesets targeting `dev`, `staging` and `main`,
+   where configured. Keep every other required check and source gate. If the
+   deleted check blocks merging the removal PR itself, coordinate its retirement
+   with the maintainer; do not add a fake successful replacement.
 3. **Branch protection for `main`** → Require status checks →
    add `Main branch source gate / enforce-source-is-staging`. If the old
    `enforce-source-is-dev` check was required on `main`, remove it — that gate
