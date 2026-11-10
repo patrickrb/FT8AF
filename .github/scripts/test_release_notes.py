@@ -70,7 +70,7 @@ class PaidGenerationTest(unittest.TestCase):
                                  .split("\n      - name:", 1)[0])
         for lane, attempt, expected_calls in (
             ("dev", "1", 1), ("dev", "2", 0),
-            ("production", "1", 0), ("production", "2", 0),
+            ("promotion", "1", 0), ("promotion", "2", 0),
             ("tag", "1", 0), ("ci", "1", 0),
         ):
             with self.subTest(lane=lane, attempt=attempt), tempfile.TemporaryDirectory() as tmp:
