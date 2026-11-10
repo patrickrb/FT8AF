@@ -583,30 +583,43 @@ jobs:
         # internal testers ran rather than re-rolling Claude's decision. The
         # staging prerelease body carries both inside hidden HTML-comment markers
         # (see "Write release notes"). Falls through (found=false) for staging
-        # builds that predate the markers, so Claude decides on main instead.
-        if: steps.lane.outputs.lane == 'production' && steps.changes.outputs.android_changed == 'true'
+        # builds that predate the markers, using deterministic patch/PR-title
+        # fallback on main rather than paying to generate notes again.
+        if: >-
+          steps.changes.outputs.android_changed == 'true'
+          && (steps.lane.outputs.lane == 'production'
+            || (steps.lane.outputs.lane == 'dev' && github.run_attempt != '1'))
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PREV_TAG: ${{ steps.changes.outputs.prev_tag }}
+          RELEASE_LANE: ${{ steps.lane.outputs.lane }}
         run: |
           set -euo pipefail
           cand=""
-          for tag in $(git tag --list 'android-dev.*' --sort=-v:refname); do
-            # Newest staging build that is part of this main HEAD and was not
-            # already shipped by the previous production release.
-            if git merge-base --is-ancestor "$tag" HEAD 2>/dev/null \
-               && { [[ -z "$PREV_TAG" ]] || ! git merge-base --is-ancestor "$tag" "$PREV_TAG" 2>/dev/null; }; then
-              cand="$tag"; break
+          if [[ "$RELEASE_LANE" == "dev" ]]; then
+            # A completed internal release may already exist on a retry.
+            # Preserve its chosen version/notes instead of overwriting them.
+            if git rev-parse -q --verify "refs/tags/android-dev.${GITHUB_RUN_NUMBER}" >/dev/null; then
+              cand="android-dev.${GITHUB_RUN_NUMBER}"
             fi
-          done
+          else
+            for tag in $(git tag --list 'android-dev.*' --sort=-v:refname); do
+              # Newest staging build that is part of this main HEAD and was not
+              # already shipped by the previous production release.
+              if git merge-base --is-ancestor "$tag" HEAD 2>/dev/null \
+                 && { [[ -z "$PREV_TAG" ]] || ! git merge-base --is-ancestor "$tag" "$PREV_TAG" 2>/dev/null; }; then
+                cand="$tag"; break
+              fi
+            done
+          fi
           if [[ -z "$cand" ]]; then
-            echo "No unshipped android-dev.* build reachable from HEAD — Claude will version this release."
+            echo "No unshipped android-dev.* build reachable from HEAD — using deterministic fallback."
             echo "found=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
           BODY=$(gh release view "$cand" --json body -q .body 2>/dev/null | tr -d '\r' || true)
           VERSION=$(sed -nE 's#.*<!-- ft8af-version: ([0-9]+\.[0-9]+\.[0-9]+) -->.*#\1#p' <<< "$BODY" | head -n1)
           if [[ -z "$VERSION" ]]; then
-            echo "Candidate $cand has no version marker (pre-dates AI versioning) — Claude will version this release."
+            echo "Candidate $cand has no version marker (pre-dates AI versioning) — using deterministic fallback."
             echo "found=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
           awk '/<!-- ft8af-notes-start -->/{f=1; next} /<!-- ft8af-notes-end -->/{f=0} f' <<< "$BODY" > notes.txt
@@ -628,12 +641,13 @@ jobs:
           COMMIT_LOG: ${{ steps.changes.outputs.log }}
           PR_LIST: ${{ steps.changes.outputs.prs }}
           CHANGE_SIZE: ${{ steps.changes.outputs.size }}
+          RELEASE_LANE: ${{ steps.lane.outputs.lane }}
         run: |
           set -euo pipefail
           # Never block a release on the AI step: with no key or a failed call,
           # warn loudly, take a patch bump and use the PR titles as the notes.
           fallback() {
-            echo "::warning title=AI versioning fell back::$1 — using a patch bump and the PR titles as release notes. Set the ANTHROPIC_API_KEY secret / check the step log."
+            echo "::warning title=AI versioning fell back::$1 — using a patch bump and the PR titles as release notes."
             echo "bump=patch" >> "$GITHUB_OUTPUT"
             echo "source=fallback" >> "$GITHUB_OUTPUT"
             # The PR-title notes are produced by `release_notes.py ensure-notes`
@@ -642,6 +656,11 @@ jobs:
             : > notes.txt
             exit 0
           }
+          # Paid generation belongs only to the first attempt at internal
+          # creation. Promotion reuses the candidate above; older candidates
+          # and retries use the same deterministic fallback as an API failure.
+          [[ "$RELEASE_LANE" == "dev" && "$GITHUB_RUN_ATTEMPT" == "1" ]] \
+            || fallback "paid generation is restricted to first-attempt internal releases"
           [[ -n "$ANTHROPIC_API_KEY" ]] || fallback "ANTHROPIC_API_KEY is not set"
 
           SCHEMA='{
@@ -688,14 +707,12 @@ jobs:
           jq -n --rawfile prompt prompt.txt --argjson schema "$SCHEMA" '{
             model: "claude-opus-5",
             max_tokens: 4096,
-            fallbacks: "default",
             output_config: {format: {type: "json_schema", schema: $schema}},
             messages: [{role: "user", content: $prompt}]
           }' > request.json
           if ! RESP=$(curl -sSf --max-time 300 https://api.anthropic.com/v1/messages \
               -H "x-api-key: $ANTHROPIC_API_KEY" \
               -H "anthropic-version: 2023-06-01" \
-              -H "anthropic-beta: server-side-fallback-2026-07-01" \
               -H "content-type: application/json" \
               -d @request.json); then
             fallback "the Claude API request failed"

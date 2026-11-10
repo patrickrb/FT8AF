@@ -80,7 +80,7 @@ Ported from Sorrel's `play-beta.yml`. On a push to `staging` the Android
    and size signals (commit count, `ft8af/` diff stat, changed files by area).
 2. If nothing under `ft8af/` changed (an iOS- or desktop-only promotion) it
    builds but **cuts no release** — no empty versions.
-3. Otherwise asks Claude (`claude-opus-5`, structured output) for the semver
+3. On the first workflow attempt only, asks Claude (`claude-opus-5`, structured output) for the semver
    bump — `major` / `minor` / `patch`, judged from both content and size, with
    changes outside `ft8af/` not counting — and for ≤400-character Play release
    notes aimed at ham operators.
@@ -94,8 +94,10 @@ On the later push to `main` the job looks for the newest `android-dev.*` tag
 that is an ancestor of `HEAD` and not already shipped, reads the version and
 notes back out of those markers, and releases `android-v<x.y.z>` with the same
 notes — so when that tag is later shipped to Play, production ships exactly what
-the internal testers ran. If no such candidate exists (or it pre-dates the markers) Claude
-decides on `main` instead. An `android-v<x.y.z>` that already exists is stepped
+the internal testers ran. If no such candidate exists (or it pre-dates the markers),
+`main` uses a deterministic patch bump and PR-title notes, with no paid API call.
+Retries also use that fallback rather than repeat paid generation. The tag lane
+restores the existing release notes without Claude. An `android-v<x.y.z>` that already exists is stepped
 by a patch until free.
 
 `versionCode` is unchanged: still `GITHUB_RUN_NUMBER + 1000`.
