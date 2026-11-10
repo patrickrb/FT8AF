@@ -19,20 +19,20 @@ sinc-shaped sidelobes across the entire row — measured in the host test
 window vs ~70 dB with Hann, at the display path's exact geometry (1920 samples
 @ 12 kHz). On a dB-scaled waterfall with a 50 dB visible range, a signal
 ~30 dB above the floor paints the whole row — which reads as "false energy /
-smearing when a strong signal starts". Desktop and iOS always used Hann.
+smearing when a strong signal starts". Desktop always used Hann.
 
 Android's default is now **Hann**, matching the other platforms; rectangular
 remains selectable to reproduce the old behavior for A/B comparison.
 
 ## Defaults per platform
 
-| Parameter | Android | Desktop | iOS (unchanged, for reference) |
-|---|---|---|---|
-| Window | **Hann** (was: none) — configurable | Hann — configurable | Hann — fixed |
-| FFT size | 1920 (= 160 ms @ 12 kHz, 6.25 Hz/bin) — fixed, see below | 2048 (≈5.86 Hz/bin) — configurable 512–8192 | 2048 — fixed |
-| Averaging | Off — configurable (cross-frame EMA 0.5 / 0.25) | 6-segment Welch, 50 % overlap — configurable 1–16 | 6-segment Welch — fixed |
-| Scaling | dB, median-bin noise floor, 50 dB range (`fft_display.c`) | dB, 30th-pct floor + EMA 0.9/0.1, 26 dB span, 4 dB black offset | same as desktop |
-| Bins→pixels | Spectrum strip: pair combine (Max default) — configurable Max/Avg/RMS. Waterfall: LinearGradient interpolation (see below) | 1 bin = 1 canvas column; browser scales. No aggregation step | 1 bin = 1 column |
+| Parameter | Android | Desktop |
+|---|---|---|
+| Window | **Hann** (was: none) — configurable | Hann — configurable |
+| FFT size | 1920 (= 160 ms @ 12 kHz, 6.25 Hz/bin) — fixed, see below | 2048 (≈5.86 Hz/bin) — configurable 512–8192 |
+| Averaging | Off — configurable (cross-frame EMA 0.5 / 0.25) | 6-segment Welch, 50 % overlap — configurable 1–16 |
+| Scaling | dB, median-bin noise floor, 50 dB range (`fft_display.c`) | dB, 30th-pct floor + EMA 0.9/0.1, 26 dB span, 4 dB black offset |
+| Bins→pixels | Spectrum strip: pair combine (Max default) — configurable Max/Avg/RMS. Waterfall: LinearGradient interpolation (see below) | 1 bin = 1 canvas column; browser scales. No aggregation step |
 
 ## Android
 
@@ -94,15 +94,6 @@ window / FFT size / averaging count; changes apply live via
 `wf_avg`. Defaults (Hann / 2048 / 6) reproduce the previous hard-coded pipeline
 byte-for-byte. Bins-per-pixel aggregation doesn't exist on desktop (1 bin =
 1 canvas column, scaled by the browser) — documented rather than knobbed.
-
-## iOS
-
-Out of scope for the #428 implementation round (no Mac in the loop); its
-pipeline (`FFTProcessor.swift` + `WaterfallRowBuilder.swift`) already matches
-the desktop defaults (Hann, 2048, Welch×6, same dB/floor mapping), so the
-cross-platform default behavior is consistent today. Making its parameters
-configurable can follow the desktop pattern (thread a config through
-`LiveEngine.runWaterfallLoop`) in a later PR.
 
 ## Evaluating configurations
 

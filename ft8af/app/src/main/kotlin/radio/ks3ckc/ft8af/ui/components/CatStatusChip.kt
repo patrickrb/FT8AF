@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -90,6 +92,42 @@ internal fun catChipVisuals(state: CatConnectionState): CatChipVisuals = when (s
  */
 internal fun shouldShowCatChip(controlMode: Int, state: CatConnectionState): Boolean =
     controlMode != ControlMode.VOX || state != CatConnectionState.DISCONNECTED
+
+/**
+ * Whether Call CQ should ask for confirmation before starting (#989): a rig-control mode is
+ * configured (anything but VOX, which keys via audio) and the chip reads "Radio not linked".
+ * A confirmation rather than a hard disable — a marginal link can flap between linked and not
+ * linked every few seconds, and some rigs still key without a live CAT reply.
+ */
+internal fun shouldConfirmCqWithoutRadio(controlMode: Int, state: CatConnectionState): Boolean =
+    controlMode != ControlMode.VOX && state != CatConnectionState.CONNECTED
+
+/**
+ * Shown when Call CQ is tapped while the radio isn't linked: transmitting into a radio the app
+ * can't reach may not key it at all. [onConfirm] starts the CQ anyway; [onDismiss] cancels.
+ */
+@Composable
+fun RadioNotLinkedCqDialog(
+    visible: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!visible) return
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.cq_radio_not_linked_title)) },
+        text = { Text(stringResource(R.string.cq_radio_not_linked_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.cq_radio_not_linked_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
 
 /**
  * A small CAT (rig control) connection indicator for the TX strip. Tappable to

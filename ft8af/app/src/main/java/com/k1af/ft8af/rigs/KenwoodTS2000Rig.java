@@ -15,6 +15,8 @@ import com.k1af.ft8af.ui.ToastMessage;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import radio.core.cat.CatLineSplitter;
+
 /**
  * KENWOOD TS2000, similar to YAESU gen-3 commands, nearly identical to TS590. Only difference is PTT on command is TX0; while TS590 uses TX1;
  * Uses Yaesu3Command structure, commands in KenwoodTK90RigConstant.

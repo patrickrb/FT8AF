@@ -13,6 +13,8 @@ import com.k1af.ft8af.ui.ToastMessage;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import radio.core.cat.CatLineSplitter;
+
 public class Yaesu38_450Rig extends BaseRig {
     private static final String TAG = "Yaesu38_450Rig";
     private final StringBuilder buffer = new StringBuilder();

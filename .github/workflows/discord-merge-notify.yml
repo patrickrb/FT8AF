@@ -26,11 +26,8 @@ jobs:
             echo "::error::DISCORD_WEBHOOK_URL secret is not set"
             exit 1
           fi
-          if [[ "$BRANCH" == "main" ]]; then
-            color=3066993   # green — production release
-            emoji="🚀"
-          elif [[ "$BRANCH" == "staging" ]]; then
-            color=3447003   # blue — dev (prerelease) build cut
+          if [[ "$BRANCH" == "main" || "$BRANCH" == "staging" ]]; then
+            color=3447003   # blue — internal prerelease, never production
             emoji="📦"
           else
             color=15105570  # orange — landed on dev

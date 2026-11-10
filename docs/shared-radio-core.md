@@ -111,3 +111,29 @@ No Android device was attached. Install, connected instrumentation, actual
 USB/CAT/PTT hardware and on-air behavior remain unverified. Lint/static-analysis
 and release builds were not part of this extraction's validation. Existing
 resource-format/deprecation/native format warnings were left unchanged.
+
+## CAT framing 0.2.0 (2026-11-10)
+
+The next narrow extraction moves `CivFrameSplitter` and `CatLineSplitter`,
+including their 34 existing tests, from FT8AF `da4eeece` into `radio.core.cat`.
+Only packages, public visibility and an app-specific Javadoc reference change;
+the framing algorithms and test bodies are unchanged. The 11 rig callers import
+core directly, without local copies or forwarding wrappers.
+
+CI-V commands still include `FD`, with the same 1024-byte carried-remainder
+cap/resynchronization. Text frames still exclude terminators, preserve empty
+frames, support the same character/set overloads, and have no new buffer limit.
+Transport, character decoding, rig codecs, polling, JNI and PTT are unchanged.
+The module now carries 78 tests and 17 checksum-pinned payload files.
+
+SSTVAF, JTTYAF and ROTA consume the exact versioned whole-module payload through
+their existing app owners. Their local splitters match this baseline; ports must
+only replace those copies/imports and move the existing tests into core.
+RTTYAF stays on core 0.1.0 with its inline parsers unchanged; neither parser
+adoption nor a payload-only version update is part of this approved batch.
+
+This is internal testing only. Feature PRs are held for review and maintainer
+integration, with FT8AF canonical integration first. Nothing in this batch
+advances staging/main or publishes a release/prerelease. Production requires
+Patrick to test all five apps and then explicitly approve it. Host tests and
+emulator checks are not real USB/CAT/PTT/RF validation.

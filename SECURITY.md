@@ -13,7 +13,6 @@ FT8AF ships in several flavors, all covered by this policy:
 | ----------------------- | ----------- | -------------------------------------------------- |
 | **Android**             | `ft8af/`    | Kotlin/Java app with native `ft8_lib`/JNI DSP core |
 | **Desktop (Windows / macOS / Linux)** | `desktop/` | Tauri app (Rust backend + web UI), rig control via bundled Hamlib |
-| **iOS**                 | `ios/`      | Swift app and `FT8AFKit`                            |
 
 ## Supported Versions
 
@@ -45,7 +44,7 @@ arrange a private channel.
 
 To help us triage quickly, please include as much of the following as you can:
 
-- The affected platform (Android, desktop/Windows/macOS/Linux, or iOS) and
+- The affected platform (Android or desktop/Windows/macOS/Linux) and
   component (app UI, native `ft8_lib`/JNI glue, Tauri/Rust backend, Hamlib rig
   control, build/CI workflows).
 - Version or commit hash, plus device/OS and radio model if relevant.

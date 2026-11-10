@@ -149,6 +149,10 @@
     <!-- Plain-language CAT chip labels for the redesigned TX strip -->
     <string name="cat_status_linked">Radio linked</string>
     <string name="cat_status_not_linked">Radio not linked</string>
+    <!-- Confirmation shown when Call CQ is tapped while the radio isn't linked (#989) -->
+    <string name="cq_radio_not_linked_title">Radio not linked</string>
+    <string name="cq_radio_not_linked_message">FT8AF can\'t reach your radio, so it may not key up or be on the right frequency. Check the radio connection (or tap the Radio not linked chip to retry) before calling CQ.</string>
+    <string name="cq_radio_not_linked_confirm">Call CQ anyway</string>
 
     <!-- ===== Hunt options sheet ===== -->
     <string name="hunt_priority_title">HUNT PRIORITY</string>

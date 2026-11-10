@@ -7,9 +7,13 @@ tag push, and the marker structure.
 """
 import contextlib
 import io
+import json
 import os
+from pathlib import Path
 import shutil
+import subprocess
 import tempfile
+import textwrap
 import unittest
 
 import release_notes as rn
@@ -23,6 +27,83 @@ BODY = (
     "_Version `0.151.0` — promoted from android-dev.1155._\r\n"
 )
 NOTES = "New: hamlib CAT support.\nFixes for Icom SWR meters.\n\n"
+
+
+class PaidGenerationTest(unittest.TestCase):
+    def test_retry_restores_only_its_own_published_internal_candidate(self):
+        workflow = Path(__file__).resolve().parents[1] / "workflows/android.yml"
+        step = workflow.read_text().split("        id: candidate\n", 1)[1]
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1]
+                                 .split("\n      - name:", 1)[0])
+        for tag_exists, body, found in ((True, BODY, True),
+                                        (True, "Legacy release", False),
+                                        (False, BODY, False)):
+            with self.subTest(tag_exists=tag_exists, body=body), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                # A minimal real tag inventory, including an unrelated release:
+                # a retry must not reuse another run's latest internal version.
+                subprocess.run(["git", "init", "-q", tmp], check=True)
+                tree = subprocess.check_output(["git", "mktree"], cwd=tmp, input=b"").strip().decode()
+                for tag in ["android-dev.999"] + (["android-dev.321"] if tag_exists else []):
+                    subprocess.run(["git", "update-ref", "refs/tags/" + tag, tree], cwd=tmp, check=True)
+                gh = root / "gh"
+                gh.write_text('#!/bin/sh\nprintf "%s" "$FIXTURE_BODY"\n')
+                gh.chmod(0o755)
+                env = dict(os.environ, PATH=tmp + os.pathsep + os.environ["PATH"],
+                           RELEASE_LANE="dev", GITHUB_RUN_NUMBER="321", PREV_TAG="",
+                           FIXTURE_BODY=body, GITHUB_OUTPUT=str(root / "output"))
+                result = subprocess.run(["bash", "-c", script], cwd=tmp, env=env,
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                output = (root / "output").read_text()
+                self.assertIn("found=" + str(found).lower() + "\n", output)
+                if found:
+                    self.assertIn("tag=android-dev.321\nversion=0.151.0\n", output)
+                    self.assertEqual((root / "notes.txt").read_text(), NOTES)
+
+    def test_internal_first_attempt_only_and_deterministic_fallback(self):
+        # Execute the actual workflow shell, with curl replaced by a local
+        # fixture: a regression must never spend money during a unit test.
+        workflow = Path(__file__).resolve().parents[1] / "workflows/android.yml"
+        step = workflow.read_text().split("        id: ai\n", 1)[1]
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1]
+                                 .split("\n      - name:", 1)[0])
+        for lane, attempt, expected_calls in (
+            ("dev", "1", 1), ("dev", "2", 0),
+            ("promotion", "1", 0), ("promotion", "2", 0),
+            ("tag", "1", 0), ("ci", "1", 0),
+        ):
+            with self.subTest(lane=lane, attempt=attempt), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                curl = root / "curl"
+                curl.write_text("#!/bin/sh\necho called >> calls\n"
+                                'printf "%s\\n" "$@" > curl-args\n'
+                                "echo '{\"stop_reason\":\"end_turn\",\"content\":[{\"type\":\"text\","
+                                "\"text\":\"{\\\"bump\\\":\\\"minor\\\",\\\"notes\\\":\\\"New rig support.\\\"}\"}]}'\n")
+                curl.chmod(0o755)
+                env = dict(os.environ, PATH=tmp + os.pathsep + os.environ["PATH"],
+                           RELEASE_LANE=lane, GITHUB_RUN_ATTEMPT=attempt,
+                           ANTHROPIC_API_KEY="fixture-not-a-credential",
+                           GITHUB_OUTPUT=str(root / "output"), PREV_VERSION="1.2.3",
+                           COMMIT_LOG="Fix CAT reconnect", CHANGE_SIZE="one file",
+                           PR_LIST="- #42 fix: Preserve rig selection")
+                result = subprocess.run(["bash", "-c", script], cwd=tmp, env=env,
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                calls = (root / "calls").read_text().splitlines() if (root / "calls").exists() else []
+                self.assertEqual(len(calls), expected_calls)
+                output = (root / "output").read_text()
+                notes, fallback = rn.ensure_notes((root / "notes.txt").read_text(), env["PR_LIST"])
+                if expected_calls:
+                    self.assertIn("bump=minor\nsource=claude\n", output)
+                    self.assertEqual(notes, "New rig support.\n")
+                    self.assertFalse(fallback)
+                    self.assertNotIn("fallbacks", json.loads((root / "request.json").read_text()))
+                    self.assertNotIn("server-side-fallback", (root / "curl-args").read_text())
+                else:
+                    self.assertIn("bump=patch\nsource=fallback\n", output)
+                    self.assertEqual(notes, "Preserve rig selection\n")
+                    self.assertTrue(fallback)
 
 
 class DecideTest(unittest.TestCase):

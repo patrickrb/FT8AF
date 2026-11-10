@@ -2,16 +2,16 @@ name: Desktop CI & Release
 
 # Desktop pipeline for the desktop/ Tauri port (Rust + Vite/React). On PRs and
 # non-release pushes it does a compile check (`tauri build --no-bundle`) across
-# Windows + macOS + Linux. On main pushes and desktop-v* tags it builds native
-# bundles on all three OSes and publishes them to a per-platform GitHub Release.
+# Windows + macOS + Linux. Main/staging pushes publish prerelease bundles;
+# only deliberate desktop-v* tag pushes select a production desktop release.
 #
 # Release scheme is namespaced so it sits separately from the Android
 # android-v* / android-dev.N releases on the Releases page:
 #   desktop-v* tag  -> production desktop release
-#   push to main    -> auto-bumped desktop-v* release
+#   push to main    -> desktop-dev.<run_number> PRERELEASE
 #   push to staging -> desktop-dev.<run_number> PRERELEASE
 #   push to dev     -> compile-check only, NO release
-# The dev build is cut on staging (a dev -> staging merge), never on dev itself.
+# Production stays held until Patrick tests all five apps and then approves it.
 #
 # PATH-FILTERED: PRs and dev pushes only build when desktop/** or the shared
 # native C core (ft8af/app/src/main/cpp/**) changes, or this workflow file.
@@ -50,6 +50,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Test release event/ref policy (offline, no publishing)
+        run: python3 -m unittest discover -s .github/scripts -p 'test_release_policy.py' -v
 
       - name: Filter paths
         id: filter
@@ -104,32 +107,14 @@ jobs:
           set -euo pipefail
           # Mirrors the Android lane logic but in the desktop-v* / desktop-dev-N
           # namespace so desktop releases sort separately from the app's.
-          if [[ "${GITHUB_REF}" == refs/tags/desktop-v* ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "${GITHUB_REF}" == refs/tags/desktop-v* ]]; then
             echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
             echo "version_name=${GITHUB_REF_NAME#desktop-v}" >> "$GITHUB_OUTPUT"
             echo "app_version=${GITHUB_REF_NAME#desktop-v}" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
-            # Auto-bump the last component from the latest desktop-v* tag.
-            latest=$(git tag --list 'desktop-v*' --sort=-v:refname | head -n1)
-            if [[ -z "$latest" ]]; then
-              new_tag="desktop-v0.1.0"
-            else
-              version="${latest#desktop-v}"
-              IFS='.' read -ra parts <<< "$version"
-              last_idx=$((${#parts[@]} - 1))
-              parts[$last_idx]=$((parts[$last_idx] + 1))
-              new_tag="desktop-v$(IFS=.; echo "${parts[*]}")"
-            fi
-            echo "Latest tag: ${latest:-<none>} -> new tag: $new_tag"
-            echo "release_tag=$new_tag" >> "$GITHUB_OUTPUT"
-            echo "version_name=${new_tag#desktop-v}" >> "$GITHUB_OUTPUT"
-            echo "app_version=${new_tag#desktop-v}" >> "$GITHUB_OUTPUT"
-            echo "should_release=true" >> "$GITHUB_OUTPUT"
-            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-          elif [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/staging" ]]; then
-            # staging push (a dev -> staging merge) cuts the desktop dev build.
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/staging" || "$GITHUB_REF" == "refs/heads/main" ) ]]; then
+            # Both publishing branches cut internal prereleases, never desktop-v*.
             new_tag="desktop-dev.${GITHUB_RUN_NUMBER}"
             latest=$(git tag --list 'desktop-v*' --sort=-v:refname | head -n1)
             base_ver="${latest:+${latest#desktop-v}}"

@@ -58,7 +58,8 @@ follow the [headless build/test quickstart](AGENTS.md#fresh-amp-orb-quickstart-l
 It installs JDK 17, the Android SDK/NDK, and native/desktop prerequisites.
 No device or secrets are needed for host tests or `assembleDebug`;
 `installDebug` requires an attached Android device. The [desktop app](desktop/README.md)
-also builds on Linux; the [iOS app](ios/README.md) requires macOS/Xcode.
+also builds on Linux. iOS/iPadOS is not a target: it does not allow the USB
+control these radio apps need.
 
 ---
 
