@@ -1,4 +1,0 @@
-module FT8Engine {
-header "FT8Engine-Swift.h"
-export *
-}
