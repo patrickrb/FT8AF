@@ -11,8 +11,8 @@ import radio.ks3ckc.ft8af.theme.StatusConfirmed
 import radio.ks3ckc.ft8af.theme.TextMuted
 
 /**
- * Unit tests for the pure CAT-status-chip logic ([catChipVisuals] and
- * [shouldShowCatChip]) extracted from CatStatusChip so the Composable stays a
+ * Unit tests for the pure CAT-status-chip logic ([catChipVisuals], [shouldShowCatChip]
+ * and [shouldConfirmCqWithoutRadio]) extracted from CatStatusChip so the Composable stays a
  * thin wrapper. No Android runtime needed: CatConnectionState is a plain enum,
  * ControlMode is int constants, and Compose Color is a JVM value class.
  */
@@ -80,6 +80,45 @@ class CatStatusChipLogicTest {
         assertThat(shouldShowCatChip(ControlMode.VOX, CatConnectionState.CONNECTING)).isTrue()
         assertThat(shouldShowCatChip(ControlMode.VOX, CatConnectionState.CONNECTED)).isTrue()
         assertThat(shouldShowCatChip(ControlMode.VOX, CatConnectionState.ERROR)).isTrue()
+    }
+
+    @Test
+    fun `Call CQ asks for confirmation in every not-linked state for rig-control modes`() {
+        val notLinked = listOf(
+            CatConnectionState.DISCONNECTED,
+            CatConnectionState.CONNECTING,
+            CatConnectionState.ERROR,
+        )
+        for (mode in listOf(ControlMode.CAT, ControlMode.BLUETOOTH, ControlMode.RTS, ControlMode.DTR)) {
+            for (state in notLinked) {
+                assertThat(shouldConfirmCqWithoutRadio(mode, state)).isTrue()
+            }
+        }
+    }
+
+    @Test
+    fun `Call CQ starts straight away once the radio is linked`() {
+        for (mode in listOf(ControlMode.CAT, ControlMode.BLUETOOTH, ControlMode.RTS, ControlMode.DTR)) {
+            assertThat(shouldConfirmCqWithoutRadio(mode, CatConnectionState.CONNECTED)).isFalse()
+        }
+    }
+
+    @Test
+    fun `Call CQ never asks for confirmation in VOX mode`() {
+        // VOX keys via audio and has no CAT link to wait for.
+        for (state in CatConnectionState.values()) {
+            assertThat(shouldConfirmCqWithoutRadio(ControlMode.VOX, state)).isFalse()
+        }
+    }
+
+    @Test
+    fun `Call CQ confirmation matches the chip reading Radio not linked`() {
+        // Whenever the chip is visible for a rig-control mode, a confirmation is asked
+        // exactly when the chip says "Radio not linked".
+        for (state in CatConnectionState.values()) {
+            val notLinkedLabel = catChipVisuals(state).labelRes == R.string.cat_status_not_linked
+            assertThat(shouldConfirmCqWithoutRadio(ControlMode.CAT, state)).isEqualTo(notLinkedLabel)
+        }
     }
 
     @Test

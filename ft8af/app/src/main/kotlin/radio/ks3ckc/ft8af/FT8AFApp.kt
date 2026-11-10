@@ -50,6 +50,8 @@ import com.k1af.ft8af.rigs.BaseRigOperation
 import radio.ks3ckc.ft8af.theme.BgApp
 import radio.ks3ckc.ft8af.ui.components.ActiveQsoPanel
 import radio.ks3ckc.ft8af.ui.components.shouldShowCatChip
+import radio.ks3ckc.ft8af.ui.components.shouldConfirmCqWithoutRadio
+import radio.ks3ckc.ft8af.ui.components.RadioNotLinkedCqDialog
 import radio.ks3ckc.ft8af.ui.components.CqOptionsSheet
 import radio.ks3ckc.ft8af.ui.components.canEnableFieldDay
 import radio.ks3ckc.ft8af.ui.components.shouldPersistFreeText
@@ -252,6 +254,8 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
 
     // CQ Options sheet state — long-press the CQ button to open.
     var showCqOptions by remember { mutableStateOf(false) }
+    // A Call CQ held back by the "Radio not linked" confirmation; null when none is pending.
+    var pendingCqStart by remember { mutableStateOf<(() -> Unit)?>(null) }
     var cqModifier by remember { mutableStateOf(GeneralVariables.toModifier ?: "") }
     var isFreeTextMode by remember { mutableStateOf(false) }
     // Seed the live free-text field and the saved custom-CQ from persisted config
@@ -442,22 +446,32 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
         mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
         saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, txVolume)
     }
+    // Start a CQ, first asking for confirmation if the radio isn't linked (#989).
+    val startCqGuarded: (() -> Unit) -> Unit = { start ->
+        if (shouldConfirmCqWithoutRadio(controlMode, catState)) {
+            pendingCqStart = start
+        } else {
+            start()
+        }
+    }
     val onCallCQAction: () -> Unit = {
         if (GeneralVariables.myCallsign.isNullOrEmpty()) {
             Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
-        } else if (isFreeTextMode && freeTextMessage.isNotBlank()) {
-            // Free text is a one-shot (WSJT-X Tx5 style): send it once,
-            // immediately, then the engine auto-stops — it is an alternative
-            // to a 73, not a repeating CQ. Consume the armed free text so the
-            // next tap calls a normal CQ instead of re-sending it.
-            mainViewModel.ft8TransmitSignal.sendFreeTextOnce(freeTextMessage)
-            isFreeTextMode = false
-            freeTextMessage = ""
-        } else {
-            mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
-            mainViewModel.ft8TransmitSignal.userResetToCQ()
-            mainViewModel.ft8TransmitSignal.setActivated(true)
-            GeneralVariables.resetLaunchSupervision()
+        } else startCqGuarded {
+            if (isFreeTextMode && freeTextMessage.isNotBlank()) {
+                // Free text is a one-shot (WSJT-X Tx5 style): send it once,
+                // immediately, then the engine auto-stops — it is an alternative
+                // to a 73, not a repeating CQ. Consume the armed free text so the
+                // next tap calls a normal CQ instead of re-sending it.
+                mainViewModel.ft8TransmitSignal.sendFreeTextOnce(freeTextMessage)
+                isFreeTextMode = false
+                freeTextMessage = ""
+            } else {
+                mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
+                mainViewModel.ft8TransmitSignal.userResetToCQ()
+                mainViewModel.ft8TransmitSignal.setActivated(true)
+                GeneralVariables.resetLaunchSupervision()
+            }
         }
     }
     val onStopAction: () -> Unit = {
@@ -811,6 +825,17 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             },
         )
 
+        // Confirm a Call CQ tapped while the radio isn't linked (#989).
+        RadioNotLinkedCqDialog(
+            visible = pendingCqStart != null,
+            onConfirm = {
+                val start = pendingCqStart
+                pendingCqStart = null
+                start?.invoke()
+            },
+            onDismiss = { pendingCqStart = null },
+        )
+
         // CQ Options — modifier presets, free text, and Field Day configuration.
         CqOptionsSheet(
             visible = showCqOptions,
@@ -936,7 +961,7 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             onCallCQ = {
                 if (GeneralVariables.myCallsign.isNullOrEmpty()) {
                     Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
-                } else {
+                } else startCqGuarded {
                     if (isFreeTextMode && freeTextMessage.isNotBlank()) {
                         mainViewModel.ft8TransmitSignal.setFreeText(freeTextMessage)
                         mainViewModel.ft8TransmitSignal.setTransmitFreeText(true)
