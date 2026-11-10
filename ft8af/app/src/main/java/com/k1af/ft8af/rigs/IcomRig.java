@@ -21,6 +21,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 import radio.core.cat.CatLiveness;
+import radio.core.cat.CivFrameSplitter;
 
 public class IcomRig extends BaseRig {
     private static final String TAG = "IcomRig";

@@ -1,4 +1,4 @@
-package com.k1af.ft8af.rigs;
+package radio.core.cat;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -17,7 +17,7 @@ import java.util.List;
  * remainder to carry into the next call.
  *
  * <p>Pure logic — no rig or Android state — so it is unit-testable and shared by
- * every CI-V rig ({@link IcomRig}, {@link XieGuRig}, {@link XieGu6100Rig}). Each
+ * CI-V rigs such as Icom and Xiegu. Each
  * of those previously carried its own copy of this reassembly that (a) discarded
  * the accumulated buffer whenever a chunk arrived without a terminator, losing
  * every earlier fragment of a split command, and (b) appended two stray
@@ -29,7 +29,7 @@ import java.util.List;
  * network peer) would otherwise grow it without limit and eventually exhaust
  * memory. See {@link #boundRemainder}.
  */
-final class CivFrameSplitter {
+public final class CivFrameSplitter {
     /** CI-V end-of-message terminator. */
     private static final byte END_MARKER = (byte) 0xFD;
     /** CI-V preamble byte; a command opens with two of these ({@code FE FE}). */
@@ -50,11 +50,11 @@ final class CivFrameSplitter {
     }
 
     /** Result of {@link #split}: the complete commands and the trailing remainder. */
-    static final class Result {
+    public static final class Result {
         /** Complete commands, each ending in {@code 0xFD}, in arrival order. */
-        final List<byte[]> commands;
+        public final List<byte[]> commands;
         /** Bytes after the last terminator — an incomplete command to buffer. */
-        final byte[] remainder;
+        public final byte[] remainder;
 
         Result(List<byte[]> commands, byte[] remainder) {
             this.commands = commands;
@@ -70,7 +70,7 @@ final class CivFrameSplitter {
      * @param incoming newly received bytes (never null; may be empty)
      * @return the complete commands and the bytes to carry into the next call
      */
-    static Result split(byte[] buffered, byte[] incoming) {
+    public static Result split(byte[] buffered, byte[] incoming) {
         byte[] combined = new byte[buffered.length + incoming.length];
         System.arraycopy(buffered, 0, combined, 0, buffered.length);
         System.arraycopy(incoming, 0, combined, buffered.length, incoming.length);

@@ -1,4 +1,4 @@
-package com.k1af.ft8af.rigs;
+package radio.core.cat;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,16 +28,16 @@ import java.util.List;
  * poisoned the parse of the next read (the stale {@code ID} was parsed as the
  * command and the real command landed inside the data field and was discarded).
  */
-final class CatLineSplitter {
+public final class CatLineSplitter {
     private CatLineSplitter() {
     }
 
     /** Result of {@link #split}: the complete commands and the trailing remainder. */
-    static final class Result {
+    public static final class Result {
         /** Complete commands, terminator stripped, in arrival order. */
-        final List<String> frames;
+        public final List<String> frames;
         /** Bytes after the last terminator — an incomplete command to buffer. */
-        final String remainder;
+        public final String remainder;
 
         Result(List<String> frames, String remainder) {
             this.frames = frames;
@@ -61,7 +61,7 @@ final class CatLineSplitter {
      * @param terminator the end-of-command character (e.g. {@code ';'})
      * @return the complete commands and the bytes to carry into the next call
      */
-    static Result split(String buffered, String incoming, char terminator) {
+    public static Result split(String buffered, String incoming, char terminator) {
         return split(buffered, incoming, String.valueOf(terminator));
     }
 
@@ -83,7 +83,7 @@ final class CatLineSplitter {
      * @param terminators the set of end-of-command characters (e.g. {@code ";\r"})
      * @return the complete commands and the bytes to carry into the next call
      */
-    static Result split(String buffered, String incoming, String terminators) {
+    public static Result split(String buffered, String incoming, String terminators) {
         String combined = buffered + incoming;
         List<String> frames = new ArrayList<>();
         int start = 0;

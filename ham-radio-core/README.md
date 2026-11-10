@@ -1,7 +1,9 @@
-# Ham-radio core 0.1.0
+# Ham-radio core 0.2.0
 
 Canonical source: `patrickrb/FT8AF`, repository-root `ham-radio-core/`.
-Extracted from FT8AF baseline `c2f63e8` without changing algorithms or public APIs.
+Version 0.1.0 was extracted from FT8AF baseline `c2f63e8`.
+Version 0.2.0 adds the existing CAT stream splitters from FT8AF `da4eeece`
+without changing their algorithms; classes, results and split methods are now public.
 MIT license; see `LICENSE`. This module contains no vendored native libraries.
 
 ## Boundary
@@ -14,6 +16,8 @@ An Android-free Java 8 library with no runtime dependencies:
 | `radio.core.audio.RationalResampler` | Stateful exact L/M conversion, including 44.1 kHz → 12 kHz. |
 | `radio.core.usb.UacAudioFormats` | Parse UAC1 byte descriptors; select actual supported 16-bit-container formats/rates for a caller-supplied decoder rate. No device I/O. |
 | `radio.core.cat.CatLiveness` | Probe/staleness/TX→RX re-arm decisions; caller owns timestamps, transport and state. |
+| `radio.core.cat.CivFrameSplitter` | Split CI-V chunks into commands including `FD` and a trailing remainder, preserving the existing 1024-byte remainder cap/resynchronization. |
+| `radio.core.cat.CatLineSplitter` | Split text chunks on a character or set of terminators; strip terminators, preserve empty frames and return the trailing remainder unchanged. |
 
 Resamplers retain history across calls. Create one per stream; do not concurrently
 share an instance. Reset on stream discontinuity. Input arrays are borrowed only
@@ -31,6 +35,14 @@ CAT staleness arms only after a reply, never during TX, and uses strictly greate
 than timeout. Re-arm the timestamp on the TX→RX edge. Use one consistent clock
 domain for timestamps and retain the app's disconnect/reconnect state machine.
 
+Splitters are stateless. Callers retain one remainder per transport stream and
+pass it with the next chunk; discard it on disconnect/stream discontinuity.
+Inputs must be non-null and are not modified or retained. Each result's list
+and byte arrays belong to the caller. Text remainders remain unbounded, exactly
+as before; this release adds no framing validation, address filtering or text
+buffer limit. Transport, character decoding, rig codecs, polling and PTT remain
+app-owned. Do not replace RTTYAF's older inline parsers as part of this extraction.
+
 ## Build and consume
 
 From FT8AF's root, with JDK 17:
@@ -39,9 +51,10 @@ From FT8AF's root, with JDK 17:
 bash ft8af/gradlew -p ham-radio-core clean test jar
 ```
 
-This standalone build needs no Android SDK. The existing 44 tests travel with
+This standalone build needs no Android SDK. The existing 78 tests travel with
 the implementation: sample counts, passband/alias rejection, buffer continuity,
-malformed descriptors, actual rates and CAT timeout/TX boundaries.
+malformed descriptors, actual rates, CAT timeout/TX boundaries, and 34 unchanged
+framing tests covering split/coalesced replies, terminators and CI-V resynchronization.
 
 In an Android Gradle settings file (adjust relative path):
 
