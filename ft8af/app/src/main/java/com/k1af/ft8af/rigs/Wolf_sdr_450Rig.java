@@ -13,6 +13,8 @@ import com.k1af.ft8af.ui.ToastMessage;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import radio.core.cat.CatLineSplitter;
+
 /**
  * Wolf SDR CAT command set is compatible with YAESU 450D, but some hams found in testing that 450D defaults to DIG-U mode, which cannot transmit at full power on Wolf SDR.
  * Using USB mode allows full power transmission, so a USB mode option has been added.

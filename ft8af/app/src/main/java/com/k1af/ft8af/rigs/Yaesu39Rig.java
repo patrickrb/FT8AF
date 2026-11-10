@@ -18,6 +18,8 @@ import java.util.Locale;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import radio.core.cat.CatLineSplitter;
+
 /**
  * Gen-3 commands; different rigs vary. Frequency length for 981/991 is 9 digits, others are 8 digits.
  */

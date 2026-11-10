@@ -15,6 +15,8 @@ import com.k1af.ft8af.ui.ToastMessage;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import radio.core.cat.CatLineSplitter;
+
 /**
  * KENWOOD TS590, similar to YAESU gen-3 commands. Uses Yaesu3Command structure, commands in KenwoodTK90RigConstant.
  */
