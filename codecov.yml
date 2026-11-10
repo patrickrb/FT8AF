@@ -20,12 +20,10 @@ coverage:
 # One flag per module/CI lane so the dashboard reports each as its own
 # component instead of one merged total. carryforward keeps a module's last
 # known coverage when its path-filtered workflow doesn't run on a given PR (only
-# the Android lane runs on every PR; ios/native/desktop are path-gated), so an
+# the Android lane runs on every PR; native/desktop are path-gated), so an
 # unrelated PR doesn't blank out those components.
 flags:
   android:
-    carryforward: true
-  ios:
     carryforward: true
   native:
     carryforward: true

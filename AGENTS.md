@@ -59,9 +59,11 @@ bash -lc 'java -version; cargo --version; command -v sdkmanager'
 ```
 
 **Repository map:** `ft8af/` is the Android Gradle project; `desktop/` is
-React/TypeScript + Tauri/Rust; `ios/` is SwiftUI + SwiftPM. All three reference
+React/TypeScript + Tauri/Rust. Both reference
 the tracked C DSP core in `ft8af/app/src/main/cpp/`; don't duplicate it or edit
 the vendored `ft8_lib` without checking its pin and native regression tests.
+The ham-radio apps do not target iOS/iPadOS: the USB control they need is
+unavailable there. The retired iOS source and CI have been removed.
 
 **Fast headless checks** (run from the repository root after setup, in a new
 login shell; these require no device, display, or external service):
@@ -105,9 +107,8 @@ Kotlin compiler daemon. Default daemon settings exhausted the 6 GiB workload
 limit during Robolectric startup in validation. Avoid concurrent Rust and
 Android builds. Rerun `.agents/setup` after changing dependency manifests.
 
-**Limits:** Linux orbs cannot build the iOS app or run Apple-framework Swift
-tests; use a macOS/Xcode runner or `.github/workflows/ios.yml`. Orbs have no
-KVM: do not install an Android emulator here. Android UI/instrumentation needs
+**Limits:** Orbs have no KVM: do not install an Android emulator here.
+Android UI/instrumentation needs
 a connected Android runner/device or the existing CI emulator job. RF/PTT,
 USB audio/serial, and radio timing require real hardware; a passing host suite
 is not hardware validation. Never run transmit/tune tests against a live rig
@@ -218,8 +219,8 @@ extract the decision/geometry logic into a plain top-level `internal` function
 or class (e.g. `buildQsoLog`, `QsoPathProjection`) and test that. Keep the
 Composable a thin wrapper that just calls the extracted logic.
 
-The same rule applies to the iOS and desktop apps: SwiftUI views and
-`App.tsx` stay thin wrappers over plain, testable functions.
+The same rule applies to the desktop app: `App.tsx` stays a thin wrapper over
+plain, testable functions.
 
 ### Android
 
@@ -268,37 +269,6 @@ recorded slot through the real decode pipeline, which can spot to PSKReporter
 or start the auto-sequencer). On a physical device the flows skip themselves,
 but the uninstall still happens. The screenshots land on the device in
 `/data/local/tmp/ft8af-flows/`.
-
-### iOS (`ios/`, macOS only)
-
-Pure logic goes in the `FT8AFKit` Swift package (`ios/FT8AFKit/Sources/…`),
-with XCTest suites under `ios/FT8AFKit/Tests/`. These run on the host Mac with
-no simulator, but need full Xcode for XCTest:
-
-```
-cd ios/FT8AFKit && swift test
-```
-
-With only the Command Line Tools installed, `swift test` fails with
-`unable to resolve module dependency: 'XCTest'`. `swift build` still works
-there, and compiles everything except the tests.
-
-App-level tests (`ios/FT8AF/FT8AFTests`) need full Xcode (not just the
-Command Line Tools) and XcodeGen (`brew install xcodegen`). Regenerate the
-project after adding files or targets:
-
-```
-cd ios/FT8AF && xcodegen generate
-xcodebuild test -project FT8AF.xcodeproj -scheme FT8AF \
-  -destination 'platform=iOS Simulator,name=<an installed iPhone simulator>' \
-  CODE_SIGNING_ALLOWED=NO
-```
-
-(Unverified: this `xcodebuild test` command follows CI's `xcodebuild build`
-invocation but hasn't yet been run on a Mac with full Xcode.)
-
-CI (`.github/workflows/ios.yml`) runs `swift test` but only *builds* the app;
-it does not run `FT8AFTests` yet, so run them locally.
 
 ### Desktop (`desktop/`, Tauri)
 

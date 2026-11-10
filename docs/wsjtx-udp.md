@@ -7,9 +7,9 @@ N1MM+, Log4OM, PSKReporter proxies, etc. It **broadcasts** decodes, status and
 logged QSOs, and (when enabled) **accepts** a few request messages so those apps
 can drive it.
 
-This document is the shared, language-agnostic spec: the desktop (Rust), Android
-(Kotlin) and iOS (Swift) builds each implement the same wire format and are
-pinned to the same golden vectors below, so all three encoders are byte-for-byte
+This document is the shared, language-agnostic spec: the desktop (Rust) and Android
+(Kotlin) builds each implement the same wire format and are
+pinned to the same golden vectors below, so both encoders are byte-for-byte
 identical.
 
 ## Settings
@@ -88,7 +88,7 @@ ignored; malformed or truncated datagrams are dropped without effect.
 
 Byte-exact reference datagrams (hex). The Rust codec's unit tests in
 `desktop/src-tauri/src/udp/codec.rs` are the authoritative fixtures; the Android
-and iOS ports transcribe the same field values and assert the same bytes.
+port transcribes the same field values and asserts the same bytes.
 
 **Header only — Clear (type 3):**
 
