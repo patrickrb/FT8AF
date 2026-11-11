@@ -34,15 +34,84 @@ public final class RigHardReset {
         public final int productId;
         /** It is the operator's chosen direct-USB audio input or output. */
         public final boolean configuredAudio;
+        /** It is a USB serial port the rig's CAT link would use (USB-cable mode only). */
+        public final boolean rigSerial;
         public final boolean hasPermission;
 
         public UsbId(int vendorId, int productId, boolean configuredAudio,
                      boolean hasPermission) {
+            this(vendorId, productId, configuredAudio, false, hasPermission);
+        }
+
+        public UsbId(int vendorId, int productId, boolean configuredAudio,
+                     boolean rigSerial, boolean hasPermission) {
             this.vendorId = vendorId;
             this.productId = productId;
             this.configuredAudio = configuredAudio;
+            this.rigSerial = rigSerial;
             this.hasPermission = hasPermission;
         }
+
+        boolean usedForRig() {
+            return configuredAudio || rigSerial;
+        }
+    }
+
+    /** The attached USB devices this app uses to reach the rig, each once. */
+    public static List<UsbId> rigDevices(List<UsbId> attached) {
+        List<UsbId> used = new ArrayList<>();
+        Set<Long> seen = new HashSet<>();
+        for (UsbId d : attached) {
+            if (!d.usedForRig()) continue;
+            long key = ((long) d.vendorId << 32) | (d.productId & 0xFFFFFFFFL);
+            if (seen.add(key)) used.add(d);
+        }
+        return used;
+    }
+
+    /**
+     * The rig devices this app is not allowed to open — the ones Android will raise a
+     * dialog for. Empty means there is nothing to ask: every permission is in place.
+     */
+    public static List<UsbId> missingPermission(List<UsbId> attached) {
+        List<UsbId> missing = new ArrayList<>();
+        for (UsbId d : rigDevices(attached)) {
+            if (!d.hasPermission) missing.add(d);
+        }
+        return missing;
+    }
+
+    /** What the reset found, for telling the operator what to expect. */
+    public static final class Result {
+        public final int usbDevicesFound;
+        public final int usbPermissionsMissing;
+        public final boolean usbCableMode;
+
+        public Result(int usbDevicesFound, int usbPermissionsMissing, boolean usbCableMode) {
+            this.usbDevicesFound = usbDevicesFound;
+            this.usbPermissionsMissing = usbPermissionsMissing;
+            this.usbCableMode = usbCableMode;
+        }
+    }
+
+    /** What to tell the operator after the button is pressed. */
+    public enum Outcome {
+        /** A permission is missing; Android is about to ask (or is asking) for it. */
+        ASKING,
+        /** Nothing to ask: every permission the app needs is already granted. */
+        ALL_GRANTED,
+        /** Nothing to ask, but a USB-cable rig is configured and no USB device is attached. */
+        NO_USB_DEVICE
+    }
+
+    /**
+     * @param micPermissionMissing the microphone (audio capture) runtime permission is not
+     *                             granted, so the app is asking for that too
+     */
+    public static Outcome outcome(Result result, boolean micPermissionMissing) {
+        if (micPermissionMissing || result.usbPermissionsMissing > 0) return Outcome.ASKING;
+        if (result.usbCableMode && result.usbDevicesFound == 0) return Outcome.NO_USB_DEVICE;
+        return Outcome.ALL_GRANTED;
     }
 
     /**

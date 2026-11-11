@@ -877,7 +877,9 @@
     <string name="rig_handoff_took_over">Took the radio over from %1$s</string>
     <string name="radio_take_control">Take control of radio</string>
     <string name="radio_take_control_hint">Use this if the radio is not responding or another app has it. It takes the radio from other apps, asks again for any missing USB permission, and reconnects the radio and its audio.</string>
-    <string name="radio_take_control_started">Taking control of the radio…</string>
+    <string name="radio_take_control_asking">Taking control of the radio. Android is asking for a missing permission — tap Allow.</string>
+    <string name="radio_take_control_all_granted">All permissions are already granted — nothing to ask. Reconnecting the radio…</string>
+    <string name="radio_take_control_no_usb">All permissions are granted, but no USB radio or sound card was found. Check the cable.</string>
 
     <!-- ===== Settings: logging &amp; awards ===== -->
     <string name="settings_save_swl_decodes">Save SWL Decodes</string>
