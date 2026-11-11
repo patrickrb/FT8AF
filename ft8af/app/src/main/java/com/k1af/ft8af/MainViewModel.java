@@ -3047,6 +3047,93 @@ public class MainViewModel extends ViewModel {
     }
 
     /**
+     * The operator's "Take control of radio" button: a hard reset of this app's hold on
+     * the rig. Claims the rig from sibling apps, stops anything on the air, drops the
+     * CAT link, asks again for every USB permission this app needs and does not hold
+     * (ignoring the dialog cooldown), then reconnects the rig and rebuilds the audio
+     * input. See {@link com.k1af.ft8af.handoff.RigHardReset}.
+     *
+     * @return how many USB permission dialogs were requested for audio devices
+     */
+    public int hardResetRigConnection() {
+        fileLog("RigReset: hard reset requested (connected=" + isRigConnected()
+                + " yieldedTo=" + com.k1af.ft8af.handoff.RigHandoffGate.yieldedTo() + ")");
+        // 1. Claim the rig: opens the gate and tells the siblings to let go.
+        com.k1af.ft8af.handoff.RigHandoffController handoff =
+                com.k1af.ft8af.handoff.RigHandoff.get();
+        if (handoff != null) {
+            handoff.onForegrounded(System.currentTimeMillis());
+        }
+        // 2. Tear down. An owed PTT-off goes out while the port is still open.
+        stopTransmitForHandoff();
+        retryPendingUnkey();
+        final boolean hadConnector = baseRig != null && baseRig.getConnector() != null;
+        if (hadConnector) {
+            baseRig.getConnector().disconnect();
+        }
+        // 3. Permissions. The serial device is asked for by the reconnect below.
+        UsbPermissionThrottle.forgetAll();
+        final int asked = requestMissingUsbAudioPermissions();
+        // 4. Reconnect once the siblings have had time to release.
+        final com.k1af.ft8af.handoff.RigHardReset.Reconnect plan =
+                com.k1af.ft8af.handoff.RigHardReset.planReconnect(
+                        GeneralVariables.connectMode == ConnectMode.USB_CABLE, hadConnector);
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            fileLog("RigReset: reconnecting (" + plan + ", permissionDialogs=" + asked + ")");
+            switch (plan) {
+                case SCAN_USB:
+                    getUsbDevice();
+                    break;
+                case RECONNECT_EXISTING:
+                    reconnectRig();
+                    break;
+                default:
+                    break;
+            }
+            // Unconditional, unlike the gentle reclaim: this is the hard reset.
+            Thread t = new Thread(this::reinitializeAudioInput, "RigHardReset");
+            t.setDaemon(true);
+            t.start();
+        }, com.k1af.ft8af.handoff.RigHardReset.RECONNECT_DELAY_MS);
+        return asked;
+    }
+
+    /**
+     * Raise a permission dialog for each configured USB audio device this app may not
+     * open. A grant rebinds the audio input (see {@link #requestUsbPermissionIfNeeded}).
+     */
+    private int requestMissingUsbAudioPermissions() {
+        Context context = GeneralVariables.getMainContext();
+        if (context == null) return 0;
+        UsbManager usbManager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
+        if (usbManager == null) return 0;
+        java.util.List<UsbDevice> devices = new ArrayList<>(usbManager.getDeviceList().values());
+        java.util.List<com.k1af.ft8af.handoff.RigHardReset.UsbId> ids = new ArrayList<>();
+        for (UsbDevice d : devices) {
+            boolean audio = GeneralVariables.isConfiguredUsbAudioInput(
+                    d.getVendorId(), d.getProductId())
+                    || GeneralVariables.isConfiguredUsbAudioOutput(
+                    d.getVendorId(), d.getProductId());
+            ids.add(new com.k1af.ft8af.handoff.RigHardReset.UsbId(
+                    d.getVendorId(), d.getProductId(), audio, usbManager.hasPermission(d)));
+        }
+        int asked = 0;
+        for (com.k1af.ft8af.handoff.RigHardReset.UsbId id
+                : com.k1af.ft8af.handoff.RigHardReset.audioDevicesToAsk(ids)) {
+            for (UsbDevice d : devices) {
+                if (d.getVendorId() == id.vendorId && d.getProductId() == id.productId) {
+                    fileLog(String.format("RigReset: asking USB permission for audio %04X:%04X",
+                            id.vendorId, id.productId));
+                    requestUsbPermissionIfNeeded(d);
+                    asked++;
+                    break;
+                }
+            }
+        }
+        return asked;
+    }
+
+    /**
      * Get the serial port device list
      */
     public void getUsbDevice() {

@@ -665,6 +665,9 @@ fun RadioAudioSettings(
         // =====================================================================
         // RADIO
         // =====================================================================
+        // Manual hard reset of the rig connection (and the cross-app takeover).
+        TakeControlCard(mainViewModel)
+
         SettingsSection(title = stringResource(R.string.settings_section_radio)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {

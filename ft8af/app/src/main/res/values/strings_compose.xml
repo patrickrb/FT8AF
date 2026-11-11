@@ -875,6 +875,9 @@
     <string name="rx_service_text">Decoding in the background</string>
     <string name="rig_handoff_yielded">Radio handed to %1$s — open FT8AF to take it back</string>
     <string name="rig_handoff_took_over">Took the radio over from %1$s</string>
+    <string name="radio_take_control">Take control of radio</string>
+    <string name="radio_take_control_hint">Use this if the radio is not responding or another app has it. It takes the radio from other apps, asks again for any missing USB permission, and reconnects the radio and its audio.</string>
+    <string name="radio_take_control_started">Taking control of the radio…</string>
 
     <!-- ===== Settings: logging &amp; awards ===== -->
     <string name="settings_save_swl_decodes">Save SWL Decodes</string>
