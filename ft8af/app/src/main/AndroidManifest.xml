@@ -34,6 +34,12 @@
          recognizer and the system TTS engine. Without these, SpeechRecognizer
          .isRecognitionAvailable() and TextToSpeech init can fail on Android 11+. -->
     <queries>
+        <!-- Rig handoff: the sibling ks3ckc radio apps this app asks to release the
+             rig (and answers when they ask). Android 11+ hides other packages, and
+             drops broadcasts addressed to them, unless they are declared here. -->
+        <package android:name="radio.ks3ckc.sstvaf" />
+        <package android:name="radio.ks3ckc.rttyaf" />
+        <package android:name="radio.ks3ckc.jttyaf" />
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>

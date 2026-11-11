@@ -39,6 +39,10 @@ import com.k1af.ft8af.R
 import radio.ks3ckc.ft8af.crash.CrashReporting
 import radio.ks3ckc.ft8af.sync.QsoAutoSync
 import radio.ks3ckc.ft8af.util.bluetoothAdapter
+import com.k1af.ft8af.handoff.RigHandoff
+import com.k1af.ft8af.handoff.RigHandoffController
+import com.k1af.ft8af.handoff.RigHandoffGate
+import com.k1af.ft8af.handoff.RigHandoffProtocol
 import com.k1af.ft8af.service.RxForegroundService
 import com.k1af.ft8af.service.RxServiceController
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive
@@ -118,6 +122,10 @@ class ComposeMainActivity : AppCompatActivity() {
         // and be tapped before the handler exists (which would fall back to a bare
         // stopSelf()/System.exit(0) that skips rig disconnect and RX teardown).
         RxForegroundService.setExitHandler { closeApp() }
+
+        // One rig, several ks3ckc apps: whichever is in front of the operator owns it.
+        // Installed before anything connects so a sibling's request is never missed.
+        installRigHandoff()
 
         // Keep RX alive in the background (no-op until RECORD_AUDIO is granted; the
         // permission-result callback re-invokes this once the user grants it).
@@ -669,6 +677,53 @@ class ComposeMainActivity : AppCompatActivity() {
         MediaVolumeRestore.restore(this, "resume")
     }
 
+    override fun onStart() {
+        super.onStart()
+        // We are in front of the operator: ask any sibling app to let go of the rig,
+        // and take it back if we had lent it out.
+        RigHandoff.get()?.onForegrounded(System.currentTimeMillis())
+    }
+
+    /**
+     * Wire the rig handoff (see [RigHandoffProtocol]) to this app's radio layer. The
+     * controller is process-lifetime; the callbacks resolve the view model lazily so a
+     * recreated activity never leaves them pointing at a dead one.
+     */
+    private fun installRigHandoff() {
+        val app = applicationContext
+        RigHandoff.install(
+            app,
+            object : RigHandoffController.Rig {
+                override fun isTransmitting(): Boolean =
+                    MainViewModel.peekInstance()?.isTransmittingForHandoff() == true
+
+                override fun stopTransmit() {
+                    MainViewModel.peekInstance()?.stopTransmitForHandoff()
+                }
+
+                override fun release() {
+                    MainViewModel.peekInstance()?.releaseRigForHandoff()
+                }
+
+                override fun reclaim() {
+                    MainViewModel.peekInstance()?.reclaimRigAfterHandoff()
+                }
+            },
+            object : RigHandoffController.Listener {
+                override fun onYielded(toPackage: String) {
+                    // The notification is the only surface a backgrounded app has.
+                    RxForegroundService.refreshNotification(app)
+                }
+
+                override fun onRegained(fromPackage: String?) {
+                    RxForegroundService.refreshNotification(app)
+                    rigTakeoverMessage(app.getString(R.string.rig_handoff_took_over), fromPackage)
+                        ?.let { ToastMessage.show(it) }
+                }
+            },
+        )
+    }
+
     override fun onStop() {
         // A tune carrier must never outlive the operator's attention (issue
         // #408): backgrounding or swiping the app away mid-tune force-stops the
@@ -698,6 +753,11 @@ class ComposeMainActivity : AppCompatActivity() {
     private fun autoConnectUsbIfNeeded(ports: ArrayList<CableSerialPort.SerialPort>?) {
         if (ports.isNullOrEmpty()) {
             fileLog("autoConnect: no serial ports detected")
+            return
+        }
+        if (RigHandoffGate.isYielded()) {
+            // A sibling app is using the rig; a port (re)appearing must not steal it back.
+            fileLog("autoConnect: rig handed to ${RigHandoffGate.yieldedTo()}, skipping")
             return
         }
         if (mainViewModel.isRigConnected()) {
@@ -830,6 +890,14 @@ class ComposeMainActivity : AppCompatActivity() {
         System.exit(0)
     }
 }
+
+/**
+ * The "took the radio over from FT8AF" toast text, or null when there is nobody to name
+ * (we simply came back for a rig no sibling confirmed releasing). Top-level + [internal]
+ * so it is unit-testable without the Activity.
+ */
+internal fun rigTakeoverMessage(template: String, fromPackage: String?): String? =
+    fromPackage?.let { String.format(template, RigHandoffProtocol.displayName(it)) }
 
 /**
  * True if this permission result granted RECORD_AUDIO. Top-level + [internal] so

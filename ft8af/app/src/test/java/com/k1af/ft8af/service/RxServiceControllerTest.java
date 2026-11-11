@@ -31,4 +31,11 @@ public class RxServiceControllerTest {
         assertThat(RxServiceController.commandForAction("com.k1af.ft8af.service.OTHER"))
                 .isEqualTo(RxServiceController.Command.RUN);
     }
+
+    @Test
+    public void rigYielded_onlyWhenAPackageHoldsTheRig() {
+        assertThat(RxServiceController.rigYielded("radio.ks3ckc.ft8af")).isTrue();
+        assertThat(RxServiceController.rigYielded(null)).isFalse();
+        assertThat(RxServiceController.rigYielded("")).isFalse();
+    }
 }

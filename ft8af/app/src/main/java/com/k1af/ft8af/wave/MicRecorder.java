@@ -161,8 +161,9 @@ public class MicRecorder {
                 GeneralVariables.usbAudioInputProductId));
 
         // Check if USB audio input is selected
-        if (GeneralVariables.audioInputDeviceId == -1
-                && GeneralVariables.usbAudioInputVendorId != 0) {
+        if (com.k1af.ft8af.handoff.RigHandoffGate.mayOpenUsbAudioInput(
+                GeneralVariables.audioInputDeviceId,
+                GeneralVariables.usbAudioInputVendorId)) {
             try {
                 usbAudioDevice = openUsbAudioInput();
             } catch (Exception e) {
@@ -804,8 +805,9 @@ public class MicRecorder {
         usbAudioDevice = null;
 
         // Re-check for USB audio input
-        if (GeneralVariables.audioInputDeviceId == -1
-                && GeneralVariables.usbAudioInputVendorId != 0) {
+        if (com.k1af.ft8af.handoff.RigHandoffGate.mayOpenUsbAudioInput(
+                GeneralVariables.audioInputDeviceId,
+                GeneralVariables.usbAudioInputVendorId)) {
             try {
                 usbAudioDevice = openUsbAudioInput();
             } catch (Exception e) {
