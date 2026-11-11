@@ -28,7 +28,9 @@ import com.k1af.ft8af.R;
  * (3) shows the required ongoing notification.
  *
  * <p>Started from {@code ComposeMainActivity} once RECORD_AUDIO is granted, stopped on app
- * exit. Policy lives in {@link RxServiceController} (unit-tested).
+ * exit — including the user swiping the app away from Recents, which {@link #onTaskRemoved}
+ * treats as an exit too (see its doc comment for why that needs explicit handling). Policy
+ * lives in {@link RxServiceController} (unit-tested).
  */
 public class RxForegroundService extends Service {
     private static final String CHANNEL_ID = "rx_running";
@@ -73,17 +75,7 @@ public class RxForegroundService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         String action = intent == null ? null : intent.getAction();
         if (RxServiceController.commandForAction(action) == RxServiceController.Command.EXIT) {
-            GeneralVariables.fileLog("RxForegroundService: notification Exit tapped");
-            Runnable handler = exitHandler;
-            if (handler != null) {
-                // closeApp(): stops TX/RX, disconnects the rig, stops this service, then
-                // System.exit(0) — does not return.
-                handler.run();
-            } else {
-                // Activity already destroyed; nothing left to clean up beyond the process.
-                stopSelf();
-                System.exit(0);
-            }
+            performExit("notification Exit tapped");
             return START_NOT_STICKY;
         }
         Notification notification = buildNotification();
@@ -103,6 +95,44 @@ public class RxForegroundService extends Service {
         }
         acquireWakeLock();
         return START_NOT_STICKY;
+    }
+
+    /**
+     * Swiping the app away from Recents removes its task, but by default that does
+     * <em>not</em> stop a plain started {@link Service} (no {@code android:stopWithTask} is
+     * set on this one, and task removal only auto-stops <em>bound</em> services) — so without
+     * this override, RX decode, mic capture, and the wakelock this service holds for them all
+     * kept running indefinitely after "closing" the app, until force-stopped from Android's
+     * App Info screen. {@code MainViewModel} is a process-wide singleton ({@code getInstance}),
+     * not Activity-scoped, so destroying the Activity alone never tears it down either.
+     *
+     * <p>Treated exactly like the notification's Exit button ({@link #performExit}): full
+     * shutdown via the activity's registered handler if it's still around, otherwise just end
+     * the process, since there is nothing left to clean up beyond it.
+     */
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        performExit("task removed from Recents");
+        super.onTaskRemoved(rootIntent);
+    }
+
+    /**
+     * Shared exit path for both the notification's Exit button and {@link #onTaskRemoved}:
+     * run the activity's full shutdown if it's still registered, otherwise just end the
+     * process. {@code reason} is for the log line only.
+     */
+    private void performExit(String reason) {
+        GeneralVariables.fileLog("RxForegroundService: exiting (" + reason + ")");
+        Runnable handler = exitHandler;
+        if (handler != null) {
+            // closeApp(): stops TX/RX, disconnects the rig, stops this service, then
+            // System.exit(0) — does not return.
+            handler.run();
+        } else {
+            // Activity already destroyed; nothing left to clean up beyond the process.
+            stopSelf();
+            System.exit(0);
+        }
     }
 
     @Override
