@@ -873,6 +873,13 @@
     <string name="rx_service_channel_desc">Keeps FT8 decoding running while the app is in the background or the screen is off</string>
     <string name="rx_service_title">FT8AF is receiving</string>
     <string name="rx_service_text">Decoding in the background</string>
+    <string name="rig_handoff_yielded">Radio handed to %1$s — open FT8AF to take it back</string>
+    <string name="rig_handoff_took_over">Took the radio over from %1$s</string>
+    <string name="radio_take_control">Take control of radio</string>
+    <string name="radio_take_control_hint">Use this if the radio is not responding or another app has it. It takes the radio from other apps, asks again for any missing USB permission, and reconnects the radio and its audio.</string>
+    <string name="radio_take_control_asking">Taking control of the radio. Android is asking for a missing permission — tap Allow.</string>
+    <string name="radio_take_control_all_granted">All permissions are already granted — nothing to ask. Reconnecting the radio…</string>
+    <string name="radio_take_control_no_usb">All permissions are granted, but no USB radio or sound card was found. Check the cable.</string>
 
     <!-- ===== Settings: logging &amp; awards ===== -->
     <string name="settings_save_swl_decodes">Save SWL Decodes</string>

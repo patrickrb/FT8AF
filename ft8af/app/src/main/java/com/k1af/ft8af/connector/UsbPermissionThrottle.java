@@ -69,6 +69,15 @@ public final class UsbPermissionThrottle {
         lastRequestAtByVendor.merge(vendorId, nowMs, Math::max);
     }
 
+    /**
+     * Forget every recorded request because the operator explicitly asked to be prompted
+     * again ("Take control of radio"). The cooldown exists to stop a flapping link from
+     * nagging; a button the operator pressed is the opposite of a nag.
+     */
+    public static void forgetAll() {
+        lastRequestAtByVendor.clear();
+    }
+
     /** Test isolation only: forget every recorded request. */
     static void reset() {
         lastRequestAtByVendor.clear();

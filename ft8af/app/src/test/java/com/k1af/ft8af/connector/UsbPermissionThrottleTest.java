@@ -107,4 +107,15 @@ public class UsbPermissionThrottleTest {
         UsbPermissionThrottle.markRequested(VENDOR_SERIAL, T0);
         assertThat(UsbPermissionThrottle.shouldRequestNow(VENDOR_SERIAL, T0 + 1_000)).isFalse();
     }
+
+    @Test
+    public void forgetAll_letsTheNextRequestThroughInsideTheCooldown() {
+        // "Take control of radio": the operator asked to be prompted again.
+        UsbPermissionThrottle.markRequested(0x10C4, 1_000L);
+        assertThat(UsbPermissionThrottle.shouldRequestNow(0x10C4, 2_000L)).isFalse();
+
+        UsbPermissionThrottle.forgetAll();
+
+        assertThat(UsbPermissionThrottle.shouldRequestNow(0x10C4, 2_000L)).isTrue();
+    }
 }

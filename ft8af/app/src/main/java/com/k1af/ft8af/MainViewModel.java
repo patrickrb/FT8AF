@@ -2976,6 +2976,190 @@ public class MainViewModel extends ViewModel {
         baseRig.getConnector().connect();
     }
 
+    /** A transmission or tune carrier is on the air (rig-handoff view). */
+    public boolean isTransmittingForHandoff() {
+        return ft8TransmitSignal != null
+                && (ft8TransmitSignal.isTransmitting() || ft8TransmitSignal.isTuning());
+    }
+
+    /**
+     * Stop whatever is on the air because a sibling app is taking the rig over, and
+     * disarm auto-TX so the next cycle does not key a rig we no longer hold.
+     */
+    public void stopTransmitForHandoff() {
+        if (ft8TransmitSignal == null) return;
+        ft8TransmitSignal.stopTune();
+        ft8TransmitSignal.setTransmitting(false);
+        ft8TransmitSignal.setActivated(false);
+    }
+
+    /**
+     * Let go of the rig for a sibling app: close the CAT link (which also ends its
+     * auto-reconnect loop) and rebuild the audio input, which — with
+     * {@code RigHandoffGate} already set — comes back up on the phone's own input
+     * instead of the rig's USB audio. The rebuild runs off the main thread because it
+     * joins the old capture thread.
+     */
+    public void releaseRigForHandoff() {
+        fileLog("RigHandoff: releasing rig (connected=" + isRigConnected() + ")");
+        // Armed auto-TX would otherwise fire next cycle with no rig: PTT to a closed
+        // port and the tones out of the phone speaker.
+        if (ft8TransmitSignal != null) {
+            ft8TransmitSignal.setActivated(false);
+        }
+        // A PTT-off that never reached the rig must be settled while the port is still
+        // open; after disconnect() there is nothing left to send it through.
+        retryPendingUnkey();
+        if (baseRig != null && baseRig.getConnector() != null) {
+            baseRig.getConnector().disconnect();
+        }
+        Thread t = new Thread(this::reinitializeAudioInput, "RigHandoffRelease");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * Take the rig back after a handoff (or after a sibling confirmed it let go).
+     * Deliberately gentle: a healthy link and a live USB audio stream are left alone, so
+     * a redundant call never punches a capture gap into a decode in progress.
+     */
+    public void reclaimRigAfterHandoff() {
+        boolean connected = isRigConnected();
+        boolean usbAudioWanted = com.k1af.ft8af.handoff.RigHandoffGate.mayOpenUsbAudioInput(
+                GeneralVariables.audioInputDeviceId, GeneralVariables.usbAudioInputVendorId);
+        boolean usbAudioLive = hamRecorder != null
+                && hamRecorder.getMicRecorder().isUsingUsbDirect();
+        fileLog("RigHandoff: reclaiming rig (connected=" + connected
+                + " usbAudioWanted=" + usbAudioWanted + " usbAudioLive=" + usbAudioLive + ")");
+        if (!connected) {
+            if (baseRig != null && baseRig.getConnector() != null) {
+                reconnectRig();
+            } else {
+                // Never connected this process: let the port scan drive auto-connect.
+                getUsbDevice();
+            }
+        }
+        if (usbAudioWanted && !usbAudioLive) {
+            Thread t = new Thread(this::reinitializeAudioInput, "RigHandoffReclaim");
+            t.setDaemon(true);
+            t.start();
+        }
+    }
+
+    /**
+     * The operator's "Take control of radio" button: a hard reset of this app's hold on
+     * the rig. Claims the rig from sibling apps, stops anything on the air, drops the
+     * CAT link, asks again for every USB permission this app needs and does not hold
+     * (ignoring the dialog cooldown), then reconnects the rig and rebuilds the audio
+     * input. See {@link com.k1af.ft8af.handoff.RigHardReset}.
+     *
+     * @return what was found and what is missing, so the button can tell the operator
+     *         whether a permission prompt is coming or everything was already allowed
+     */
+    public com.k1af.ft8af.handoff.RigHardReset.Result hardResetRigConnection() {
+        fileLog("RigReset: hard reset requested (connected=" + isRigConnected()
+                + " yieldedTo=" + com.k1af.ft8af.handoff.RigHandoffGate.yieldedTo() + ")");
+        // 1. Claim the rig: opens the gate and tells the siblings to let go.
+        com.k1af.ft8af.handoff.RigHandoffController handoff =
+                com.k1af.ft8af.handoff.RigHandoff.get();
+        if (handoff != null) {
+            handoff.onForegrounded(System.currentTimeMillis());
+        }
+        // 2. Tear down. An owed PTT-off goes out while the port is still open.
+        stopTransmitForHandoff();
+        retryPendingUnkey();
+        final boolean hadConnector = baseRig != null && baseRig.getConnector() != null;
+        if (hadConnector) {
+            baseRig.getConnector().disconnect();
+        }
+        // 3. Permissions. The serial device is asked for by the reconnect below.
+        UsbPermissionThrottle.forgetAll();
+        final boolean usbCable = GeneralVariables.connectMode == ConnectMode.USB_CABLE;
+        final java.util.List<com.k1af.ft8af.handoff.RigHardReset.UsbId> attached = attachedUsbIds(usbCable);
+        final int found = com.k1af.ft8af.handoff.RigHardReset.rigDevices(attached).size();
+        final int missing = com.k1af.ft8af.handoff.RigHardReset.missingPermission(attached).size();
+        fileLog("RigReset: rig USB devices found=" + found + " missingPermission=" + missing);
+        final int asked = requestMissingUsbAudioPermissions(attached);
+        // 4. Reconnect once the siblings have had time to release.
+        final com.k1af.ft8af.handoff.RigHardReset.Reconnect plan =
+                com.k1af.ft8af.handoff.RigHardReset.planReconnect(
+                        usbCable, hadConnector);
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            fileLog("RigReset: reconnecting (" + plan + ", permissionDialogs=" + asked + ")");
+            switch (plan) {
+                case SCAN_USB:
+                    getUsbDevice();
+                    break;
+                case RECONNECT_EXISTING:
+                    reconnectRig();
+                    break;
+                default:
+                    break;
+            }
+            // Unconditional, unlike the gentle reclaim: this is the hard reset.
+            Thread t = new Thread(this::reinitializeAudioInput, "RigHardReset");
+            t.setDaemon(true);
+            t.start();
+        }, com.k1af.ft8af.handoff.RigHardReset.RECONNECT_DELAY_MS);
+        return new com.k1af.ft8af.handoff.RigHardReset.Result(found, missing, usbCable);
+    }
+
+    /**
+     * Every attached USB device, tagged with how this app would use it: the operator's
+     * configured audio device, and (in USB-cable mode) a serial port for the CAT link.
+     */
+    private java.util.List<com.k1af.ft8af.handoff.RigHardReset.UsbId> attachedUsbIds(boolean usbCable) {
+        java.util.List<com.k1af.ft8af.handoff.RigHardReset.UsbId> ids = new ArrayList<>();
+        Context context = GeneralVariables.getMainContext();
+        if (context == null) return ids;
+        UsbManager usbManager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
+        if (usbManager == null) return ids;
+        java.util.List<CableSerialPort.SerialPort> ports = usbCable
+                ? CableSerialPort.listSerialPorts(context)
+                : new ArrayList<CableSerialPort.SerialPort>();
+        for (UsbDevice d : usbManager.getDeviceList().values()) {
+            boolean audio = GeneralVariables.isConfiguredUsbAudioInput(
+                    d.getVendorId(), d.getProductId())
+                    || GeneralVariables.isConfiguredUsbAudioOutput(
+                    d.getVendorId(), d.getProductId());
+            boolean serial = false;
+            for (CableSerialPort.SerialPort p : ports) {
+                if (p.deviceId == d.getDeviceId()) {
+                    serial = true;
+                    break;
+                }
+            }
+            ids.add(new com.k1af.ft8af.handoff.RigHardReset.UsbId(d.getVendorId(), d.getProductId(),
+                    audio, serial, usbManager.hasPermission(d)));
+        }
+        return ids;
+    }
+
+    /**
+     * Raise a permission dialog for each configured USB audio device this app may not
+     * open. A grant rebinds the audio input (see {@link #requestUsbPermissionIfNeeded}).
+     */
+    private int requestMissingUsbAudioPermissions(
+            java.util.List<com.k1af.ft8af.handoff.RigHardReset.UsbId> attached) {
+        Context context = GeneralVariables.getMainContext();
+        if (context == null) return 0;
+        UsbManager usbManager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
+        if (usbManager == null) return 0;
+        int asked = 0;
+        for (com.k1af.ft8af.handoff.RigHardReset.UsbId id : com.k1af.ft8af.handoff.RigHardReset.audioDevicesToAsk(attached)) {
+            for (UsbDevice d : usbManager.getDeviceList().values()) {
+                if (d.getVendorId() == id.vendorId && d.getProductId() == id.productId) {
+                    fileLog(String.format("RigReset: asking USB permission for audio %04X:%04X",
+                            id.vendorId, id.productId));
+                    requestUsbPermissionIfNeeded(d);
+                    asked++;
+                    break;
+                }
+            }
+        }
+        return asked;
+    }
+
     /**
      * Get the serial port device list
      */
