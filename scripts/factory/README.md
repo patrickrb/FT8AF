@@ -24,12 +24,11 @@ beside it, untouched.
 
 **1. Get the main checkout onto the newest `dev`.** The loop reads its skill
 from `C:\Users\burns\Projects\NEXT-FT8CN`. The launcher fast-forwards it only
-when it is on `dev` and clean — untracked files count as dirty, so move any
-strays out first.
+when it is on `dev` with no tracked changes (untracked files are fine).
 
 ```powershell
 cd C:\Users\burns\Projects\NEXT-FT8CN
-git status --short                      # must be empty (move untracked files elsewhere)
+git status --short --untracked-files=no   # must be empty
 git switch dev
 git pull --ff-only origin dev
 ```
