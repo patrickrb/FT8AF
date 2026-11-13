@@ -2,7 +2,8 @@
 
 Expected routing is defined independently of the shell under test. In
 particular a production-looking ref must not turn an unsupported event into
-a release, and main must remain a prerelease even with existing production tags.
+a release, and main must remain a prerelease even with existing production tags, and the
+retired staging branch must not release at all.
 """
 import json
 import os
@@ -65,7 +66,7 @@ class ReleasePolicyTest(unittest.TestCase):
             for ref in REFS:
                 with self.subTest(event=event, ref=ref):
                     result = self.android_release(event, ref)
-                    internal = event == "push" and ref in ("refs/heads/main", "refs/heads/staging")
+                    internal = event == "push" and ref == "refs/heads/main"
                     production = event in ("push", "workflow_dispatch") and ref == "refs/tags/android-v2.7.1"
                     self.assertEqual(result["should_release"], str(internal or production).lower())
                     self.assertEqual(result["is_prerelease"], str(internal).lower())
@@ -78,7 +79,7 @@ class ReleasePolicyTest(unittest.TestCase):
             for ref in REFS:
                 with self.subTest(event=event, ref=ref):
                     result = self.run_script("desktop", "tag", event, ref)
-                    internal = event == "push" and ref in ("refs/heads/main", "refs/heads/staging")
+                    internal = event == "push" and ref == "refs/heads/main"
                     production = event == "push" and ref == "refs/tags/desktop-v2.7.1"
                     self.assertEqual(result["should_release"], str(internal or production).lower())
                     self.assertEqual(result["is_prerelease"], str(internal).lower())
@@ -86,7 +87,7 @@ class ReleasePolicyTest(unittest.TestCase):
                     self.assertEqual(result["app_version"], "1.4.11-81" if internal else "2.7.1" if production else "")
 
     def test_internal_builds_without_production_tag_history(self):
-        for branch in ("main", "staging"):
+        for branch in ("main",):
             with self.subTest(branch=branch):
                 result = self.run_script("desktop", "tag", "push", f"refs/heads/{branch}", tagged=False)
                 self.assertEqual(result["release_tag"], "desktop-dev.81")
@@ -94,19 +95,19 @@ class ReleasePolicyTest(unittest.TestCase):
                 self.assertEqual(result["app_version"], "0.1.1-81")
                 self.assertEqual(result["is_prerelease"], "true")
 
-    def test_android_reuses_candidate_without_production_tag_or_extra_bump(self):
-        for branch in ("main", "staging"):
+    def test_android_rerun_reuses_its_release_without_production_tag_or_extra_bump(self):
+        for branch in ("main",):
             with self.subTest(branch=branch):
                 result = self.android_release("push", f"refs/heads/{branch}", CAND_FOUND="true",
                                               CAND_TAG="android-dev.79", CAND_VERSION="2.6.3", BUMP="major")
                 self.assertEqual(result["release_tag"], "android-dev.81")
                 self.assertEqual(result["version_name"], "2.6.3-dev.81")
-                self.assertEqual(result["version_source"], "promoted from android-dev.79")
+                self.assertEqual(result["version_source"], "reused from android-dev.79 (re-run)")
                 self.assertEqual(result["play_track"], "internal")
                 self.assertEqual(result["is_prerelease"], "true")
 
     def test_android_no_app_changes_never_cuts_branch_release(self):
-        for branch in ("main", "staging"):
+        for branch in ("main",):
             with self.subTest(branch=branch):
                 result = self.android_release("push", f"refs/heads/{branch}", ANDROID_CHANGED="false")
                 self.assertEqual(result["should_release"], "false")
@@ -115,7 +116,7 @@ class ReleasePolicyTest(unittest.TestCase):
 
     def test_detection_builds_publishing_pushes_and_path_filters_ci(self):
         for platform in WORKFLOWS:
-            for ref in ("refs/heads/main", "refs/heads/staging", f"refs/tags/{platform}-v2.7.1"):
+            for ref in ("refs/heads/main", f"refs/tags/{platform}-v2.7.1"):
                 with self.subTest(platform=platform, ref=ref):
                     self.assertEqual(self.run_script(platform, "decide", "push", ref)["run"], "true")
             for event, ref in (("push", "refs/heads/dev"), ("pull_request", "refs/pull/12/merge")):
@@ -141,7 +142,7 @@ class ReleasePolicyTest(unittest.TestCase):
     def test_discord_branch_notifications_do_not_announce_production(self):
         workflow = (ROOT / ".github/workflows/discord-merge-notify.yml").read_text()
         notify = textwrap.dedent(workflow.split("        run: |\n", 1)[1])
-        for branch in ("main", "staging", "dev"):
+        for branch in ("main", "dev"):
             with self.subTest(branch=branch), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 curl = root / "curl"

@@ -9,7 +9,7 @@ name: Play store listings
 #                                         check-permissions, or publish
 #
 # Publishing is DELIBERATE, never automatic: no branch push runs it. Listing
-# text lands in the repo on the normal feature -> dev -> staging -> main flow
+# text lands in the repo on the normal feature -> dev -> main flow
 # and sits there until someone decides the store should say it, then ships by a
 # manual run here (or by running .github/scripts/publish_listings.py locally --
 # see docs/store-listings.md). Merging to main touches Google Play in no way at

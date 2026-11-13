@@ -123,7 +123,17 @@ a PR.
 
 **All PRs target the `dev` branch.** After finishing the code for any work item,
 open a pull request against `dev` (do the work on a feature branch, then
-`gh pr create --base dev`). Don't merge straight to `main`.
+`gh pr create --base dev`). Don't merge straight to `main`: the only PR into
+`main` is the dev → main release PR (there is no `staging` branch any more;
+see `docs/release-pipeline.md`).
+
+**The software factory.** Specs go in as GitHub issues labelled
+`factory:ready`; the loop in `.claude/skills/ft8af-factory/SKILL.md` builds
+each one in its own worktree, proves it with tests and emulator evidence,
+merges it into `dev`, and releases dev → main to the Play internal track.
+Patrick tests that build on his phone and promotes it to production himself.
+Each user-facing feature that reaches production is then announced on the
+ft8af.app blog and FT8AF's social accounts (`.claude/skills/feature-announce/`).
 
 **Use a git worktree for every separate line of work.** Don't switch branches in
 your primary checkout — branch-switching there collides with anything else in
@@ -155,10 +165,14 @@ id first in the slug, e.g. `fix/bur-12-cq-button-stuck`.
 
 ### Pull requests
 
-- **Agents never merge.** Open the PR against `dev`, then stop. The maintainer
-  merges. They test on a phone only for `needs-device-test` PRs (see "Device
-  testing" below); for everything else they merge on the CI, code review, and
-  QA evidence.
+- **Who merges.** An interactive agent opens the PR against `dev` and stops;
+  the maintainer merges. The software-factory loop has Patrick's standing
+  authority (2026-11-13) to merge its own feature PRs into `dev` once
+  `pr-gate` is green, code review is answered and QA evidence is posted, and
+  to merge the dev → main release PR once every check on it passed. That merge
+  publishes to Play **internal** only. Nobody but Patrick promotes to
+  production, creates an `android-v*` / `desktop-v*` tag, or runs the
+  production ship.
 - **Fill in every section of the PR template**
   (`.github/pull_request_template.md`): the debug APK link, a 3-6 step
   manual test checklist with expected results, what changed, risks, and what was
@@ -174,22 +188,23 @@ id first in the slug, e.g. `fix/bur-12-cq-button-stuck`.
 - **CI must be green.** That means `android-gate` (unit tests and the release
   build) plus, on PRs that touch `ft8af/**` or `ham-radio-core/**`, `Debug APK for manual testing`.
 - **Get a code review before QA.** Once CI is green, request a Copilot review
-  first. If Copilot doesn't respond (it can run out of credits), run Claude's
+  first, **once per PR** (reviews are expensive: fix what's valid, answer and
+  resolve every thread, never re-request). If Copilot doesn't respond (it can run out of credits), run Claude's
   `code-review` skill on the PR instead. Address or answer every finding before
   handing off to QA, and fill in the "Code review" section of the template
   with the reviewer you used.
 - **Label PRs that come from Discord feedback** with `from-discord`, and link
   the Discord message or the tracking task in "What changed".
-- **QA attaches evidence.** After code review, QA installs the debug APK on an
-  emulator, runs the PR's manual test checklist, and posts screenshots or a
+- **QA attaches evidence.** After code review, QA (the factory loop does its
+  own) installs the debug APK on an emulator, runs the PR's manual test checklist, and posts screenshots or a
   short screen recording to the PR. A PR without that evidence isn't ready
   for the maintainer.
 
 ### Device testing
 
 The maintainer doesn't install every PR's APK. Device testing happens once per
-release batch, on the Play internal build that `staging` produces, which holds
-every PR merged into `dev` since the last batch. Per-PR device testing is only
+release batch, on the Play internal build that the dev → main release
+produces, which holds every PR merged into `dev` since the last release. Per-PR device testing is only
 for changes an emulator can't check. Label those PRs `needs-device-test`:
 
 - transmit, PTT, or anything that keys the radio
@@ -202,7 +217,10 @@ for changes an emulator can't check. Label those PRs `needs-device-test`:
 The author applies the label and says why in the template's "Device test"
 section. QA checks the label against the diff and adds it if it's missing.
 When in doubt, add it. Everything else (UI, decode/display logic, settings,
-CI, docs) merges on CI + code review + QA evidence.
+CI, docs) merges on CI + code review + QA evidence. A `needs-device-test` PR
+may still merge into `dev` and ride the next internal release; the release PR
+lists every one of them under "Test on your phone" so the batch device test
+covers them before anything is promoted to production.
 
 `from-discord` fixes are confirmed by the reporter: once the fix reaches a Play
 testing track, `discord-play-track-watch` posts to Discord and the reporter
