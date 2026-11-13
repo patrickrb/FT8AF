@@ -69,8 +69,10 @@ jobs:
         with:
           python-version: '3.11'
 
+      # Only this workflow's own tests: the rest of .github/scripts (which
+      # need `requests` and more) run in factory-tests.yml.
       - name: Run publish_listings unit tests
-        run: python -m unittest discover -s .github/scripts -p 'test_*.py' -v
+        run: python -m unittest discover -s .github/scripts -p 'test_publish_listings.py' -v
 
   publish:
     name: Run against Play
