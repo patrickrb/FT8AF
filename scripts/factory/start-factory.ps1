@@ -13,10 +13,11 @@
        dev and clean, so the loop reads the newest skill;
     4. opens a terminal tab running run-loop.cmd, which sets FT8AF_FACTORY=1
        (the guard hook, guard.py) and runs
-         claude --permission-mode acceptEdits "/loop /ft8af-factory"
-       in the main checkout. Edits are accepted, the commands the factory uses
-       are allowlisted in .claude/settings.json, and anything else stops at a
-       prompt (Patrick: no --dangerously-skip-permissions).
+         claude --dangerously-skip-permissions "/loop /ft8af-factory"
+       in the main checkout. Permission prompts are skipped (Patrick, 2026-11-13:
+       an unattended loop that stops at a prompt after a reboot never gets
+       going). The deny list in .claude/settings.json and the guard hook still
+       block destructive git / gh commands.
 
   Everything it decides goes to %LOCALAPPDATA%\ft8af-factory\autostart.log.
 
