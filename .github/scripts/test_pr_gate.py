@@ -28,7 +28,10 @@ class PrGateTest(unittest.TestCase):
             gh.write_text(FAKE_GH)
             gh.chmod(0o755)
             (root / "prs").write_text(open_prs + "\n")
-            (root / "runs").write_text("".join("\t".join(r) + "\n" for r in runs))
+            # Rows are (id, name, status, conclusion) for PR runs, or
+            # (id, name, event, status, conclusion) to set the event.
+            rows = [r if len(r) == 5 else (r[0], r[1], "pull_request", r[2], r[3]) for r in runs]
+            (root / "runs").write_text("".join("\t".join(r) + "\n" for r in rows))
             env = dict(os.environ, PATH=tmp + os.pathsep + os.environ["PATH"], FIXTURE=tmp,
                        REPO="patrickrb/FT8AF", SHA="abc123")
             if dry:
@@ -49,7 +52,7 @@ class PrGateTest(unittest.TestCase):
         out, posted = self.gate([("1", "Android CI & Release", "completed", "failure"),
                                  ("2", "Desktop CI & Release", "in_progress", "")])
         self.assertIn("state=failure", posted)
-        self.assertIn("Android CI & Release (failure)", out)
+        self.assertIn("Android CI & Release [pull_request] (failure)", out)
 
     def test_queued_run_holds_the_gate(self):
         _, posted = self.gate([("1", "Android CI & Release", "queued", "")])
@@ -60,6 +63,18 @@ class PrGateTest(unittest.TestCase):
         _, posted = self.gate([("5", "Android CI & Release", "completed", "failure"),
                                ("9", "Android CI & Release", "completed", "success")])
         self.assertIn("state=success", posted)
+
+    def test_push_run_cannot_hide_the_pr_run_on_the_same_commit(self):
+        # A dev -> main PR's head is dev's head: a later, green dev-push run of
+        # the same workflow must not stand in for the PR run that is failing.
+        _, posted = self.gate([("5", "Android CI & Release", "pull_request", "completed", "failure"),
+                               ("9", "Android CI & Release", "push", "completed", "success")])
+        self.assertIn("state=failure", posted)
+
+    def test_push_and_pr_runs_must_both_finish(self):
+        _, posted = self.gate([("5", "Android CI & Release", "push", "completed", "success"),
+                               ("9", "Android CI & Release", "pull_request", "in_progress", "")])
+        self.assertIn("state=pending", posted)
 
     def test_post_merge_workflows_are_ignored(self):
         _, posted = self.gate([("1", "PR gate", "in_progress", ""),

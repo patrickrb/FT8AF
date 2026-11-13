@@ -43,16 +43,37 @@ and including `<N>`, shipped now:
 ```bash
 gh release list --limit 50 --json tagName --jq '.[].tagName' | grep '^android-dev\.'
 gh release view android-dev.<k> --json body --jq .body        # notes for each shipped build
-git -C /c/Users/burns/Projects/NEXT-FT8CN log --merges --first-parent --format='%s' android-dev.<base>..android-dev.<N>
+git -C /c/Users/burns/Projects/NEXT-FT8CN fetch --tags origin
+git -C /c/Users/burns/Projects/NEXT-FT8CN log --merges --format='%s' android-dev.<base>..android-dev.<N> \
+  | grep -E '^Merge pull request #[0-9]+ from ' | grep -vE ' from [^/]+/(dev|staging)$'
 ```
 
-The merge subjects of the dev → main releases list the feature PRs; read each
-one (`gh pr view <n> --json title,body,labels,mergedAt`). A feature is a PR
+All parents, not `--first-parent`: main's first-parent history is only the
+dev → main release merges, and the feature PRs are merges on dev's side. The
+last `grep` drops the release/promotion merges themselves (from `dev` or the
+retired `staging`). Read each remaining PR
+(`gh pr view <n> --json title,body,labels,mergedAt`). A feature is a PR
 labelled `user-facing` (factory PRs carry it), or for older PRs one whose
 "What changed" opens with something an operator would notice. Fixes, CI,
 refactors and docs are not features; a fix an operator reported (often
 `from-discord`) can get one line in a feature post, not a post of its own.
 Nothing user-facing shipped → no posts; still say so in the report.
+
+Track the batch in one issue so an interrupted run resumes instead of
+starting over or stopping half-done. Before writing anything, find or open it:
+
+```bash
+gh issue list --label announce --state all --search "android-dev.<N> in:title" --json number,state,body
+gh issue create --label announce --title "Announce android-dev.<N> (<version>)" --body-file checklist.md
+```
+
+The body is a checklist: one line per feature (PR, blog slug), then one line
+per network per post. Tick each item the moment it is done (edit the body),
+paste the live URL next to it, and close the issue only when every item is
+ticked or marked skipped with a reason. A later cycle that finds an **open**
+`announce` issue resumes only its unticked items; a **closed** one for this
+release means it's finished. The blog's `release` field is not the "done"
+marker, the closed issue is.
 
 ## 2. One blog post per feature
 

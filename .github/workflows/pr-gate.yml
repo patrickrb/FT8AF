@@ -37,8 +37,12 @@ on:
       - Orb readiness
       - Play store listings
       - Main branch source gate
-    # `requested` too, so a re-run flips an earlier green back to pending.
-    types: [requested, completed]
+      - Factory & release script tests
+    # GitHub doesn't send `requested` for a re-run, so `in_progress` is what
+    # flips an earlier green back to pending once a retry starts. A retry
+    # still queued can't be seen here, which is why the factory re-evaluates
+    # the gate itself (DRY_RUN) right before every merge.
+    types: [requested, in_progress, completed]
 
 permissions:
   contents: read

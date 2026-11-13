@@ -7,8 +7,10 @@
 # the moment its event fires (status `queued`), while its job check runs only
 # appear once a runner picks it up — so a gate reading check runs could go
 # green while a test workflow is still waiting in the queue. Only the latest
-# run of each workflow counts (a re-run, or a duplicate cancelled by a
-# concurrency group, is superseded by it).
+# run of each workflow *per event* counts (a re-run, or a duplicate cancelled
+# by a concurrency group, is superseded by it). Keying on the event too keeps
+# a push run on the same commit from hiding the PR run: a dev -> main PR's
+# head is dev's head, whose dev-push run skips the tests the PR run makes.
 #
 #   a workflow's latest run failed / cancelled / timed out -> failure
 #   any latest run still queued, waiting or in progress    -> pending
@@ -33,20 +35,20 @@ fi
 IGNORE='^(PR gate|Discord — merge notify|Discord — Play track watch|Claude Code|Running Copilot Code Review|Copilot code review)$'
 
 runs=$(gh api --paginate "repos/$REPO/actions/runs?head_sha=$SHA&per_page=100" \
-  --jq '.workflow_runs[] | [.id, .name, .status, (.conclusion // "")] | @tsv' \
+  --jq '.workflow_runs[] | [.id, .name, .event, .status, (.conclusion // "")] | @tsv' \
   | sort -t$'\t' -k1,1n \
-  | awk -F'\t' '{ latest[$2] = $0 } END { for (n in latest) print latest[n] }')
+  | awk -F'\t' '{ latest[$2 FS $3] = $0 } END { for (n in latest) print latest[n] }')
 
 failed=""; pending=""; passed=0
-while IFS=$'\t' read -r _id name status conclusion; do
+while IFS=$'\t' read -r _id name event status conclusion; do
   [ -z "$name" ] && continue
   [[ "$name" =~ $IGNORE ]] && continue
   if [ "$status" != completed ]; then
-    pending="$pending $name;"
+    pending="$pending $name [$event];"
   else
     case "$conclusion" in
       success|skipped|neutral) passed=$((passed + 1)) ;;
-      *) failed="$failed $name ($conclusion);" ;;
+      *) failed="$failed $name [$event] ($conclusion);" ;;
     esac
   fi
 done <<< "$runs"

@@ -112,9 +112,14 @@ def redact(text):
     text = str(text)
     for var in SECRET_VARS:
         val = os.environ.get(var)
-        if val and len(val) >= 4:
-            text = text.replace(val, "<%s>" % var)
-            text = text.replace(urllib.parse.quote(val, safe=""), "<%s>" % var)
+        if not val or len(val) < 4:
+            continue
+        # call() reports URLs without their query, so a webhook configured
+        # with "?thread_id=…" must also be redacted in its query-free form.
+        for form in {val, val.split("?", 1)[0]}:
+            if len(form) >= 4:
+                text = text.replace(form, "<%s>" % var)
+                text = text.replace(urllib.parse.quote(form, safe=""), "<%s>" % var)
     return text
 
 

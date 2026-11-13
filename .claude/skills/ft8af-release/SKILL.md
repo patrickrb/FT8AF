@@ -31,7 +31,9 @@ What the merge fires:
 | `discord-merge-notify.yml` | 📦 post to Discord |
 | `discord-play-track-watch.yml` (every 10 min) | Discord post when the internal release appears, and later when Patrick promotes it |
 
-Releases cut at most once per day, unless a merged PR is labelled `hotfix`.
+Releases cut at most once per 24 hours, unless a PR in the backlog is
+labelled `hotfix`; the factory checks for an unreleased backlog on every
+cycle, idle or not.
 A desktop- or docs-only range builds but cuts no Android release; that's
 expected, not a failure.
 

@@ -94,11 +94,13 @@ gh api "repos/patrickrb/FT8AF/contents/tracks.json?ref=state/play-tracks" --jq .
   | base64 -d | python -c "import json,sys; d=json.load(sys.stdin); print([r['name'] for r in d['production'] if r['status']=='completed'])"
 ```
 
-If the completed production release name (an `android-dev.<run#>` tag) has a
-higher run number than the newest `release` in ft8af-site's
-`src/blog/*/post.json` on `main` (before the first post, the baseline is
-`android-dev.1312`, production on 2026-11-13), run the `feature-announce`
-skill for it before anything else.
+Run the `feature-announce` skill before anything else when either:
+- an `announce` issue is still **open** (a run was interrupted: resume its
+  unticked items), or
+- the completed production release (an `android-dev.<run#>` tag) has a
+  higher run number than the newest `announce` issue's release, open or
+  closed (before the first one, the baseline is `android-dev.1312`,
+  production on 2026-11-13).
 
 ### 0b. Stop the line
 Fix these first, in this order, as their own PRs:
@@ -186,15 +188,19 @@ thread. Never re-request after fixing. If Copilot hasn't answered in 30
 minutes, run the `code-review` skill instead and say so in the template's
 "Code review" section. Docs-only PRs get no review.
 
-Merge only when the gate says so:
+Merge only when the gate says so, re-evaluated right now rather than read
+from a status that a queued retry may not have touched yet:
 ```bash
 SHA=$(gh pr view <N> --json headRefOid --jq .headRefOid)
+REPO=patrickrb/FT8AF SHA=$SHA DRY_RUN=1 bash .github/scripts/pr_gate.sh     # must print "success — …"
 gh api repos/patrickrb/FT8AF/commits/$SHA/status --jq '.statuses[] | select(.context=="pr-gate") | .state'
 gh pr view <N> --json mergeStateStatus,isDraft --jq '"\(.mergeStateStatus) draft=\(.isDraft)"'
-gh pr merge <N> --merge          # only on pr-gate=success and CLEAN
+gh pr merge <N> --merge          # only when both say success and the PR is CLEAN
 ```
 If a check goes red, fix it on the branch; never re-run a flaky check more
-than once without finding why.
+than once without finding why. Re-run only through
+`bash scripts/factory/rerun.sh <run id>`: it refuses tag and manual-dispatch
+runs (the production path), and the guard blocks raw `gh run rerun`.
 
 ### 8. Close out
 After merge: comment the PR on the spec issue, drop `factory:in-progress`,
@@ -205,8 +211,12 @@ Save a memory only for what the repo can't tell the next session.
 
 ## Releasing dev → main
 
-At the end of a cycle that merged anything, and at most once per day unless a
-merged PR is labelled `hotfix`. Run the `ft8af-release` skill: it opens the
+At the end of **every** cycle, idle ones included, check for unreleased work:
+`git log --oneline origin/main..origin/dev` (ignoring merges of earlier
+release PRs). If there is any, and no dev → main release merged in the last
+24 hours (or a PR in the backlog is labelled `hotfix`), run the
+`ft8af-release` skill. Work that missed today's release goes out on the next
+cycle after the 24 hours, even if nothing new merges. The skill: it opens the
 release PR (with the "Test on your phone" list), merges it when every check
 passed, watches the internal publish land, and tells Patrick the build is
 ready to test.

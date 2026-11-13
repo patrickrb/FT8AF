@@ -34,6 +34,10 @@ RULES = [
     ("a production tag (android-v* / desktop-v*)", re.compile(
         r"\b(?:git\b.*\s(?:tag|push)\b|gh\s+(?:release\s+create|workflow\s+run)\b|gh\s+api\b.*\bgit/refs\b)"
         r".*\b(?:android|desktop)-v\d")),
+    ("a production workflow dispatch", re.compile(
+        r"\bgh\s+api\b.*/dispatches\b.*\b(?:android|desktop)-v\d|\bgh\s+api\b.*\b(?:android|desktop)-v\d.*/dispatches\b")),
+    ("a raw workflow re-run (use scripts/factory/rerun.sh, which refuses production runs)",
+     re.compile(r"\bgh\s+(?:run\s+rerun|api\b.*/actions/runs/\d+/rerun)")),
     ("merging past branch protection (--admin)", re.compile(r"\bgh\s+pr\s+merge\b.*\s--admin\b")),
 ]
 
@@ -64,6 +68,9 @@ BLOCK = [
     "gh release create android-v1.2.0", "gh workflow run android.yml --ref android-v1.2.0",
     "gh api repos/a/b/git/refs -f ref=refs/tags/android-v1.2.0 -f sha=x",
     "gh pr merge 12 --merge --admin",
+    "gh api repos/a/b/actions/workflows/android.yml/dispatches -f ref=android-v1.2.0",
+    "gh run rerun 123", "gh run rerun 123 --failed",
+    "gh api -X POST repos/a/b/actions/runs/123/rerun",
 ]
 ALLOW = [
     "git push -u origin feat/x", "git push", "git fetch origin",
@@ -76,6 +83,7 @@ ALLOW = [
     "bash scripts/factory/gradle.sh testDebugUnitTest",
     "gh pr merge 12 --merge", "gh release view android-dev.1538", "git tag --list 'android-dev.*'",
     "git fetch --tags", "gh run list --workflow=android.yml --branch main",
+    "bash scripts/factory/rerun.sh 123", "gh run view 123 --json headBranch",
 ]
 
 
