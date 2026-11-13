@@ -128,6 +128,7 @@
     <string name="qsopanel_qsoing_with">QSO con %1$s</string>
     <string name="qsopanel_waiting_for">In attesa di %1$s</string>
     <string name="qsopanel_tap_to_view">tocca per vedere ↗</string>
+    <string name="qsopanel_sent_report">inviato %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">In attesa di messaggi...</string>
     <string name="qsopanel_log_action">LOG</string>
@@ -226,9 +227,11 @@
     <string name="log_sync_title_no_services">NESSUN SERVIZIO ABILITATO</string>
     <string name="log_sync_title_syncing">SINCRONIZZAZIONE…</string>
     <string name="log_sync_title_complete">SINCRONIZZAZIONE COMPLETATA</string>
-    <string name="log_sync_enable_services">Abilita Cloudlog/Wavelog/Nextlog o QRZ nelle Impostazioni, poi riprova.</string>
+    <string name="log_sync_enable_services">Abilita Cloudlog/Wavelog/Nextlog, QRZ o World Radio League nelle Impostazioni, poi riprova.</string>
     <string name="log_sync_progress_count">%1$d di %2$d QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d accettati</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d già nel registro</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d scaricati</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d accettati</string>
     <string name="log_sync_nothing_to_upload">Nessun QSO nel log da caricare al momento.</string>
     <string name="log_sync_working">Elaborazione…</string>
@@ -237,6 +240,29 @@
     <string name="pota_tab_activate">Attiva</string>
     <string name="pota_tab_hunt">Hunt</string>
     <string name="pota_tab_history">Cronologia</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">adesso</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="one">%d s fa</item>
+        <item quantity="many">%d s fa</item>
+        <item quantity="other">%d s fa</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="one">%d min fa</item>
+        <item quantity="many">%d min fa</item>
+        <item quantity="other">%d min fa</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="one">%d h fa</item>
+        <item quantity="many">%d h fa</item>
+        <item quantity="other">%d h fa</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="one">%d g fa</item>
+        <item quantity="many">%d g fa</item>
+        <item quantity="other">%d g fa</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">Mostra l’ora UTC</string>
     <string name="pota_start_activation">Avvia attivazione</string>
     <string name="pota_park_reference_label">Riferimento parco (es. K-1234)</string>
     <string name="pota_notes_optional_label">Note (opzionale)</string>
@@ -248,6 +274,7 @@
     <string name="pota_self_spot_failed">Self-spot fallito — controlla il log</string>
     <string name="pota_active_park">ATTIVO — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_dupe">duplicato</string>
     <string name="pota_contacts_map">Mappa contatti</string>
     <string name="pota_back">Indietro</string>
     <string name="pota_valid_activation">attivazione valida</string>
@@ -395,6 +422,9 @@
     <string name="settings_tx_watchdog_desc">Interrompe automaticamente la trasmissione dopo il timeout</string>
     <string name="settings_stop_after">Stop dopo</string>
     <string name="settings_stop_after_desc">Interrompi la chiamata dopo N tentativi senza risposta</string>
+    <string name="settings_max_73">Invii 73 max</string>
+    <string name="settings_max_73_desc">Numero massimo di trasmissioni RR73/73 per contatto prima di proseguire</string>
+    <string name="settings_max_73_auto">Auto</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Hunt (risposta automatica al CQ)</string>
@@ -462,6 +492,9 @@
     <string name="settings_qrz_profile_lookup_desc">Username + password per QRZ XML API (avatar)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">Carica automaticamente i QSO su un\'istanza Cloudlog, Wavelog o Nextlog</string>
+    <string name="settings_cloudlog_download">Scarica i QSO da Wavelog durante la sincronizzazione</string>
+    <string name="settings_cloudlog_download_desc">La sincronizzazione aggiunge anche i QSO presenti nel tuo registro Wavelog ma non in questo. Non vengono inviati a QRZ né a World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">Richiede Wavelog: questo server non può elencare i suoi QSO.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">Ritardo PTT</string>
@@ -478,8 +511,11 @@
     <string name="bug_report_send_email">Invia email</string>
     <string name="bug_report_no_email_app">Nessuna app email trovata per inviare la segnalazione</string>
     <string name="bug_report_open_github">Apri issue su GitHub</string>
-    <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">Visualizza / condividi debug.log</string>
+    <string name="settings_share_logs">Condividi log</string>
+    <string name="settings_share_logs_desc">Invia debug.log via email, Discord, Drive…</string>
+    <string name="settings_view_logs">Visualizza log</string>
+    <string name="settings_share_logs_empty">Nessun log registrato finora</string>
     <string name="settings_about_body">Versione %1$s (build %2$s)\nData build %3$s\n\nFT8, reso facile.\n\nUn\'app transceiver FT8 autonoma per Android. Controllo radio via USB, Bluetooth e rete con sequenziamento e logging automatici.</string>
     <string name="settings_website">Sito web</string>
     <string name="settings_community">Community</string>
@@ -499,8 +535,6 @@
     <string name="settings_conn_network">Rete</string>
     <string name="settings_no_usb_serial">Nessun dispositivo seriale USB rilevato. Collega un cavo USB alla tua radio e riprova.</string>
     <string name="settings_no_bluetooth_devices">Nessun dispositivo Bluetooth associato trovato. Associa prima un dispositivo nelle impostazioni Bluetooth di Android.</string>
-    <string name="settings_debug_mode_enabled">Modalità debug abilitata</string>
-    <string name="settings_debug_mode_disabled">Modalità debug disabilitata</string>
     <string name="settings_edit_operator_identity">Modifica identità operatore</string>
     <string name="settings_callsign">Nominativo</string>
     <string name="settings_callsign_hint">es. W1AW</string>
@@ -523,6 +557,7 @@
     <string name="settings_username_hint">Il tuo username QRZ.com</string>
     <string name="settings_password">Password</string>
     <string name="settings_enabled_bands_dialog_desc">Le bande nascoste non appariranno nei selettori di frequenza.</string>
+    <string name="settings_enabled_bands_keep_one">Almeno una banda deve restare attiva.</string>
     <string name="settings_select_serial_port">Seleziona porta seriale</string>
     <string name="settings_tx_volume_advice">Regola in tempo reale — il tuo prossimo TX usa questo livello. Osserva l\'ALC della radio e abbassa finché tocca appena la linea.</string>
     <string name="settings_input_volume">Volume di ingresso</string>
@@ -549,6 +584,8 @@
     <string name="cq_offset_moved">Offset CQ spostato in uno spazio libero: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Offset TX libero automatico</string>
     <string name="settings_auto_clear_tx_desc">Chiamando CQ, sceglie uno spazio libero dall\'attività recente della banda e si sposta se viene occupato</string>
+    <string name="settings_auto_clear_tx_min">Offset automatico minimo</string>
+    <string name="settings_auto_clear_tx_min_desc">La scelta automatica non va mai sotto questo offset. Alzalo per tenere le armoniche audio fuori dalla banda passante</string>
     <string name="tune_content_description">Tune: avvia l\'accordatore della radio o trasmette una portante continua per l\'accordo dell\'antenna</string>
     <string name="tune_stopped_timeout">Tune fermato dopo %1$d s</string>
     <string name="tune_blocked_tx">Ferma il CQ/QSO prima di usare Tune</string>
@@ -580,4 +617,15 @@
     <string name="settings_bin_agg_max">Massimo</string>
     <string name="settings_bin_agg_avg">Media</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d accettati</string>
+    <string name="settings_wrl_desc">Carica automaticamente i QSO nel tuo logbook di World Radio League (richiede una chiave Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Genera una chiave in World Radio League da Integrations → Developer API. Una sola chiave vale per tutto l\'account.</string>
+    <string name="settings_wrl_logbook">Logbook</string>
+    <string name="settings_wrl_logbook_default">Logbook predefinito</string>
+    <string name="settings_wrl_loading_logbooks">Caricamento logbook…</string>
+    <string name="settings_wrl_no_logbooks">Il tuo account World Radio League non ha ancora logbook.</string>
+    <string name="settings_wrl_create_logbook">Crea il logbook “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">Creazione del logbook…</string>
 </resources>

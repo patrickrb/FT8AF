@@ -24,11 +24,58 @@ public class WifiConnector extends BaseRigConnector{
     public WifiRig wifiRig;
     public OnWifiDataReceived onWifiDataReceived;
 
+    // Real link state (issue #754). wifiRig.opened flips true the instant start() is called,
+    // before the UDP handshake — reading it as "connected" made the Settings header claim a
+    // connection with the radio off. This tracks the actual login/close edges instead, and
+    // feeds isConnected().
+    private final WifiLinkState linkState = new WifiLinkState();
+
 
     public WifiConnector(int controlMode, WifiRig wifiRig) {
         super(controlMode);
         this.wifiRig=wifiRig;
+        // Forward the rig's link lifecycle to the shared connector-state pipeline so the CAT
+        // status chip, connect/disconnect toasts, and the liveness watchdog all light up for
+        // the network path exactly as they do for USB/Bluetooth.
+        this.wifiRig.setOnLinkStateChanged(new WifiRig.OnLinkStateChanged() {
+            @Override
+            public void onSessionBegin(int session) {
+                // Fresh state for this attempt, scoped to its session id, at the instant the
+                // rig advances the counter — so an event from the previous session can no
+                // longer be admitted afterwards (Copilot review on #778).
+                linkState.reset(session);
+            }
 
+            @Override
+            public void onLoginResult(int session, boolean ok) {
+                emit(linkState.onLoginResult(session, ok), "login " + (ok ? "ok" : "failed"));
+            }
+
+            @Override
+            public void onSendError(int session) {
+                emit(linkState.onSendError(session), "network send error");
+            }
+
+            @Override
+            public void onClosed() {
+                emit(linkState.onClosed(), "closed");
+            }
+        });
+    }
+
+    private void emit(WifiLinkState.Emit action, String reason) {
+        if (action == null || getOnConnectorStateChanged() == null) return;
+        switch (action) {
+            case CONNECTED:
+                getOnConnectorStateChanged().onConnected();
+                break;
+            case DISCONNECTED:
+                getOnConnectorStateChanged().onDisconnected();
+                break;
+            case ERROR:
+                getOnConnectorStateChanged().onRunError(reason);
+                break;
+        }
     }
 
     @Override
@@ -41,6 +88,17 @@ public class WifiConnector extends BaseRigConnector{
     @Override
     public void connect() {
         super.connect();
+        // Announce the attempt so the chip shows "connecting" (amber) immediately; the
+        // CONNECTED/ERROR edge follows from the login response. A reconnect reuses this same
+        // connector instance, so each attempt needs a fresh link state — otherwise the
+        // terminal flag from the previous close/error swallows the next login and the chip
+        // never leaves "connecting" (Copilot review on #754). The reset itself happens in
+        // onSessionBegin(), which the rig fires from start() as it advances the session id:
+        // doing it here, before start(), left a window in which a late event from the old
+        // session still matched the current id and hit the reset state (Copilot #778).
+        if (getOnConnectorStateChanged() != null) {
+            getOnConnectorStateChanged().onConnecting();
+        }
         wifiRig.start();
     }
 
@@ -72,7 +130,9 @@ public class WifiConnector extends BaseRigConnector{
 
     @Override
     public boolean isConnected() {
-        return wifiRig.opened;
+        // The real link state (post-login, pre-close), not wifiRig.opened which is true the
+        // instant start() runs — see linkState (#754).
+        return linkState.isConnected();
     }
 
     public void setOnWifiDataReceived(OnWifiDataReceived onDataReceived) {

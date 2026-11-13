@@ -93,9 +93,10 @@ internal fun buildQsoLog(
         // hashed callsigns (e.g. "<CALL>" → "CALL") so they match displayCallsign. (#255)
         val from = msg.getCallsignFrom()
         // Only the target station's traffic appears in this panel. Own-callsign
-        // loopback (from == us) is filtered upstream (OwnTxEchoFilter) and there
-        // is deliberately no decoded-list TX branch, so anything not from the
-        // target is skipped here — TX rows come solely from synthTx below.
+        // decodes are normally filtered upstream (OwnTxEchoFilter), and full
+        // duplex deliberately puts them back in the list; either way they are not
+        // from the target, so this guard skips them and there is no TX row
+        // duplicated against synthTx. TX rows come solely from synthTx below.
         if (!from.equals(displayCallsign, ignoreCase = true)) return@forEach
 
         // Skip CQ/DE/QRZ messages — the target is calling for contacts, not
@@ -122,6 +123,76 @@ internal fun buildQsoLog(
     entries.addAll(synthTx)
 
     return entries.sortedBy { it.utcTime }
+}
+
+/**
+ * Upper bound on the accumulated RX log for a single target, so a QSO that never
+ * completes (a stuck target on a busy frequency) can't grow the list without limit.
+ * Far above any real exchange — a standard QSO is 4-6 rows, and a stubborn one with
+ * repeats is a couple of dozen.
+ */
+internal const val MAX_RX_LOG_ENTRIES = 100
+
+/**
+ * Stable identity for one conversation row, used to de-duplicate across snapshots.
+ *
+ * <p>Time is part of the key on purpose: a station that sends the same text in two
+ * different cycles produced two real transmissions and gets two rows, matching how TX
+ * rows are logged per transmission rather than per unique message.
+ */
+internal fun qsoLogKey(entry: QsoLogEntry): String =
+    "${entry.direction}|${entry.utcTime}|${entry.messageText}"
+
+/**
+ * Merge freshly-decoded rows into the rows this panel has already shown.
+ *
+ * <p>This is what makes the panel's RX history durable. The decode list it is derived
+ * from is shared, capped, and periodically emptied — `trimToMessageCount` drops from the
+ * front once it hits `MESSAGE_COUNT` (about an hour of busy-band operating), the
+ * clear-every-cycle setting wipes it at each slot boundary, a band change or the Clear
+ * button empties it outright. Re-deriving the conversation from it on every recomposition
+ * meant any of those retroactively erased messages the operator had already read, and the
+ * log box — which sizes to its content — visibly shrank. TX rows never had this problem
+ * because they live in the composable's own state; now RX rows don't either.
+ *
+ * <p>Duplicates are expected input, not an error: the decode list is cumulative, so the
+ * same message reappears in every later snapshot, and the late full-slot pass re-delivers
+ * a slot's messages alongside newly recovered ones.
+ *
+ * <p>A repeat of a known key REPLACES the stored row rather than being discarded, because
+ * a row's metadata is not fixed once seen. `FT8SignalListener.checkMessageSame` upgrades a
+ * stored message's SNR *in place* when a later pass decodes the same text better ("prefer
+ * known SNR over unknown; when both are known, keep the higher"), so the same key can
+ * legitimately arrive with a better SNR than the one first captured. Keeping the first
+ * would pin the panel to a stale — often unknown — report for the rest of the QSO.
+ * Latest-wins matches that upstream resolution, which only ever moves toward the better
+ * value.
+ *
+ * @param existing rows already accumulated for the current target
+ * @param incoming rows just derived from the live decode list
+ * @return the union, ascending by time, trimmed to [MAX_RX_LOG_ENTRIES] newest
+ */
+internal fun mergeRxLog(
+    existing: List<QsoLogEntry>,
+    incoming: List<QsoLogEntry>,
+): List<QsoLogEntry> {
+    if (incoming.isEmpty()) return existing
+    val byKey = LinkedHashMap<String, QsoLogEntry>(existing.size + incoming.size)
+    existing.forEach { byKey[qsoLogKey(it)] = it }
+    var changed = false
+    incoming.forEach { entry ->
+        val key = qsoLogKey(entry)
+        // Structural inequality, so an unchanged repeat (the common case, every cycle)
+        // still costs nothing and preserves the caller's instance below.
+        if (byKey[key] != entry) {
+            byKey[key] = entry
+            changed = true
+        }
+    }
+    if (!changed) return existing
+    val merged = byKey.values.sortedBy { it.utcTime }
+    if (merged.size <= MAX_RX_LOG_ENTRIES) return merged
+    return merged.subList(merged.size - MAX_RX_LOG_ENTRIES, merged.size).toList()
 }
 
 /**
@@ -224,6 +295,13 @@ fun ActiveQsoPanel(
     var pendingTxLog by remember { mutableStateOf(false) }
     var synthTxTarget by remember { mutableStateOf<String?>(null) }
 
+    // Accumulated RX/BUSY rows for the current target, held here for the same reason
+    // synthTxLog is: the panel must not lose conversation it has already shown. These
+    // used to be re-derived from the shared decode list on every recomposition, so a
+    // trim, a clear-every-cycle wipe, a band change, or the Clear button silently
+    // erased them mid-QSO and the log box shrank. See mergeRxLog.
+    val rxLog = remember { mutableStateListOf<QsoLogEntry>() }
+
     // Clear TX state when the target genuinely changes to a different station.
     // Also handles the same-callsign-new-QSO edge case: when a QSO ends
     // (displayCallsign → null for > 500ms) and the same station is worked
@@ -235,6 +313,7 @@ fun ActiveQsoPanel(
         if (displayCallsign != null) {
             if (displayCallsign != synthTxTarget) {
                 synthTxLog.clear()
+                rxLog.clear()
                 wasTransmitting = false
                 pendingTxLog = false
             }
@@ -271,16 +350,55 @@ fun ActiveQsoPanel(
         }
     }
 
-    // Build the conversation log to/from the target station. The classification
-    // and ordering live in buildQsoLog() so they can be unit tested.
-    val qsoMessages: List<QsoLogEntry> = remember(messageList, messageList?.size, displayCallsign, transmittingMessage, synthTxLog.size) {
-        buildQsoLog(
+    // The target the conversation log belongs to. Falls back to synthTxTarget — which
+    // LaunchedEffect(displayCallsign) only clears after a 500ms settle — so the same
+    // LiveData null-flicker on tab switches that #250 fixed for the TX rows can no
+    // longer blank the RX rows either. A genuine QSO end still clears both, one target
+    // change later, exactly as before.
+    val logTarget = displayCallsign ?: synthTxTarget
+
+    // Fold this snapshot's decodes for the target into the durable RX log. Only new
+    // rows survive the merge, so the cumulative decode list re-presenting the same
+    // messages every cycle is a no-op rather than a source of duplicates.
+    LaunchedEffect(messageList, messageList?.size, logTarget) {
+        val target = logTarget ?: return@LaunchedEffect
+        val incoming = buildQsoLog(
             messageList = messageList,
-            displayCallsign = displayCallsign ?: "",
+            displayCallsign = target,
             myCallsign = GeneralVariables.myCallsign ?: "",
-            synthTx = synthTxLog.toList(),
+            synthTx = emptyList(),
         )
+        val existing = rxLog.toList()
+        val merged = mergeRxLog(existing, incoming)
+        // mergeRxLog returns the caller's OWN instance when it added nothing, so this
+        // identity check keeps snapshot writes (and the recomposition each triggers) to
+        // real changes. Size alone would miss a merge that both added and trimmed at
+        // MAX_RX_LOG_ENTRIES.
+        if (merged !== existing) {
+            rxLog.clear()
+            rxLog.addAll(merged)
+        }
     }
+
+    // The conversation shown: durable RX/BUSY rows plus our own TX rows, in time order.
+    // Computed inline rather than remember()d — these are snapshot state lists, so
+    // reading them here registers the dependency and any change recomposes. A remember
+    // keyed on sizes would miss a merge that trims as it appends.
+    val qsoMessages: List<QsoLogEntry> =
+        if (logTarget == null) emptyList()
+        else (rxLog + synthTxLog).sortedBy { it.utcTime }
+
+    // Banner SNR (#953): the heard value is the same decode the QSO sheet's Signal
+    // card shows, falling back to the durable RX log so it doesn't blink out when the
+    // decode list is cleared. The sent report is read on each recomposition; it
+    // changes only when a TX message is built, which also updates transmittingMessage.
+    val latestFromTarget = remember(messageList, messageList?.size, displayCallsign) {
+        latestDecodeFrom(messageList, displayCallsign)
+    }
+    val bannerSnr = qsoBannerSnr(
+        heard = heardSnr(latestFromTarget, rxLog.lastOrNull { it.snr != null }?.snr),
+        sent = sentReportOrNull(mainViewModel.ft8TransmitSignal.sentTargetReport),
+    )
 
     AnimatedVisibility(
         visible = expanded && (hasTarget || isActivated),
@@ -312,7 +430,7 @@ fun ActiveQsoPanel(
                     isTransmitting -> stringResource(R.string.qsopanel_qsoing_with, displayCallsign)
                     else -> stringResource(R.string.qsopanel_waiting_for, displayCallsign)
                 },
-                snr = if (displayCallsign != null) toCallsign?.snr else null,
+                snr = if (displayCallsign != null) bannerSnr else null,
                 onClick = if (displayCallsign != null) onReopenSheet else null,
                 onLog = if (displayCallsign != null) {
                     {
@@ -367,7 +485,7 @@ fun ActiveQsoPanel(
 @Composable
 private fun StationHeader(
     targetCallsign: String,
-    snr: Int?,
+    snr: QsoBannerSnr?,
     onClick: (() -> Unit)? = null,
     onLog: (() -> Unit)? = null,
     onClear: (() -> Unit)? = null,
@@ -400,10 +518,18 @@ private fun StationHeader(
                 fontWeight = FontWeight.Bold,
                 fontFamily = GeistMonoFamily,
             )
-            if (snr != null) {
+            snr?.heard?.let { heard ->
                 Text(
-                    text = if (snr >= 0) "+${snr}dB" else "${snr}dB",
+                    text = bannerSnrLabel(heard),
                     color = Signal,
+                    fontSize = 11.sp,
+                    fontFamily = GeistMonoFamily,
+                )
+            }
+            snr?.sent?.let { sent ->
+                Text(
+                    text = stringResource(R.string.qsopanel_sent_report, bannerSnrLabel(sent)),
+                    color = TextFaint,
                     fontSize = 11.sp,
                     fontFamily = GeistMonoFamily,
                 )
@@ -669,6 +795,78 @@ private fun TxSelector(
     }
 }
 
+/**
+ * Order the pileup caller chips for display. When [strongestFirst] the queue is
+ * sorted by SNR descending (best copy first) — matching the auto-dequeue policy
+ * in [com.k1af.ft8af.ft8transmit.CallerQueueOrdering] — so the chip the operator
+ * is nudged to tap next is the same station the engine would pick. [sortedByDescending]
+ * is stable, so equal-SNR callers keep their first-heard order. Off preserves the
+ * raw queue (first-heard) order. Extracted for unit testing.
+ */
+internal fun orderCallerQueue(
+    queue: List<QueuedCaller>,
+    strongestFirst: Boolean,
+): List<QueuedCaller> =
+    if (strongestFirst) queue.sortedByDescending { it.snr } else queue
+
+/**
+ * Signed SNR label for a queued caller chip (e.g. "+5", "-12"). A queued caller
+ * with no reported SNR carries 0, which renders as "+0".
+ */
+internal fun callerSnrLabel(snr: Int): String = if (snr >= 0) "+$snr" else "$snr"
+
+/**
+ * The newest decode from [callsign] in [messages] (arrival order), or null. Both
+ * sides are compared with hashed-call brackets stripped, so `<CALL>` and `CALL`
+ * find the same decodes whichever form the caller holds: the sheet is keyed by the
+ * tapped row's raw callsign, the banner by the TX target. The QSO sheet's Signal
+ * card and the QSO banner both read this decode, so they show the same SNR (#953).
+ */
+internal fun latestDecodeFrom(messages: List<Ft8Message>?, callsign: String?): Ft8Message? {
+    val key = callsign?.replace("<", "")?.replace(">", "")
+    if (key.isNullOrEmpty()) return null
+    return messages?.lastOrNull { it.getCallsignFrom().equals(key, ignoreCase = true) }
+}
+
+/**
+ * How we last heard the target: the [latest] decode's SNR, else [fallback] (an
+ * older heard value) when the station isn't in the current decode list, which is
+ * emptied by clear-every-cycle, band changes and Clear. SNR_UNKNOWN counts as none.
+ */
+internal fun heardSnr(latest: Ft8Message?, fallback: Int?): Int? =
+    latest?.takeIf { it.hasSnr() }?.snr
+        ?: fallback?.takeIf { it != Ft8Message.SNR_UNKNOWN }
+
+/**
+ * The report we sent for display, from FT8TransmitSignal.getSentTargetReport():
+ * null while it holds -100 (no report sent yet: grid call, Field Day exchange,
+ * Hound before the Fox report). SNR_UNKNOWN maps to 0, which is what
+ * TransmitCallsign.getSnr() puts on the air for it.
+ */
+internal fun sentReportOrNull(raw: Int): Int? = when (raw) {
+    -100 -> null
+    Ft8Message.SNR_UNKNOWN -> 0
+    else -> raw
+}
+
+/**
+ * The two SNR values the QSO banner can show. [heard] is how we last heard the
+ * target (the same number as the sheet's Signal card). [sent] is the report we
+ * transmitted to them, which stays fixed while [heard] moves with conditions.
+ * Showing that report unlabelled as "the" SNR is what made #953 look like a bug.
+ */
+internal data class QsoBannerSnr(val heard: Int?, val sent: Int?)
+
+/**
+ * Pair [heard] with [sent], keeping [sent] only when it adds something: it differs
+ * from [heard], or we have no heard value at all.
+ */
+internal fun qsoBannerSnr(heard: Int?, sent: Int?): QsoBannerSnr =
+    QsoBannerSnr(heard = heard, sent = sent?.takeIf { it != heard })
+
+/** Banner SNR text: "+3dB" / "-7dB". */
+internal fun bannerSnrLabel(snr: Int): String = "${callerSnrLabel(snr)}dB"
+
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CallerQueueBar(
@@ -678,6 +876,12 @@ private fun CallerQueueBar(
     if (queue.isEmpty()) return
 
     Spacer(modifier = Modifier.height(6.dp))
+
+    // Display order tracks the auto-dequeue policy so the leftmost chip is the
+    // station the engine would work next. Computed inline (the queue is capped at
+    // ~10 callers) rather than remember()d, so an SNR update that mutates a queued
+    // caller in place still re-sorts on the next recomposition.
+    val ordered = orderCallerQueue(queue, GeneralVariables.pileupStrongestFirst)
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -697,8 +901,8 @@ private fun CallerQueueBar(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            queue.forEach { caller ->
-                Box(
+            ordered.forEach { caller ->
+                Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
                         .background(SignalSoft)
@@ -707,13 +911,20 @@ private fun CallerQueueBar(
                             else Modifier
                         )
                         .padding(horizontal = 6.dp, vertical = 2.dp),
-                    contentAlignment = Alignment.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Text(
                         text = caller.callsign,
                         color = Signal,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium,
+                        fontFamily = GeistMonoFamily,
+                    )
+                    Text(
+                        text = callerSnrLabel(caller.snr),
+                        color = Signal.copy(alpha = 0.65f),
+                        fontSize = 9.sp,
                         fontFamily = GeistMonoFamily,
                     )
                 }

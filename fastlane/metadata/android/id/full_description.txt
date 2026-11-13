@@ -1,0 +1,70 @@
+FT8AF mengubah ponsel atau tablet Android Anda menjadi stasiun FT8 yang lengkap. Sambungkan radio lewat USB, ketuk CQ, dan bekerjalah ke seluruh dunia — tanpa laptop.
+
+Isi tanda panggil, samakan baud rate, pilih perangkat audio: sebagian besar operator sudah memanggil CQ dalam hitungan menit. Aplikasi menyetel radio, mengikuti Anda saat berganti band, dan mencatat kontak begitu QSO selesai.
+
+Dekode seluruh band secara real time dan pancarkan dengan FT8, FT4, dan FT2 — portabel dari puncak bukit, saat mengaktivasi taman, di Field Day, atau sekadar dari rumah.
+
+YANG ANDA PERLUKAN
+• Radio HF dengan port data atau USB
+• Kabel USB OTG atau antarmuka audio USB, misalnya DigiRig
+• Ponsel atau tablet dengan Android 6.0 ke atas
+
+RADIO YANG DIDUKUNG
+Sebagian besar transceiver HF lewat kontrol CAT melalui USB (Yaesu, Icom, Kenwood, Elecraft, dan lainnya), ditambah radio jaringan seperti FlexRadio, Icom IP, dan Xiegu X6100. Mode kontrol: CAT, VOX, RTS, dan DTR.
+
+DEKODE & PANCAR
+• FT8, FT4, dan FT2 didekode real time dengan mode cepat dan mendalam
+• Tampilan waterfall dan spektrum langsung, tuning cukup dengan sentuhan
+• Panggilan CQ, panggilan terarah, dan pesan teks bebas
+• Ganti band di aplikasi, radio ikut menyesuaikan
+• Pemilihan slot pancar, TX watchdog, dan pengawasan otomatis
+• Mode Hound untuk mengerjakan DXpedition
+• DT pada setiap dekode, seperti yang dilakukan WSJT-X
+
+BURU YANG BELUM ANDA PUNYA
+• Hunt menjawab CQ untuk Anda, jadi bukaan band dipakai untuk berkontak
+• Pilih siapa yang dijawab: terbaru, terkuat, terlemah, terjauh, POTA/SOTA, DXCC baru, atau grid baru
+• Penanda DXCC BARU, GRID BARU, dan ZONA BARU di daftar dekode
+• Antrean pemanggil menjaga Anda pada stasiun yang sedang dikerjakan, bukan yang paling kencang
+
+PARKS ON THE AIR
+• Pencarian taman dan pelacakan aktivasi sudah menyatu
+• Self-spot ke pota.app tanpa keluar dari aplikasi
+• Kontak taman-ke-taman, terlacak dan terekspor
+• Kirim log aktivasi Anda langsung ke pota.app
+
+BUKU LOG
+• Kontak tercatat otomatis begitu QSO selesai
+• Pelacakan DXCC, zona CQ dan ITU, serta Worked All States
+• Statistik per band dan per jarak
+• Impor dan ekspor berkas ADIF
+• Ubah atau hapus entri log
+
+SINKRONISASI LOG
+• Unggah QSO ke Cloudlog, Wavelog, QRZ.com, atau Nextlog
+• Status sinkronisasi per kontak, jadi Anda tahu apa yang sudah terunggah
+• Uji koneksi dari Pengaturan untuk memeriksa kredensial Anda
+
+PETA & PSK REPORTER
+• Peta interaktif berisi kontak Anda
+• Lapisan PSK Reporter memperlihatkan di mana sinyal Anda terdengar di dunia
+• Grid locator dan jarak untuk setiap stasiun yang terdekode
+
+SELALU TEPAT WAKTU
+FT8 memerlukan UTC dengan ketelitian sekitar satu detik. FT8AF menyelaraskan lewat NTP, mendisiplinkan jam dari GPS, atau mengoreksi diri dari DT sinyal yang didekodenya — Anda tetap di dalam slot meski tanpa internet dan tanpa sinyal seluler.
+
+AUDIO & KONEKTIVITAS
+• Perangkat audio USB, audio Bluetooth, dan headset Bluetooth
+• Laju sampel dan kedalaman bit yang dapat diatur
+• Sambung otomatis ke radio saat USB dicolokkan
+
+BEBAS TANGAN
+• Pengumuman suara saat ada stasiun memanggil atau QSO selesai
+• Perintah suara dengan tekan-untuk-bicara
+• Layar status Android Auto untuk beroperasi dari kendaraan
+
+DIBUAT UNTUK OPERATOR
+FT8AF adalah fork modern dari FT8CN karya BG7YOZ, dibangun ulang dengan antarmuka Compose masa kini, diterjemahkan ke 17 bahasa, serta membawa ratusan fitur baru dan perbaikan. Dikembangkan oleh K1AF dan N0rC dalam perjalanan darat menuju Hamvention, di jalan I-70 pada 70 mph.
+
+Sumber terbuka di bawah Lisensi MIT.
+https://github.com/patrickrb/FT8AF

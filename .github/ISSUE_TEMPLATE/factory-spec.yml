@@ -1,0 +1,76 @@
+name: Factory spec
+description: A feature or fix for the factory loop to build, test and ship to the Play internal track.
+title: "<what the operator gets>"
+labels: ["factory:draft"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A spec is ready when an agent could build it without asking you anything.
+        Relabel it `factory:ready` once **Open questions** is empty; the factory
+        loop (`.claude/skills/ft8af-factory/SKILL.md`) takes ready specs oldest
+        first (`priority:high` before the rest). Each shipped user-facing feature
+        gets a blog post and social posts once you promote it to production.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One or two sentences. What the operator can do afterwards, and why it matters.
+    validations:
+      required: true
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: Behaviour
+      description: What it does, on screen and off. Copy that must appear verbatim goes in quotes.
+    validations:
+      required: true
+  - type: textarea
+    id: scenarios
+    attributes:
+      label: Scenarios (acceptance)
+      description: |
+        Given / when / then, one per line. Each becomes a test (JVM unit test,
+        ham-radio-core test, native host test or emulator flow) and passing all
+        of them is what "done" means; nobody reads the diff to decide. Include
+        the edge cases you care about.
+      placeholder: |
+        - Given FT4 is selected on 20 m, when I switch to FT8, then the dial moves to 14.074 and stays on 20 m.
+        - Given no radio is linked, when I tap Call CQ, then a confirm sheet says the radio isn't linked.
+    validations:
+      required: true
+  - type: textarea
+    id: decisions
+    attributes:
+      label: Decisions
+      description: Settled calls the agent must not re-open (copy, defaults, which radios, what to cut).
+  - type: dropdown
+    id: platforms
+    attributes:
+      label: Platforms
+      options:
+        - Android (default)
+        - Android and desktop
+        - Desktop only
+        - Site / tooling only
+    validations:
+      required: true
+  - type: dropdown
+    id: radio
+    attributes:
+      label: Touches the radio?
+      description: Transmit, PTT, CAT, USB audio/serial or audio routing. These ship to internal and wait for your phone test before production.
+      options:
+        - "No"
+        - "Yes (needs-device-test)"
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+  - type: textarea
+    id: open-questions
+    attributes:
+      label: Open questions
+      description: Anything still undecided. Must be empty for `factory:ready`.

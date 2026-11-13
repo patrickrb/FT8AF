@@ -1,7 +1,10 @@
 package radio.ks3ckc.ft8af.ui.settings
 
+import android.content.Context
 import android.media.AudioManager
+import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableIntStateOf
@@ -33,19 +37,31 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.k1af.ft8af.FullDuplexMonitor
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import com.k1af.ft8af.connector.CableSerialPort
 import com.k1af.ft8af.connector.ConnectMode
+import com.k1af.ft8af.connector.SerialPortLabel
 import com.k1af.ft8af.database.ControlMode
 import com.k1af.ft8af.database.OperationBand
 import com.k1af.ft8af.database.RigNameList
 import com.k1af.ft8af.rigs.BaseRigOperation
+import com.k1af.ft8af.rigs.CivAddressConfig
 import com.k1af.ft8af.rigs.InstructionSet
 import com.k1af.ft8af.ui.AudioDeviceSpinnerAdapter
+import com.k1af.ft8af.wave.AudioChannelCapability
+import com.k1af.ft8af.wave.AudioChannelSelect
+import com.k1af.ft8af.ft8transmit.QmxCatTones
+import com.k1af.ft8af.wave.UsbAudioDevice
+import radio.ks3ckc.ft8af.MediaVolumeRestore
+import radio.ks3ckc.ft8af.PER_BAND_INPUT_LEVEL_KEY
 import radio.ks3ckc.ft8af.PER_BAND_OUTPUT_LEVEL_KEY
+import radio.ks3ckc.ft8af.inputLevelChangedInDialog
+import radio.ks3ckc.ft8af.inputLevelFromGainPercent
 import radio.ks3ckc.ft8af.outputLevelFromVolumePercent
+import radio.ks3ckc.ft8af.saveInputLevelForCurrentBand
 import radio.ks3ckc.ft8af.saveOutputLevelForCurrentBand
 import radio.ks3ckc.ft8af.theme.*
 import radio.ks3ckc.ft8af.ui.components.FT8AFIconButton
@@ -72,6 +88,7 @@ fun RadioAudioSettings(
     val bandIndexLive by GeneralVariables.mutableBandChange.observeAsState(
         GeneralVariables.bandListIndex,
     )
+    val bandFreqLive by GeneralVariables.mutableBandFreq.observeAsState(GeneralVariables.band)
     val baseFreqLive by GeneralVariables.mutableBaseFrequency.observeAsState(
         GeneralVariables.getBaseFrequency(),
     )
@@ -102,7 +119,19 @@ fun RadioAudioSettings(
     // defensive config-load clamp existed) can't start the row/slider invalid.
     var inputVolume by remember {
         mutableIntStateOf(
-            clampVolumePercent((GeneralVariables.inputGainPercent * 100).toInt(), INPUT_VOLUME_MAX),
+            clampVolumePercent(
+                inputLevelFromGainPercent(GeneralVariables.inputGainPercent), INPUT_VOLUME_MAX,
+            ),
+        )
+    }
+    // Level when the Input Volume dialog opened: dismissing without moving the
+    // slider must not overwrite this band's saved per-band level (issue #927).
+    var inputVolumeAtOpen by remember { mutableIntStateOf(inputVolume) }
+    // A band change from this screen's picker may restore a per-band input
+    // volume (issue #927); re-read it so the row shows the restored value.
+    LaunchedEffect(bandIndexLive) {
+        inputVolume = clampVolumePercent(
+            inputLevelFromGainPercent(GeneralVariables.inputGainPercent), INPUT_VOLUME_MAX,
         )
     }
 
@@ -120,6 +149,20 @@ fun RadioAudioSettings(
     }
     var audioInputName by remember { mutableStateOf(audioInputAdapter.getDeviceDisplayName(audioInputPos)) }
     var audioOutputName by remember { mutableStateOf(audioOutputAdapter.getDeviceDisplayName(audioOutputPos)) }
+    // Channel count of each selected device, for the RX/TX channel selectors below.
+    // A mono device has no side to choose, so the control greys out. Re-queried in
+    // each picker's onSelect: AudioDeviceInfo is a snapshot of one device, not a
+    // live handle, so switching devices has to re-ask.
+    var audioInputChannels by remember {
+        mutableIntStateOf(selectedDeviceMaxChannels(
+            context, GeneralVariables.audioInputDeviceId, AudioManager.GET_DEVICES_INPUTS,
+        ))
+    }
+    var audioOutputChannels by remember {
+        mutableIntStateOf(selectedDeviceMaxChannels(
+            context, GeneralVariables.audioOutputDeviceId, AudioManager.GET_DEVICES_OUTPUTS,
+        ))
+    }
 
     // Dialog visibility state
     var showRigModelPicker by remember { mutableStateOf(false) }
@@ -142,7 +185,8 @@ fun RadioAudioSettings(
 
     // Derived display strings
     val connectModeStr = ConnectMode.getModeStr(connectMode)
-    val bandStr = remember(bandIndexLive) {
+    // Keyed on the reported dial too: off-plan reports keep the same index (#978).
+    val bandStr = remember(bandIndexLive, bandFreqLive) {
         BaseRigOperation.getFrequencyAllInfo(GeneralVariables.band)
     }
     val baseFreqStr = remember(baseFreqLive) { GeneralVariables.getBaseFrequencyStr() }
@@ -200,9 +244,17 @@ fun RadioAudioSettings(
                 mainViewModel.databaseOpr.writeConfig(
                     "baudRate", GeneralVariables.baudRate.toString(), null,
                 )
+                // "civ" is a HEX key (rigaddress.txt, the legacy screen and the loader all
+                // agree). Writing Int.toString() here stored "164" for an IC-705's 0xA4,
+                // which reloaded as 0x64 and silently killed CAT frequency control (#753).
+                val encodedCiv = CivAddressConfig.encode(GeneralVariables.civAddress)
+                mainViewModel.databaseOpr.writeConfig("civ", encodedCiv, null)
+                // Provenance marker: tells the #753 repair this value is hex and trusted.
                 mainViewModel.databaseOpr.writeConfig(
-                    "civ", GeneralVariables.civAddress.toString(), null,
+                    CivAddressConfig.FORMAT_KEY, CivAddressConfig.FORMAT_HEX, null,
                 )
+                GeneralVariables.civAddressStored = encodedCiv
+                GeneralVariables.civAddressFormatKnown = true
             },
         )
     }
@@ -379,10 +431,14 @@ fun RadioAudioSettings(
             excludedBands = excludedBands,
             onDismiss = { showEnabledBands = false },
             onToggle = { waveLength, enabled ->
-                val updated = excludedBands.toMutableSet()
-                if (enabled) updated.remove(waveLength) else updated.add(waveLength)
                 // Never let the user hide every band; at least one must remain.
-                if (updated.size >= OperationBand.getAllWaveLengths().size) return@BandToggleDialog
+                val updated = OperationBand.toggleExcludedBand(
+                    OperationBand.getAllWaveLengths(), excludedBands, waveLength, enabled,
+                )
+                if (updated == null) {
+                    Toast.makeText(context, R.string.settings_enabled_bands_keep_one, Toast.LENGTH_SHORT).show()
+                    return@BandToggleDialog
+                }
                 excludedBands = updated
                 GeneralVariables.excludedBands = java.util.HashSet(updated)
                 mainViewModel.databaseOpr.writeConfig(
@@ -469,6 +525,9 @@ fun RadioAudioSettings(
             onDismiss = {
                 showInputVolume = false
                 mainViewModel.databaseOpr.writeConfig("inputVolume", inputVolume.toString(), null)
+                if (inputLevelChangedInDialog(inputVolumeAtOpen, inputVolume)) {
+                    saveInputLevelForCurrentBand(mainViewModel.databaseOpr, inputVolume)
+                }
             },
         )
     }
@@ -498,12 +557,47 @@ fun RadioAudioSettings(
                     )
                     mainViewModel.requestUsbPermissionIfNeeded(usbInfo.device)
                 } else if (deviceId != -1) {
-                    GeneralVariables.usbAudioInputVendorId = 0
-                    GeneralVariables.usbAudioInputProductId = 0
-                    mainViewModel.databaseOpr.writeConfig("usbAudioInputVid", "0", null)
-                    mainViewModel.databaseOpr.writeConfig("usbAudioInputPid", "0", null)
+                    // A framework-routed USB device (e.g. "USB-Audio - QMX
+                    // Transceiver") carries no VID:PID of its own -- find the
+                    // raw UsbDevice by product-name overlap and persist ITS
+                    // VID:PID, so a later re-enumeration (which changes the
+                    // numeric id but not the product name) can still resolve
+                    // it instead of falling back to Default.
+                    val productName = audioInputAdapter.getUsbFrameworkDeviceProductName(position)
+                    val rawUsb = productName?.let {
+                        UsbAudioDevice.matchByProductName(
+                            UsbAudioDevice.findUsbAudioDevices(context), it, true,
+                        )
+                    }
+                    if (rawUsb != null) {
+                        GeneralVariables.usbAudioInputVendorId = rawUsb.device.vendorId
+                        GeneralVariables.usbAudioInputProductId = rawUsb.device.productId
+                    } else {
+                        GeneralVariables.usbAudioInputVendorId = 0
+                        GeneralVariables.usbAudioInputProductId = 0
+                    }
+                    mainViewModel.databaseOpr.writeConfig(
+                        "usbAudioInputVid", GeneralVariables.usbAudioInputVendorId.toString(), null,
+                    )
+                    mainViewModel.databaseOpr.writeConfig(
+                        "usbAudioInputPid", GeneralVariables.usbAudioInputProductId.toString(), null,
+                    )
                 }
                 audioInputName = audioInputAdapter.getDeviceDisplayName(position)
+                audioInputChannels = selectedDeviceMaxChannels(
+                    context, deviceId, AudioManager.GET_DEVICES_INPUTS,
+                )
+                // The live MicRecorder only reads audioInputDeviceId at construction
+                // time (openAudioRecord()'s setPreferredDevice / openUsbAudioInput()),
+                // so without this the newly-picked device is persisted but the running
+                // capture keeps using whatever it opened with — silently, with no error
+                // — until the next USB attach/detach or app restart happens to reopen
+                // it. Mirrors the RX-channel-change and SCO-connect paths, which already
+                // reopen for the same reason.
+                mainViewModel.reinitializeAudioInput()
+                // Selecting a Bluetooth-SCO mic must actually bring SCO up (issue #723);
+                // deselecting it releases SCO unless a Bluetooth rig still needs it.
+                mainViewModel.refreshBluetoothHeadsetMode()
             },
         )
     }
@@ -533,12 +627,33 @@ fun RadioAudioSettings(
                     )
                     mainViewModel.requestUsbPermissionIfNeeded(usbInfo.device)
                 } else if (deviceId != -1) {
-                    GeneralVariables.usbAudioOutputVendorId = 0
-                    GeneralVariables.usbAudioOutputProductId = 0
-                    mainViewModel.databaseOpr.writeConfig("usbAudioOutputVid", "0", null)
-                    mainViewModel.databaseOpr.writeConfig("usbAudioOutputPid", "0", null)
+                    // Same reasoning as the input picker above.
+                    val productName = audioOutputAdapter.getUsbFrameworkDeviceProductName(position)
+                    val rawUsb = productName?.let {
+                        UsbAudioDevice.matchByProductName(
+                            UsbAudioDevice.findUsbAudioDevices(context), it, false,
+                        )
+                    }
+                    if (rawUsb != null) {
+                        GeneralVariables.usbAudioOutputVendorId = rawUsb.device.vendorId
+                        GeneralVariables.usbAudioOutputProductId = rawUsb.device.productId
+                    } else {
+                        GeneralVariables.usbAudioOutputVendorId = 0
+                        GeneralVariables.usbAudioOutputProductId = 0
+                    }
+                    mainViewModel.databaseOpr.writeConfig(
+                        "usbAudioOutputVid", GeneralVariables.usbAudioOutputVendorId.toString(), null,
+                    )
+                    mainViewModel.databaseOpr.writeConfig(
+                        "usbAudioOutputPid", GeneralVariables.usbAudioOutputProductId.toString(), null,
+                    )
                 }
                 audioOutputName = audioOutputAdapter.getDeviceDisplayName(position)
+                audioOutputChannels = selectedDeviceMaxChannels(
+                    context, deviceId, AudioManager.GET_DEVICES_OUTPUTS,
+                )
+                // Same for the speaker side: route playback over the BT headset (issue #723).
+                mainViewModel.refreshBluetoothHeadsetMode()
             },
         )
     }
@@ -550,6 +665,9 @@ fun RadioAudioSettings(
         // =====================================================================
         // RADIO
         // =====================================================================
+        // Manual hard reset of the rig connection (and the cross-app takeover).
+        TakeControlCard(mainViewModel)
+
         SettingsSection(title = stringResource(R.string.settings_section_radio)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
@@ -589,12 +707,12 @@ fun RadioAudioSettings(
                     )
                     SectionDivider()
                     run {
-                        val total = OperationBand.getAllWaveLengths().size
+                        val waveLengths = OperationBand.getAllWaveLengths()
                         SettingsRow(
                             label = stringResource(R.string.settings_enabled_bands),
                             value = stringResource(
                                 R.string.settings_bands_enabled_format,
-                                total - excludedBands.size, total,
+                                OperationBand.countEnabledBands(waveLengths, excludedBands), waveLengths.size,
                             ),
                             showChevron = true,
                             onClick = { showEnabledBands = true },
@@ -649,8 +767,137 @@ fun RadioAudioSettings(
                         description = stringResource(R.string.settings_input_volume_desc),
                         value = stringResource(R.string.settings_percent_format, inputVolume),
                         showChevron = true,
-                        onClick = { showInputVolume = true },
+                        onClick = {
+                            inputVolumeAtOpen = inputVolume
+                            showInputVolume = true
+                        },
                     )
+                    SectionDivider()
+                    run {
+                        var rxChannel by remember {
+                            mutableIntStateOf(AudioChannelSelect.clamp(GeneralVariables.rxAudioChannel))
+                        }
+                        val rxGate = rxChannelRowGate(
+                            micSource = mainViewModel.hamRecorder?.isMicSource() ?: true,
+                            maxChannels = audioInputChannels,
+                        )
+                        SegmentedSelectRow(
+                            label = stringResource(R.string.settings_rx_channel),
+                            description = stringResource(R.string.settings_rx_channel_desc),
+                            optionLabels = listOf(
+                                AudioChannelSelect.BOTH to
+                                    stringResource(R.string.settings_rx_channel_mix),
+                                AudioChannelSelect.LEFT to
+                                    stringResource(R.string.settings_channel_left),
+                                AudioChannelSelect.RIGHT to
+                                    stringResource(R.string.settings_channel_right),
+                            ),
+                            // Show what will actually be used, not the stored
+                            // preference: on a mono input every option produces the
+                            // same audio, so the control reads Mix while greyed out.
+                            // The stored value is left alone, so plugging a stereo
+                            // interface back in restores the operator's choice.
+                            selected = AudioChannelCapability.effectiveSelection(
+                                rxChannel, audioInputChannels,
+                            ),
+                            enabled = rxGate == AudioChannelRowGate.ENABLED,
+                            disabledNote = stringResource(rxGate.noteRes()),
+                            onSelect = { value ->
+                                val previous = rxChannel
+                                rxChannel = value
+                                GeneralVariables.rxAudioChannel = value
+                                mainViewModel.databaseOpr.writeConfig(
+                                    AudioChannelSelect.RX_CONFIG_KEY, value.toString(), null,
+                                )
+                                // Mix uses a mono AudioRecord, L/R a stereo one,
+                                // and the native USB path takes the fold at
+                                // start — so some changes need the input
+                                // reopened to take effect. The view model decides
+                                // which, debounces the A/B tapping, and runs it on
+                                // a thread that outlives this screen.
+                                mainViewModel.onRxAudioChannelChanged(previous, value)
+                            },
+                        )
+                    }
+                    SectionDivider()
+                    run {
+                        var txChannel by remember {
+                            mutableIntStateOf(AudioChannelSelect.clamp(GeneralVariables.txAudioChannel))
+                        }
+                        val txGate = txChannelRowGate(
+                            deviceId = GeneralVariables.audioOutputDeviceId,
+                            maxChannels = audioOutputChannels,
+                        )
+                        SegmentedSelectRow(
+                            label = stringResource(R.string.settings_tx_channel),
+                            description = stringResource(R.string.settings_tx_channel_desc),
+                            optionLabels = listOf(
+                                AudioChannelSelect.BOTH to
+                                    stringResource(R.string.settings_tx_channel_both),
+                                AudioChannelSelect.LEFT to
+                                    stringResource(R.string.settings_channel_left),
+                                AudioChannelSelect.RIGHT to
+                                    stringResource(R.string.settings_channel_right),
+                            ),
+                            // Default sink shows Both: TxChannelLayout keeps the
+                            // mono open there regardless of the stored choice.
+                            selected = if (txGate == AudioChannelRowGate.DEFAULT_SINK) {
+                                AudioChannelSelect.BOTH
+                            } else {
+                                AudioChannelCapability.effectiveSelection(
+                                    txChannel, audioOutputChannels,
+                                )
+                            },
+                            enabled = txGate == AudioChannelRowGate.ENABLED,
+                            disabledNote = stringResource(txGate.noteRes()),
+                            onSelect = { value ->
+                                txChannel = value
+                                GeneralVariables.txAudioChannel = value
+                                mainViewModel.databaseOpr.writeConfig(
+                                    AudioChannelSelect.TX_CONFIG_KEY, value.toString(), null,
+                                )
+                                // Nothing to reopen here, unlike RX: both TX paths
+                                // read the selection when the next transmission
+                                // builds its output, so the change lands next over.
+                            },
+                        )
+                    }
+                    SectionDivider()
+                    run {
+                        var qmxCatTones by remember {
+                            mutableStateOf(GeneralVariables.qmxCatTones)
+                        }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_qmx_cat_tones),
+                            description = stringResource(R.string.settings_qmx_cat_tones_desc),
+                            toggle = qmxCatTones,
+                            onToggleChange = { enabled ->
+                                qmxCatTones = enabled
+                                GeneralVariables.qmxCatTones = enabled
+                                mainViewModel.databaseOpr.writeConfig(
+                                    QmxCatTones.CONFIG_KEY, if (enabled) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
+                    SectionDivider()
+                    run {
+                        var fullDuplex by remember {
+                            mutableStateOf(GeneralVariables.fullDuplexMonitor)
+                        }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_full_duplex),
+                            description = stringResource(R.string.settings_full_duplex_desc),
+                            toggle = fullDuplex,
+                            onToggleChange = { enabled ->
+                                fullDuplex = enabled
+                                GeneralVariables.fullDuplexMonitor = enabled
+                                mainViewModel.databaseOpr.writeConfig(
+                                    FullDuplexMonitor.CONFIG_KEY, if (enabled) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
                     SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_tx_volume),
@@ -672,6 +919,53 @@ fun RadioAudioSettings(
                                 GeneralVariables.mutableShowTxVolumeSlider.postValue(enabled)
                                 mainViewModel.databaseOpr.writeConfig(
                                     "showTxVolumeSlider", if (enabled) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
+                    SectionDivider()
+                    run {
+                        val context = LocalContext.current
+                        var restoreVolume by remember { mutableStateOf(GeneralVariables.restoreMediaVolume) }
+                        // Observed, not remembered: the volume keys also change it.
+                        val savedLevel by MediaVolumeRestore.savedLevel.collectAsState()
+                        val maxLevel = remember { MediaVolumeRestore.maxLevel(context) }
+                        val baseDesc = stringResource(R.string.settings_restore_media_volume_desc)
+                        val savedDesc = stringResource(R.string.settings_restore_media_volume_saved, savedLevel, maxLevel)
+                        SettingsRow(
+                            label = stringResource(R.string.settings_restore_media_volume),
+                            description = MediaVolumeRestore.description(baseDesc, savedDesc, restoreVolume, savedLevel),
+                            toggle = restoreVolume,
+                            onToggleChange = { enabled ->
+                                restoreVolume = enabled
+                                if (enabled) {
+                                    // Turning it on saves the level it should hold.
+                                    val level = MediaVolumeRestore.currentLevel(context)
+                                    MediaVolumeRestore.saveLevel(level)
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        MediaVolumeRestore.CONFIG_LEVEL, level.toString(), null,
+                                    )
+                                }
+                                GeneralVariables.restoreMediaVolume = enabled
+                                mainViewModel.databaseOpr.writeConfig(
+                                    MediaVolumeRestore.CONFIG_ENABLED, if (enabled) "1" else "0", null,
+                                )
+                            },
+                        )
+                    }
+                    SectionDivider()
+                    run {
+                        var drawer by remember { mutableStateOf(GeneralVariables.controlsDrawerEnabled) }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_controls_drawer),
+                            description = stringResource(R.string.settings_controls_drawer_desc),
+                            toggle = drawer,
+                            onToggleChange = { enabled ->
+                                drawer = enabled
+                                GeneralVariables.controlsDrawerEnabled = enabled
+                                GeneralVariables.mutableControlsDrawerEnabled.postValue(enabled)
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "controlsDrawerEnabled", if (enabled) "1" else "0", null,
                                 )
                             },
                         )
@@ -703,6 +997,31 @@ fun RadioAudioSettings(
                             },
                         )
                     }
+                    SectionDivider()
+                    run {
+                        var perBandInput by remember {
+                            mutableStateOf(GeneralVariables.savePerBandInputLevel)
+                        }
+                        SettingsRow(
+                            label = stringResource(R.string.settings_per_band_input_volume),
+                            description = stringResource(R.string.settings_per_band_input_volume_desc),
+                            toggle = perBandInput,
+                            onToggleChange = { enabled ->
+                                perBandInput = enabled
+                                GeneralVariables.savePerBandInputLevel = enabled
+                                mainViewModel.databaseOpr.writeConfig(
+                                    PER_BAND_INPUT_LEVEL_KEY, if (enabled) "1" else "0", null,
+                                )
+                                // Seed the current band, mirroring the output-level toggle.
+                                if (enabled) {
+                                    saveInputLevelForCurrentBand(
+                                        mainViewModel.databaseOpr,
+                                        inputLevelFromGainPercent(GeneralVariables.inputGainPercent),
+                                    )
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -710,7 +1029,8 @@ fun RadioAudioSettings(
 }
 
 /**
- * Per-band visibility toggles. Lists every distinct band name from bands.txt;
+ * Per-band visibility toggles. Lists every distinct band name in the band plan
+ * (bands.txt plus custom dials), lowest frequency first;
  * a band that's switched off is hidden from both band pickers.
  */
 @Composable
@@ -790,6 +1110,14 @@ private fun BandToggleDialog(
 }
 
 /**
+ * Whether the serial-port picker should show the dual-port (Enhanced/Standard)
+ * explanation: only when at least one listed port belongs to a chip whose
+ * interfaces have names. Pure so it is unit-tested; the Composable just calls it.
+ */
+internal fun shouldShowDualPortHint(ports: List<CableSerialPort.SerialPort>?): Boolean =
+    SerialPortLabel.anyPortHasRole(ports)
+
+/**
  * Dialog for selecting a USB serial port to connect to a rig.
  */
 @Composable
@@ -816,6 +1144,9 @@ private fun SerialPortPickerDialog(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Rows read "Silicon Labs CP2105 · Port 1 of 2 · Enhanced", never raw
+            // hex (issue #817). The label is built by SerialPortLabel (unit-tested).
+            val portOfTemplate = stringResource(R.string.serial_port_label_port_of)
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -823,7 +1154,7 @@ private fun SerialPortPickerDialog(
             ) {
                 itemsIndexed(ports) { _, port ->
                     Text(
-                        text = port.information(),
+                        text = port.label(portOfTemplate),
                         color = TextPrimary,
                         fontSize = 14.sp,
                         modifier = Modifier
@@ -832,6 +1163,19 @@ private fun SerialPortPickerDialog(
                             .padding(horizontal = 24.dp, vertical = 12.dp),
                     )
                 }
+            }
+
+            // Which of a dual-UART chip's ports carries CAT depends on the rig
+            // (Yaesu: Enhanced, Kenwood: Standard), so the app states the fact and
+            // leaves the choice to the operator rather than guessing a "CAT" tag.
+            if (shouldShowDualPortHint(ports)) {
+                Text(
+                    text = stringResource(R.string.serial_port_picker_dual_port_hint),
+                    color = TextMuted,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -985,6 +1329,161 @@ private fun AudioDevicePickerDialog(
         onDismiss = onDismiss,
         onSelect = onSelect,
     )
+}
+
+/**
+ * How many channels the currently selected audio device reports, for
+ * [AudioChannelCapability] to turn into "can this operator pick a side?".
+ *
+ * Three cases, matching how [AudioDeviceSpinnerAdapter] identifies a device:
+ * a positive id is a framework-routed device whose `AudioDeviceInfo` reports its
+ * channel counts; `-1` is a USB-direct entry driven over libusb, which has no
+ * `AudioDeviceInfo` at all but whose open [UsbAudioDevice] knows its endpoint's
+ * channel count; and `0` is "Default", where we cannot see what the system will
+ * route to.
+ *
+ * Anything we cannot determine returns [AudioChannelCapability.UNKNOWN], which
+ * leaves the selector enabled — better than greying out a control that would
+ * have worked. A wrong guess in that direction costs the operator one confusing
+ * A/B; the other direction hides the setting on the very interfaces that need it.
+ */
+private fun selectedDeviceMaxChannels(
+    context: Context,
+    deviceId: Int,
+    direction: Int,
+): Int =
+    when (channelCountSource(deviceId)) {
+        ChannelCountSource.DEFAULT -> AudioChannelCapability.UNKNOWN
+        ChannelCountSource.USB_DIRECT -> usbDirectMaxChannels(context, direction)
+        ChannelCountSource.FRAMEWORK -> {
+            val audioManager =
+                context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+            val info = audioManager?.getDevices(direction)?.firstOrNull { it.id == deviceId }
+            if (info == null) {
+                AudioChannelCapability.UNKNOWN
+            } else {
+                AudioChannelCapability.maxChannelCount(info.channelCounts)
+            }
+        }
+    }
+
+/**
+ * Channel count of the selected USB-direct device. The capture side can ask the
+ * device `MicRecorder` holds open, which has negotiated a real stream and knows
+ * its rate; the playback side never holds one open between overs
+ * (`playViaUsbAudio` opens and closes per transmission), so both fall back to
+ * the count judged from the endpoint descriptors at enumeration, matched by
+ * the persisted VID:PID.
+ */
+private fun usbDirectMaxChannels(context: Context, direction: Int): Int {
+    val isInput = direction == AudioManager.GET_DEVICES_INPUTS
+    if (isInput) {
+        UsbAudioDevice.getActiveInputDevice()?.let { return it.inputChannels }
+    }
+    val vid = if (isInput) GeneralVariables.usbAudioInputVendorId else GeneralVariables.usbAudioOutputVendorId
+    val pid = if (isInput) GeneralVariables.usbAudioInputProductId else GeneralVariables.usbAudioOutputProductId
+    val enumerated =
+        try {
+            UsbAudioDevice.findUsbAudioDevices(context)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    val match = enumerated.firstOrNull { it.device.vendorId == vid && it.device.productId == pid }
+        ?: enumerated.firstOrNull { if (isInput) it.hasInput else it.hasOutput }
+        ?: return AudioChannelCapability.UNKNOWN
+    return if (isInput) match.inputChannels else match.outputChannels
+}
+
+/** The note a greyed-out channel row shows for its gate. */
+private fun AudioChannelRowGate.noteRes(): Int =
+    when (this) {
+        AudioChannelRowGate.DEFAULT_SINK -> R.string.settings_tx_channel_default_sink
+        AudioChannelRowGate.NETWORK_SOURCE -> R.string.settings_rx_channel_network_source
+        else -> R.string.settings_channel_mono_device
+    }
+
+/**
+ * A segmented control for a small int-valued setting — N options (two-plus),
+ * generic over [optionLabels], not tied to audio at all despite living in
+ * this file. Reused as-is for decode depth in [AdvancedSettings] (`internal`,
+ * not `private`, for exactly that cross-file reuse). Originally built for, and
+ * still used twice for, the audio channel selector: which side of a stereo
+ * path the app uses, once for receive (Mix / Left / Right) and once for
+ * transmit (Both / Left / Right) — because a splitter cable, a dual-receiver
+ * rig, or an interface with one side floating needs the two directions set
+ * independently.
+ *
+ * A segmented control rather than a picker dialog: the choice is a quick A/B
+ * while watching the waterfall or the rig's ALC, so it stays on-screen
+ * instead of behind a dialog.
+ *
+ * When [enabled] is false the setting doesn't apply right now (e.g. the audio
+ * channel selectors: the device reports a single channel, so there is no side
+ * to choose). The control greys out and shows [disabledNote] instead of the
+ * usual description rather than disappearing — an operator looking for the
+ * setting needs to see that it exists and why it does not apply here. Pass an
+ * empty [disabledNote] (as decode depth does) when the control is always
+ * enabled.
+ */
+@Composable
+internal fun SegmentedSelectRow(
+    label: String,
+    description: String,
+    optionLabels: List<Pair<Int, String>>,
+    selected: Int,
+    enabled: Boolean,
+    disabledNote: String,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val shape = RoundedCornerShape(999.dp)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = label,
+                color = if (enabled) TextPrimary else TextMuted,
+                fontSize = 14.sp,
+            )
+            Text(
+                text = if (enabled) description else disabledNote,
+                color = TextMuted,
+                fontSize = 12.sp,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for ((value, optionLabel) in optionLabels) {
+                val isSelected = value == selected
+                val active = enabled && isSelected
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(34.dp)
+                        .clip(shape)
+                        .background(if (active) AccentSoft else BgSurface2, shape)
+                        .border(1.dp, if (active) BorderAmber else Border, shape)
+                        .clickable(enabled = enabled) { onSelect(value) },
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = optionLabel,
+                        color = if (active) Accent else TextMuted,
+                        fontSize = 13.sp,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
+                    )
+                }
+            }
+        }
+    }
 }
 
 /**

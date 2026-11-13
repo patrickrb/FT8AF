@@ -113,6 +113,21 @@ call_hash_out="$tmp/ft8_call_hash_test"
     -I "$ft8" "${call_hash_srcs[@]}" -lm -o "$call_hash_out"
 "$call_hash_out"
 
+# Callsign hash-store tests: the per-decoder open-addressing table shared by
+# ft8_decode_jni.cpp and ft2_decode_jni.cpp (ftx_hash_store.h). Guards the
+# save/lookup semantics and, crucially, that a saturated table drops the insert
+# instead of probing forever (the unbounded loop that used to hang the decode
+# thread). Header-only under test; links just the ft8_lib message path for the
+# hash-type enum.
+hash_store_srcs=(
+    "$here/test_hash_store.c"
+)
+hash_store_out="$tmp/ft8_hash_store_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${hash_store_srcs[@]}" -lm -o "$hash_store_out"
+"$hash_store_out"
+
 # EU_VHF / CONTESTING decoder tests (issue #403): the hand-rolled bit
 # extraction + direct formatting for i3=0 n3=2 and i3=0 n3=6 frames. Payloads
 # are assembled by an independent bit writer; callsign bits come from the
@@ -153,7 +168,9 @@ rat_out="$tmp/ft8_rational_test"
 # FT8SignalListener + ft8_decode_jni.cpp) and scores against WSJT-X jt9 truth
 # sidecars. Fails if any corpus file matches fewer truth messages than its
 # committed floor (testdata/ft8/floors.txt) — the floors ratchet up as decoder
-# improvements land. See decode_bench.c's header for flags and output format.
+# improvements land. Also fails if the matched decodes' ft8_snr() drifts from
+# jt9's SNR beyond testdata/ft8/snr_bounds.txt (issue #937). See
+# decode_bench.c's header for flags and output format.
 bench_srcs=(
     "$here/decode_bench.c"
     "$here/gfsk.c"
@@ -181,7 +198,8 @@ bench_out="$tmp/ft8_decode_bench"
     -I "$ft8" "${bench_srcs[@]}" -lm -o "$bench_out"
 
 "$bench_out" --self-test
-"$bench_out" --assert-floor "$here/testdata/ft8/floors.txt" "$here"/testdata/ft8/*.wav
+"$bench_out" --assert-floor "$here/testdata/ft8/floors.txt" \
+    --assert-snr "$here/testdata/ft8/snr_bounds.txt" "$here"/testdata/ft8/*.wav
 
 # Subtraction unit tests: waterfall-domain (tone replacement) and coherent
 # time-domain deep-decode subtraction properties (removal, neighbor
@@ -277,3 +295,72 @@ xslot_out="$tmp/ft8_xslot_test"
     -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
     -I "$ft8" "${xslot_srcs[@]}" -lm -o "$xslot_out"
 "$xslot_out"
+
+# GFSK output-length tests: the synth_gfsk_output_len helper (gfsk.c) that the
+# TX buffer sizing on both the Java side (GenerateFT8.waveformSampleCount) and
+# the native synth_gfsk JNI guard must agree on, plus a canary check that
+# synth_gfsk_offset writes exactly that many samples. Guards the heap OOB write a
+# non-integral audioRate (e.g. 44100) in FT4/FT2 used to trigger. No ft8_lib deps.
+gfsk_len_srcs=(
+    "$here/test_gfsk_len.c"
+    "$here/gfsk.c"
+)
+gfsk_len_out="$tmp/ft8_gfsk_len_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" "${gfsk_len_srcs[@]}" -lm -o "$gfsk_len_out"
+"$gfsk_len_out"
+
+# Audio-feed tests: the per-slot monitor feed shared by ft8_decode_jni.cpp and
+# ft2_decode_jni.cpp (ftx_feed.h). Guards the bounded copy into the retained
+# samples buffer and, crucially, that a NULL `data` pointer (a failed JNI array
+# pin) is a no-op instead of the native SIGSEGV the two float feed paths used to
+# take. Links the monitor + FFT + decode path monitor_process exercises.
+feed_srcs=(
+    "$here/test_feed.c"
+    "$ft8/common/monitor.c"
+    "$ft8/ft8/decode.c"
+    "$ft8/ft8/constants.c"
+    "$ft8/ft8/crc.c"
+    "$ft8/ft8/text.c"
+    "$ft8/ft8/message.c"
+    "$ft8/ft8/pack.c"
+    "$ft8/ft8/encode.c"
+    "$ft8/ft8/ldpc.c"
+    "$ft8/ft8/osd.c"
+    "$ft8/ft8/unpack.c"
+    "$ft8/fft/kiss_fft.c"
+    "$ft8/fft/kiss_fftr.c"
+)
+feed_out="$tmp/ft8_feed_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$ft8" -I "$here" "${feed_srcs[@]}" -lm -o "$feed_out"
+"$feed_out"
+
+# Hamlib feed tests: the byte-forwarding write loop of the hamlib loopback
+# bridge (hamlib_feed.h, used by nativeFeedFromRig). Guards that a large frame
+# drains through short socket writes and, crucially, that a NULL pointer (a
+# failed JNI array pin on the CAT read thread) is a no-op instead of the native
+# SIGSEGV the old inline loop took. Header-only, no ft8_lib deps; needs pthread.
+hamlib_feed_srcs=(
+    "$here/test_hamlib_feed.c"
+)
+hamlib_feed_out="$tmp/ft8_hamlib_feed_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$here" "${hamlib_feed_srcs[@]}" -lpthread -o "$hamlib_feed_out"
+"$hamlib_feed_out"
+
+# Grid-shape tests: the shared check (ft8_grid_shape.h) behind a real-device
+# finding -- "RR73" (the protocol's reply token, never a locator) passed the
+# old per-file checks by coincidence, so every RR73 reply earned a false
+# "NEW GRID" badge. Header-only, no ft8_lib deps.
+grid_shape_srcs=(
+    "$here/test_grid_shape.c"
+)
+grid_shape_out="$tmp/ft8_grid_shape_test"
+"$CC" -std=c11 -O2 -D_GNU_SOURCE \
+    -Wall -Wno-deprecated-non-prototype -Wno-unused-function \
+    -I "$here" "${grid_shape_srcs[@]}" -o "$grid_shape_out"
+"$grid_shape_out"

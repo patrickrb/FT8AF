@@ -44,6 +44,12 @@
     <string name="VOX">VOX</string>
     <string name="CAT">CAT</string>
     <string name="operationBand">Frequency</string>
+    <!-- Custom dial frequencies (issue #470) -->
+    <string name="addCustomFreq">+ Add custom frequency</string>
+    <string name="customFreqTitle">Custom dial frequency</string>
+    <string name="customFreqLabelHint">Label (optional, e.g. 3B9 DX)</string>
+    <string name="customFreqHzHint">Dial frequency in Hz (e.g. 14090000)</string>
+    <string name="save">Save</string>
     <string name="civ_address">CI-V</string>
     <string name="pl_civ_address">CI-V address of the rig</string>
     <string name="serial_port">Serial port</string>
@@ -312,6 +318,7 @@
     <string name="count_total_cqzone">Total CQ Zone : %d \n Completed : %d(%.1f%%)</string>
     <string name="count_cqzone_proportion">CQ Zone Statistics</string>
     <string name="dxcc_completion_statistics">DXCC statistics</string>
+    <string name="continent_completion_statistics">Continent statistics</string>
     <string name="count_total_dxcc">Total DXCC : %d \nCompleted : %d(%.1f%%)</string>
     <string name="count_dxcc_proportion">DXCC statistics</string>
     <string name="callsign_info">Callsign:%s\nLocation:%s\nCQ zone:%d\nITU zone:%d\nContinent:%s\nLongitude and latitude:%.2f,%.2f\nTime zone:%.0f\nDxcc prefix:%s</string>
@@ -356,6 +363,7 @@
     <string name="connect_xiegu_ip">Connect XIEGU Radio %s …</string>
     <string name="network_exception">%s : Network transmission exception : %s</string>
     <string name="login_succeed">Login succeeded !</string>
+    <string name="civ_address_ambiguous_hint">CI-V address is 0x%1$02X but the %2$s default is 0x%3$02X. If the rig uses the default, re-select it under Settings › Radio.</string>
     <string name="loging_failed">Login failed, invalid user name or password.</string>
     <string name="data_stream">Data stream</string>
     <string name="control_stream">Control stream</string>
@@ -482,6 +490,7 @@
     <string name="html_comment">Comment</string>
     <string name="decode_mode_text">Decode mode</string>
     <string name="fast_mode">Fast decode</string>
+    <string name="balanced_mode">Balanced decode</string>
     <string name="deep_mode">Deep decode</string>
     <string name="export_null">Export from WebUI via web browser on another device under the same LAN \n Please connect to a valid Wi-Fi</string>
     <string name="null_task_html">Task not exist!</string>
@@ -491,6 +500,7 @@
     <string name="import_new_count_html">Add QSLs: %d</string>
     <string name="import_update_count_html">Update QSLs: %d</string>
     <string name="import_invalid_count_html">Invalid QSLs: %d</string>
+    <string name="import_warning_count_html">Imported with a dropped field: %d</string>
     <string name="import_progress_html">"Progress: "</string>
     <string name="import_readed_html">Validated QSL: %d</string>
     <string name="import_canceled_html">Canceled!</string>
@@ -541,7 +551,7 @@
     <string name="cloudlog_addr">Server address</string>
     <string name="cloudlog_api_key">Apikey</string>
     <string name="test_cloudlog_config">TEST</string>
-    <string name="cloudlog_station_id">Station ID</string>
+    <string name="cloudlog_station_id">Station Location ID</string>
     <string name="cloudlog_help">cloudlog_en.txt</string>
     <string name="pass">Pass!</string>
     <string name="fail">Fail!</string>
@@ -572,4 +582,7 @@
     <string name="alc_switch_on" translatable="false">ALC On</string>
     <string name="alc_switch_off" translatable="false">ALC Off</string>
 
+    <string name="pota_social_share">Share activation</string>
+    <string name="pota_social_caption">From a park to the world. Powered by ft8af. %1$s</string>
+    <string name="pota_social_failed">Could not share this activation. Please try again.</string>
 </resources>

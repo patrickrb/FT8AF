@@ -1,4 +1,0 @@
-module CFT8 {
-    umbrella header "CFT8.h"
-    export *
-}

@@ -201,4 +201,56 @@ public class EvidenceOnlyParseTest {
         signal.parseMessageToFunction(list(rxMsg("K1AF", "N2JFD", "R-18")), true);
         assertThat(signal.getFunctionOrder()).isEqualTo(2);
     }
+
+    // ---- stale evidence must not rewind the QSO -----------------------------
+    // Field report (POTA 2026-07-23): three QSOs logged "advance order 4->2".
+    // The fast pass correctly advanced us to RR73 on the partner's R-report,
+    // then ~20ms later a replayed decode of that partner's *opening grid* --
+    // stashed behind our previous transmission and drained a cycle late --
+    // knocked the sequence back to order 2. We re-sent the signal report the
+    // partner had already answered, costing a full 30s exchange each time.
+
+    @Test
+    public void deepStaleGridAfterRR73_doesNotRewindToReport() {
+        startQsoAtOrder(4);// we are sending RR73
+        signal.parseMessageToFunction(list(rxMsg("K1AF", "N2JFD", "FN20")), true);
+        assertThat(signal.getFunctionOrder()).isEqualTo(4);// still RR73, not 2
+    }
+
+    @Test
+    public void deepStaleReportAfter73_doesNotRewind() {
+        startQsoAtOrder(5);// we are sending 73
+        signal.parseMessageToFunction(list(rxMsg("K1AF", "N2JFD", "R-18")), true);
+        assertThat(signal.getFunctionOrder()).isEqualTo(5);
+    }
+
+    @Test
+    public void fastPassMayStillLowerTheOrder() {
+        // Only deep/replayed evidence is gated. The fast pass sees the current
+        // cycle, so if the partner genuinely fell back to calling us with a
+        // grid, it still re-seeds the report step.
+        startQsoAtOrder(4);
+        signal.parseMessageToFunction(list(rxMsg("K1AF", "N2JFD", "FN20")), false);
+        assertThat(signal.getFunctionOrder()).isEqualTo(2);
+    }
+
+    @Test
+    public void deepStaleEvidence_stillClearsNoReplyCount() {
+        // The decode is too old to move the sequence, but it is still proof the
+        // partner was transmitting: don't let it count towards giving up.
+        startQsoAtOrder(4);
+        GeneralVariables.noReplyCount = 2;
+        signal.parseMessageToFunction(list(rxMsg("K1AF", "N2JFD", "FN20")), true);
+        assertThat(signal.getFunctionOrder()).isEqualTo(4);
+        assertThat(GeneralVariables.noReplyCount).isEqualTo(0);
+    }
+
+    @Test
+    public void deepEvidenceRepeatingCurrentStep_stillAccepted() {
+        // newOrder+1 == functionOrder is not a rewind: at RR73 the partner
+        // re-sending R-report keeps us at RR73 and is normal QSO behaviour.
+        startQsoAtOrder(4);
+        signal.parseMessageToFunction(list(rxMsg("K1AF", "N2JFD", "R-18")), true);
+        assertThat(signal.getFunctionOrder()).isEqualTo(4);
+    }
 }

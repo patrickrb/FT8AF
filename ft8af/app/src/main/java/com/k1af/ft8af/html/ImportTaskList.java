@@ -75,6 +75,7 @@ public class ImportTaskList extends HashMap<Integer, ImportTaskList.ImportTask> 
         public int updateCount = 0;//number of updated records
         public int invalidCount = 0;//invalid QSL records
         public int newCount = 0;//number of newly imported records
+        public int warningCount = 0;//records written (new or updated) with one field dropped, e.g. an unparseable RST
         public ImportState status = ImportState.STARTING;//status: 0=starting, 1=running, 2=finished, 3=canceled
         String message = "";//task message description
         String errorMsg = "";
@@ -96,6 +97,7 @@ public class ImportTaskList extends HashMap<Integer, ImportTaskList.ImportTask> 
                     + String.format(cell, String.format(GeneralVariables.getStringFromResource(R.string.import_new_count_html), newCount))
                     + String.format(cell, String.format(GeneralVariables.getStringFromResource(R.string.import_update_count_html), updateCount))
                     + String.format(cell, String.format(GeneralVariables.getStringFromResource(R.string.import_invalid_count_html), invalidCount))
+                    + String.format(cell, String.format(GeneralVariables.getStringFromResource(R.string.import_warning_count_html), warningCount))
                     + String.format(cell, String.format(GeneralVariables.getStringFromResource(R.string.import_readed_html), importedCount))
                     + String.format(cell, message)
                     + String.format(cell, errorHtml)

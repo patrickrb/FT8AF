@@ -16,7 +16,6 @@ import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
-import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -37,12 +36,16 @@ import androidx.lifecycle.Observer
 import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
+import radio.ks3ckc.ft8af.crash.CrashReporting
 import radio.ks3ckc.ft8af.sync.QsoAutoSync
 import radio.ks3ckc.ft8af.util.bluetoothAdapter
+import com.k1af.ft8af.handoff.RigHandoff
+import com.k1af.ft8af.handoff.RigHandoffController
+import com.k1af.ft8af.handoff.RigHandoffGate
+import com.k1af.ft8af.handoff.RigHandoffProtocol
 import com.k1af.ft8af.service.RxForegroundService
 import com.k1af.ft8af.service.RxServiceController
 import com.k1af.ft8af.bluetooth.BluetoothStateBroadcastReceive
-import com.k1af.ft8af.bluetooth.ScoPolicy
 import com.k1af.ft8af.connector.CableSerialPort
 import com.k1af.ft8af.connector.ConnectMode
 import com.k1af.ft8af.callsign.CallsignDatabase
@@ -50,6 +53,7 @@ import com.k1af.ft8af.database.DatabaseOpr
 import com.k1af.ft8af.database.OnAfterQueryConfig
 import com.k1af.ft8af.database.OperationBand
 import com.k1af.ft8af.location.GpsClockUpdater
+import com.k1af.ft8af.timer.NtpClockUpdater
 import com.k1af.ft8af.location.GridLocationUpdater
 import com.k1af.ft8af.log.ImportSharedLogs
 import com.k1af.ft8af.wave.UsbAudioNative
@@ -91,13 +95,18 @@ class ComposeMainActivity : AppCompatActivity() {
         val permissions = buildPermissionsList()
         checkPermission(permissions)
 
-        // Edge-to-edge is mandatory on Android 15 (targetSdk 35) and the old
+        // Edge-to-edge has been mandatory since Android 15 (API 35) — and stays
+        // enforced on our current target — while the old
         // FLAG_FULLSCREEN / window.statusBarColor APIs are deprecated. Opt into
         // edge-to-edge, then preserve the app's original full-screen look by
         // hiding the system bars immersively (transient reveal on swipe) instead
         // of the deprecated fullscreen flag. Keep the screen on as before.
         enableEdgeToEdge()
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Screen-awake is now a setting (default on, matching the previous
+        // hard-coded behaviour). Config has not hydrated yet at this point, so
+        // this applies the default; onResume re-applies once the stored value is
+        // loaded, and the settings toggle applies it live.
+        ScreenWake.apply(window, GeneralVariables.keepScreenOn)
 
         super.onCreate(savedInstanceState)
 
@@ -113,6 +122,10 @@ class ComposeMainActivity : AppCompatActivity() {
         // and be tapped before the handler exists (which would fall back to a bare
         // stopSelf()/System.exit(0) that skips rig disconnect and RX teardown).
         RxForegroundService.setExitHandler { closeApp() }
+
+        // One rig, several ks3ckc apps: whichever is in front of the operator owns it.
+        // Installed before anything connects so a sibling's request is never missed.
+        installRigHandoff()
 
         // Keep RX alive in the background (no-op until RECORD_AUDIO is granted; the
         // permission-result callback re-invokes this once the user grants it).
@@ -132,6 +145,22 @@ class ComposeMainActivity : AppCompatActivity() {
         UsbAudioNative.setTxVolume(GeneralVariables.volumePercent)
         GeneralVariables.mutableVolumePercent.observe(this) { v ->
             if (v != null) UsbAudioNative.setTxVolume(v)
+        }
+
+        // Re-apply the screen-awake preference once config hydration finishes.
+        // onCreate/onResume both run before initData()'s async config load
+        // completes, so they apply the default (on); if the stored value is
+        // actually false the screen would stay awake until the next resume or a
+        // manual toggle. Observing mutableConfigLoaded catches the moment the real
+        // value lands. Lifecycle-bound and delivered on the main thread, so the
+        // window flag is set safely.
+        mainViewModel.mutableConfigLoaded.observe(this) { loaded ->
+            if (loaded == true) {
+                ScreenWake.apply(window, GeneralVariables.keepScreenOn)
+                // Startup restore (issue #985): the setting is only known once
+                // config lands, so the first onResume can't do it.
+                MediaVolumeRestore.restore(this, "startup")
+            }
         }
 
         // Register back press handler. Priority: dismiss the QSO sheet if
@@ -252,7 +281,13 @@ class ComposeMainActivity : AppCompatActivity() {
             com.k1af.ft8af.alert.DxAlertNotifier.EXTRA_CALLSIGN,
         ) ?: return
         if (callsign.isBlank()) return
-        fileLog("handleAlertIntent: preselect $callsign")
+        // The full callsign goes to the local debug.log, but a callsign is PII in
+        // this app, so the Sentry breadcrumb is redacted (see fileLog / the
+        // "callsign is never sent" promise).
+        fileLog(
+            "handleAlertIntent: preselect $callsign",
+            breadcrumbMsg = "handleAlertIntent: preselect <redacted>",
+        )
         mainViewModel.mutablePreselectCallsign.postValue(callsign)
     }
 
@@ -308,10 +343,11 @@ class ComposeMainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         // Proceed regardless; same behavior as original.
 
-        // RECORD_AUDIO just granted (first launch): start the background RX service now so
-        // it begins in this session instead of only after the next app launch.
-        val micIdx = permissions.indexOf(Manifest.permission.RECORD_AUDIO)
-        if (micIdx >= 0 && grantResults.getOrNull(micIdx) == PackageManager.PERMISSION_GRANTED) {
+        // RECORD_AUDIO just granted (first launch): the mic capture opened at startup failed
+        // without it, so rebuild it, and start the background RX service — both now, in this
+        // session, instead of only after the next app launch.
+        if (micGrantedIn(permissions, grantResults)) {
+            mainViewModel.restartAudioAfterMicGrant()
             startRxServiceIfPermitted()
         }
 
@@ -382,6 +418,16 @@ class ComposeMainActivity : AppCompatActivity() {
                     "baudRate=${GeneralVariables.baudRate}, " +
                     "controlMode=${GeneralVariables.controlMode}, " +
                     "connectMode=${GeneralVariables.connectMode}")
+                // Diagnostic (RX device-selection investigation): the value hydration
+                // actually read from the DB, BEFORE reinitializeAudioInput() below runs
+                // off it — settles whether a later audioInputDeviceId=0 at MicRecorder
+                // init means "never persisted / lost on restart" (this line also shows
+                // 0) or "persisted fine but something reset it afterward" (this line
+                // shows the real value).
+                fileLog("configLoaded: audioInputDeviceId=${GeneralVariables.audioInputDeviceId}, " +
+                    "audioOutputDeviceId=${GeneralVariables.audioOutputDeviceId}, " +
+                    "usbAudioInputVidPid=${GeneralVariables.usbAudioInputVendorId}:" +
+                    "${GeneralVariables.usbAudioInputProductId}")
                 if (GeneralVariables.autoUpdateGridFromGPS) {
                     val grid = MaidenheadGrid.getMyMaidenheadGrid(applicationContext)
                     if (grid.isNotEmpty()) {
@@ -390,8 +436,18 @@ class ComposeMainActivity : AppCompatActivity() {
                     }
                     GridLocationUpdater.refresh(applicationContext, mainViewModel)
                 }
+                // Defensive: a hand-edited or pre-feature-restore config could have both
+                // flags persisted true. Enforce the mutual-exclusion invariant here too —
+                // GPS wins as the original feature — before either updater starts.
+                if (GeneralVariables.disciplineClockFromGPS && GeneralVariables.disciplineClockFromNtp) {
+                    GeneralVariables.disciplineClockFromNtp = false
+                    mainViewModel.databaseOpr.writeConfig("disciplineClockFromNtp", "0", null)
+                }
                 if (GeneralVariables.disciplineClockFromGPS) {
                     GpsClockUpdater.refresh(applicationContext)
+                }
+                if (GeneralVariables.disciplineClockFromNtp) {
+                    NtpClockUpdater.refresh(applicationContext)
                 }
                 mainViewModel.ft8TransmitSignal.setTimer_sec(GeneralVariables.transmitDelay)
 
@@ -415,11 +471,10 @@ class ComposeMainActivity : AppCompatActivity() {
                 // review); gating on connect mode at all keeps a car/headphones paired
                 // for music from being yanked out of A2DP (the original bug).
                 Handler(Looper.getMainLooper()).post {
-                    if (ScoPolicy.shouldEnterHeadsetMode(
-                            GeneralVariables.connectMode, mainViewModel.isBTConnected())
-                    ) {
-                        mainViewModel.setBlueToothOn()
-                    }
+                    // Enter Bluetooth headset (SCO) mode if a Bluetooth rig is in use OR the
+                    // persisted audio device is a Bluetooth-SCO headset (issue #723). The
+                    // decision + AudioRecord rebuild live in the view model.
+                    mainViewModel.refreshBluetoothHeadsetMode()
                 }
 
                 // USB auto-connect is driven by the mutableSerialPorts observer; Bluetooth has
@@ -449,16 +504,18 @@ class ComposeMainActivity : AppCompatActivity() {
         val uri: Uri? = intent.data
         if (uri != null) {
             try {
-                val inputStream = baseContext.contentResolver.openInputStream(uri)
-                if (inputStream == null) {
-                    Log.e(TAG, "Failed to open input stream for URI: $uri")
-                    return
-                }
                 mainViewModel.mutableImportShareRunning.value = true
                 val importSharedLogs = ImportSharedLogs(mainViewModel)
                 Log.d(TAG, "Starting import...")
                 importSharedLogs.doImport(
-                    inputStream,
+                    {
+                        // Re-opened once per pass (ImportSharedLogs.doImport streams the
+                        // source twice: once to count records, once to parse+insert) rather
+                        // than passed as a single already-open stream, so neither pass needs
+                        // to buffer the whole file to allow "rewinding".
+                        baseContext.contentResolver.openInputStream(uri)
+                            ?: throw IOException("Failed to open input stream for URI: $uri")
+                    },
                     object : OnShareLogEvents {
                         override fun onPreparing(info: String?) {
                             mainViewModel.mutableShareInfo.postValue(info)
@@ -609,6 +666,64 @@ class ComposeMainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Re-apply the screen-awake preference. onCreate runs before config
+        // hydration, so the stored value may differ from the default it applied;
+        // this also covers returning from the settings screen.
+        ScreenWake.apply(window, GeneralVariables.keepScreenOn)
+        // Coming back to the app is when a phone that lowered the volume in the
+        // background gets put right (issue #985). No-op while config is unloaded.
+        MediaVolumeRestore.restore(this, "resume")
+    }
+
+    override fun onStart() {
+        super.onStart()
+        // We are in front of the operator: ask any sibling app to let go of the rig,
+        // and take it back if we had lent it out.
+        RigHandoff.get()?.onForegrounded(System.currentTimeMillis())
+    }
+
+    /**
+     * Wire the rig handoff (see [RigHandoffProtocol]) to this app's radio layer. The
+     * controller is process-lifetime; the callbacks resolve the view model lazily so a
+     * recreated activity never leaves them pointing at a dead one.
+     */
+    private fun installRigHandoff() {
+        val app = applicationContext
+        RigHandoff.install(
+            app,
+            object : RigHandoffController.Rig {
+                override fun isTransmitting(): Boolean =
+                    MainViewModel.peekInstance()?.isTransmittingForHandoff() == true
+
+                override fun stopTransmit() {
+                    MainViewModel.peekInstance()?.stopTransmitForHandoff()
+                }
+
+                override fun release() {
+                    MainViewModel.peekInstance()?.releaseRigForHandoff()
+                }
+
+                override fun reclaim() {
+                    MainViewModel.peekInstance()?.reclaimRigAfterHandoff()
+                }
+            },
+            object : RigHandoffController.Listener {
+                override fun onYielded(toPackage: String) {
+                    // The notification is the only surface a backgrounded app has.
+                    RxForegroundService.refreshNotification(app)
+                }
+
+                override fun onRegained(fromPackage: String?) {
+                    RxForegroundService.refreshNotification(app)
+                    rigTakeoverMessage(app.getString(R.string.rig_handoff_took_over), fromPackage)
+                        ?.let { ToastMessage.show(it) }
+                }
+            },
+        )
+    }
+
     override fun onStop() {
         // A tune carrier must never outlive the operator's attention (issue
         // #408): backgrounding or swiping the app away mid-tune force-stops the
@@ -638,6 +753,11 @@ class ComposeMainActivity : AppCompatActivity() {
     private fun autoConnectUsbIfNeeded(ports: ArrayList<CableSerialPort.SerialPort>?) {
         if (ports.isNullOrEmpty()) {
             fileLog("autoConnect: no serial ports detected")
+            return
+        }
+        if (RigHandoffGate.isYielded()) {
+            // A sibling app is using the rig; a port (re)appearing must not steal it back.
+            fileLog("autoConnect: rig handed to ${RigHandoffGate.yieldedTo()}, skipping")
             return
         }
         if (mainViewModel.isRigConnected()) {
@@ -698,8 +818,20 @@ class ComposeMainActivity : AppCompatActivity() {
         }
     }
 
-    /** Write a line to /sdcard/Android/data/com.k1af.ft8af/files/debug.log */
-    private fun fileLog(msg: String) {
+    /**
+     * Write a line to /sdcard/Android/data/com.k1af.ft8af/files/debug.log.
+     *
+     * The full [msg] always goes to the on-device debug.log and logcat, but only
+     * [breadcrumbMsg] is mirrored into Sentry — pass a redacted string (or null) for
+     * lines carrying PII (callsign, grid, location) so it never rides along with a
+     * crash report, keeping the "callsign/location are never sent" promise.
+     */
+    private fun fileLog(msg: String, breadcrumbMsg: String? = msg) {
+        // Mirror the (possibly redacted) line into Sentry as a breadcrumb so a crash
+        // report carries the same event trail (CAT sends, band changes, USB
+        // attach…). No-op unless crash reporting is enabled. First, so it fires
+        // even when the external dir is unavailable and the file write is skipped.
+        breadcrumbMsg?.let { CrashReporting.breadcrumb(it) }
         try {
             val ts = SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(Date())
             val dir = getExternalFilesDir(null) ?: return
@@ -729,6 +861,13 @@ class ComposeMainActivity : AppCompatActivity() {
                 val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                 val systemVol = (newVol * maxVol).toInt().coerceIn(0, maxVol)
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, systemVol, 0)
+                // The keys set the level on purpose, so that's now the one to restore.
+                if (GeneralVariables.restoreMediaVolume) {
+                    MediaVolumeRestore.saveLevel(systemVol)
+                    mainViewModel.databaseOpr.writeConfig(
+                        MediaVolumeRestore.CONFIG_LEVEL, systemVol.toString(), null,
+                    )
+                }
 
                 // Show volume toast
                 volumeToast?.cancel()
@@ -753,6 +892,23 @@ class ComposeMainActivity : AppCompatActivity() {
 }
 
 /**
+ * The "took the radio over from FT8AF" toast text, or null when there is nobody to name
+ * (we simply came back for a rig no sibling confirmed releasing). Top-level + [internal]
+ * so it is unit-testable without the Activity.
+ */
+internal fun rigTakeoverMessage(template: String, fromPackage: String?): String? =
+    fromPackage?.let { String.format(template, RigHandoffProtocol.displayName(it)) }
+
+/**
+ * True if this permission result granted RECORD_AUDIO. Top-level + [internal] so
+ * the first-launch mic restart can be unit-tested without constructing the Activity.
+ */
+internal fun micGrantedIn(
+    permissions: Array<out String>,
+    grantResults: IntArray,
+): Boolean = permissionGrantedIn(permissions, grantResults, Manifest.permission.RECORD_AUDIO)
+
+/**
  * True if this permission result granted either fine or coarse location.
  * Top-level + [internal] so the GPS-grid restart decision (issue #59) can be
  * unit-tested without constructing the Activity.
@@ -760,16 +916,21 @@ class ComposeMainActivity : AppCompatActivity() {
 internal fun locationGrantedIn(
     permissions: Array<out String>,
     grantResults: IntArray,
-): Boolean {
-    for (i in permissions.indices) {
-        if (i >= grantResults.size) break
-        val p = permissions[i]
-        if ((p == Manifest.permission.ACCESS_FINE_LOCATION ||
-                p == Manifest.permission.ACCESS_COARSE_LOCATION) &&
-            grantResults[i] == PackageManager.PERMISSION_GRANTED
-        ) {
-            return true
-        }
-    }
-    return false
+): Boolean = permissionGrantedIn(
+    permissions,
+    grantResults,
+    Manifest.permission.ACCESS_FINE_LOCATION,
+    Manifest.permission.ACCESS_COARSE_LOCATION,
+)
+
+/**
+ * True if this permission result granted any of [wanted]. A cancelled request
+ * delivers an empty (or short) [grantResults], which counts as not granted.
+ */
+internal fun permissionGrantedIn(
+    permissions: Array<out String>,
+    grantResults: IntArray,
+    vararg wanted: String,
+): Boolean = permissions.indices.any { i ->
+    permissions[i] in wanted && grantResults.getOrNull(i) == PackageManager.PERMISSION_GRANTED
 }

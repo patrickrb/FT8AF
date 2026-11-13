@@ -722,7 +722,7 @@
                             android:layout_marginTop="4dp"
                             android:background="@drawable/editor_style"
                             android:ems="10"
-                            android:inputType="text|textUri"
+                            android:inputType="number"
 
                             android:minHeight="15dp"
                             android:textColor="@color/text_view_color"
@@ -1642,6 +1642,15 @@
                                 android:layout_height="wrap_content"
                                 android:buttonTint="?attr/colorPrimary"
                                 android:text="@string/fast_mode"
+                                android:textColor="@color/text_view_color"
+                                android:textSize="12sp" />
+
+                            <RadioButton
+                                android:id="@+id/balancedDecodeRadioButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:buttonTint="?attr/colorPrimary"
+                                android:text="@string/balanced_mode"
                                 android:textColor="@color/text_view_color"
                                 android:textSize="12sp" />
 

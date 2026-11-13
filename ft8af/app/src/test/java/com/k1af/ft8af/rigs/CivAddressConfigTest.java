@@ -1,0 +1,212 @@
+package com.k1af.ft8af.rigs;
+
+import static com.google.common.truth.Truth.assertThat;
+
+import org.junit.Test;
+
+/**
+ * Unit tests for {@link CivAddressConfig} (issue #753): the {@code civ} config key is hex,
+ * the Compose rig picker wrote decimal for three months, and the loader has to survive
+ * both. Pure JUnit — no Android types.
+ */
+public class CivAddressConfigTest {
+
+    // ---- encode --------------------------------------------------------------------
+
+    @Test
+    public void encode_isLowercaseHexWithoutPrefix() {
+        assertThat(CivAddressConfig.encode(0xA4)).isEqualTo("a4");
+        assertThat(CivAddressConfig.encode(0x94)).isEqualTo("94");
+        assertThat(CivAddressConfig.encode(0x0E)).isEqualTo("e");
+    }
+
+    @Test
+    public void encode_masksToOneByte() {
+        assertThat(CivAddressConfig.encode(0x1A4)).isEqualTo("a4");
+    }
+
+    @Test
+    public void encode_roundTripsThroughDecode() {
+        for (int a = 0; a <= 0xFF; a++) {
+            assertThat(CivAddressConfig.decode(CivAddressConfig.encode(a), -1)).isEqualTo(a);
+        }
+    }
+
+    // ---- decode --------------------------------------------------------------------
+
+    @Test
+    public void decode_hex_asAlwaysStored() {
+        assertThat(CivAddressConfig.decode("a4", 0)).isEqualTo(0xA4);
+        assertThat(CivAddressConfig.decode("A4", 0)).isEqualTo(0xA4);
+        assertThat(CivAddressConfig.decode(" 5e ", 0)).isEqualTo(0x5E);
+        assertThat(CivAddressConfig.decode("0xA4", 0)).isEqualTo(0xA4);
+    }
+
+    @Test
+    public void decode_repairsDecimalWrittenByOldComposePicker() {
+        // IC-705: 0xA4 == 164 -> stored "164" -> hex 0x164 overflows a byte -> decimal 164.
+        assertThat(CivAddressConfig.decode("164", 0)).isEqualTo(0xA4);
+        // IC-7300 0x94 == 148, IC-7000 0x70 == 112, IC-9700 0xA2 == 162, IC-7100 0x88 == 136
+        assertThat(CivAddressConfig.decode("148", 0)).isEqualTo(0x94);
+        assertThat(CivAddressConfig.decode("112", 0)).isEqualTo(0x70);
+        assertThat(CivAddressConfig.decode("162", 0)).isEqualTo(0xA2);
+        assertThat(CivAddressConfig.decode("136", 0)).isEqualTo(0x88);
+    }
+
+    @Test
+    public void decode_twoDigitDecimal_isAmbiguous_readAsHex() {
+        // "88" (an IC-706MKIIG's 0x58 in decimal) is also valid hex — decode alone can't
+        // tell; reconcileWithModel settles it.
+        assertThat(CivAddressConfig.decode("88", 0)).isEqualTo(0x88);
+    }
+
+    @Test
+    public void decode_fallbacks() {
+        assertThat(CivAddressConfig.decode(null, 0xA4)).isEqualTo(0xA4);
+        assertThat(CivAddressConfig.decode("", 0xA4)).isEqualTo(0xA4);
+        assertThat(CivAddressConfig.decode("   ", 0xA4)).isEqualTo(0xA4);
+        assertThat(CivAddressConfig.decode("zz", 0xA4)).isEqualTo(0xA4);
+        assertThat(CivAddressConfig.decode("0x", 0xA4)).isEqualTo(0xA4);
+        // Too big in both bases.
+        assertThat(CivAddressConfig.decode("999", 0xA4)).isEqualTo(0xA4);
+        assertThat(CivAddressConfig.decode("1a4", 0xA4)).isEqualTo(0xA4);
+        assertThat(CivAddressConfig.decode("-1", 0xA4)).isEqualTo(0xA4);
+    }
+
+    // ---- reconcileWithModel ----------------------------------------------------------
+
+    @Test
+    public void reconcile_matchingModel_unchanged() {
+        assertThat(CivAddressConfig.reconcileWithModel(0xA4, 0xA4)).isEqualTo(0xA4);
+    }
+
+    @Test
+    public void reconcile_twoDigitDecimalTwinOfModel_resolvesToModel() {
+        // planRepair only uses this to *detect* the ambiguity (Copilot #778); the helper's
+        // own contract is unchanged.
+        // Stored "88" for 0x58 (IC-706MKIIG) -> loaded 0x88; digits "88" in decimal == 0x58.
+        assertThat(CivAddressConfig.reconcileWithModel(0x88, 0x58)).isEqualTo(0x58);
+        // Stored "94" for 0x5E (IC-718).
+        assertThat(CivAddressConfig.reconcileWithModel(0x94, 0x5E)).isEqualTo(0x5E);
+        // Stored "40" for 0x28 (IC-725).
+        assertThat(CivAddressConfig.reconcileWithModel(0x40, 0x28)).isEqualTo(0x28);
+    }
+
+    @Test
+    public void reconcile_userOverride_isLeftAlone() {
+        // Rig re-addressed to 0x5F on purpose while the model says 0xA4: not a decimal twin.
+        assertThat(CivAddressConfig.reconcileWithModel(0x5F, 0xA4)).isEqualTo(0x5F);
+        // Hex digits with a letter can't be a decimal twin at all.
+        assertThat(CivAddressConfig.reconcileWithModel(0x9A, 0x62)).isEqualTo(0x9A);
+    }
+
+    @Test
+    public void reconcile_invalidModelAddress_isIgnored() {
+        assertThat(CivAddressConfig.reconcileWithModel(0x88, -1)).isEqualTo(0x88);
+        assertThat(CivAddressConfig.reconcileWithModel(0x88, 0x100)).isEqualTo(0x88);
+    }
+
+    // ---- planRepair (provenance marker + write-back) -----------------------------------
+
+    @Test
+    public void plan_unmarkedThreeDigitDecimal_isWrittenBackEvenThoughAddressMatchesModel() {
+        // Copilot review #774: "164" decodes to 0xA4 == model, so an address-only compare
+        // would never persist the fix and "164" would stay on disk forever.
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("164", false, 0xA4, 0xA4);
+        assertThat(r.address).isEqualTo(0xA4);
+        assertThat(r.writeBack).isTrue();
+    }
+
+    @Test
+    public void plan_unmarkedTwoDigitDecimalTwin_isKeptFlaggedAmbiguousAndMarked() {
+        // Copilot review on #778: "88" on an IC-706 (0x58) is either the old picker's decimal
+        // write or a deliberate 0x88 override typed into the legacy hex field — with no UI
+        // left to restore an override, it must not be silently rewritten. Keep 0x88, mark
+        // it so this is a one-time event, and flag it so the user gets the re-select hint.
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("88", false, 0x88, 0x58);
+        assertThat(r.address).isEqualTo(0x88);
+        assertThat(r.writeBack).isTrue();
+        assertThat(r.ambiguous).isTrue();
+    }
+
+    @Test
+    public void plan_unmarkedNonTwinMismatch_isNotAmbiguous() {
+        // 0x5F vs model 0xA4: "5f" can't be a decimal string, so it's a plain override.
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("5f", false, 0x5F, 0xA4);
+        assertThat(r.address).isEqualTo(0x5F);
+        assertThat(r.writeBack).isTrue();   // marker still gets written
+        assertThat(r.ambiguous).isFalse();
+    }
+
+    @Test
+    public void plan_threeDigitDecimal_isNeverAmbiguous() {
+        // decode() already resolved "164" -> 0xA4 unambiguously; nothing to hint about.
+        assertThat(CivAddressConfig.planRepair("164", false, 0xA4, 0xA4).ambiguous).isFalse();
+    }
+
+    @Test
+    public void plan_markedOverrideThatIsDecimalTwinOfModel_isTrusted() {
+        // Copilot review #774: a user who deliberately set 0x88 on an IC-706 (model 0x58)
+        // through a hex-aware writer must not have it reset on every connectRig().
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("88", true, 0x88, 0x58);
+        assertThat(r.address).isEqualTo(0x88);
+        assertThat(r.writeBack).isFalse();
+        assertThat(r.ambiguous).isFalse();   // known provenance: no hint either
+    }
+
+    @Test
+    public void plan_unmarkedCanonicalHex_isMarkedOnce() {
+        // Value is fine, but provenance is unknown: write the marker so it's settled.
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("a4", false, 0xA4, 0xA4);
+        assertThat(r.address).isEqualTo(0xA4);
+        assertThat(r.writeBack).isTrue();
+        assertThat(r.ambiguous).isFalse();
+    }
+
+    @Test
+    public void plan_markedCanonicalHex_isSteadyState() {
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("a4", true, 0xA4, 0xA4);
+        assertThat(r.address).isEqualTo(0xA4);
+        assertThat(r.writeBack).isFalse();
+        // Case / whitespace differences don't count as non-canonical.
+        assertThat(CivAddressConfig.planRepair(" A4 ", true, 0xA4, 0xA4).writeBack).isFalse();
+    }
+
+    @Test
+    public void plan_markedButPrefixedHex_isCanonicalized() {
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("0xA4", true, 0xA4, 0xA4);
+        assertThat(r.address).isEqualTo(0xA4);
+        assertThat(r.writeBack).isTrue();
+    }
+
+    @Test
+    public void plan_noStoredRow_isWrittenBackWithDefault() {
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair(null, false, 0xA4, 0xA4);
+        assertThat(r.address).isEqualTo(0xA4);
+        assertThat(r.writeBack).isTrue();
+    }
+
+    @Test
+    public void plan_markedUserOverride_neverReconciled() {
+        CivAddressConfig.Repair r = CivAddressConfig.planRepair("5f", true, 0x5F, 0xA4);
+        assertThat(r.address).isEqualTo(0x5F);
+        assertThat(r.writeBack).isFalse();
+    }
+
+    @Test
+    public void isHexFormatMarker() {
+        assertThat(CivAddressConfig.isHexFormatMarker("hex")).isTrue();
+        assertThat(CivAddressConfig.isHexFormatMarker(" HEX ")).isTrue();
+        assertThat(CivAddressConfig.isHexFormatMarker("dec")).isFalse();
+        assertThat(CivAddressConfig.isHexFormatMarker("")).isFalse();
+        assertThat(CivAddressConfig.isHexFormatMarker(null)).isFalse();
+    }
+
+    @Test
+    public void decimalTwin_helper() {
+        assertThat(CivAddressConfig.decimalTwin("88")).isEqualTo(88);
+        assertThat(CivAddressConfig.decimalTwin("a4")).isEqualTo(-1);
+        assertThat(CivAddressConfig.decimalTwin("")).isEqualTo(-1);
+        assertThat(CivAddressConfig.decimalTwin(null)).isEqualTo(-1);
+    }
+}

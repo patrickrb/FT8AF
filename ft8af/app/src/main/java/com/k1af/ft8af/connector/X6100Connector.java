@@ -243,6 +243,13 @@ public class X6100Connector extends BaseRigConnector {
     //Method for sending A91 data packets
     @Override
     public void sendFt8A91(byte[] a91,float baseFreq){
+        // Defence-in-depth: callers already drop PTT + skip on a null a91 (invalid
+        // callsign), but never hand a null payload to the rig — it carries no message and
+        // would previously NPE in byteToStr() below / be sent as a bogus A91 packet.
+        if (a91 == null) {
+            Log.w(TAG, "sendFt8A91: null a91 payload (invalid callsign?), skipping");
+            return;
+        }
         Log.d(TAG,String.format("A91:%s", BaseRig.byteToStr(a91)));
         //xieguRadio.commandSendA91(a91,GeneralVariables.volumePercent,baseFreq);
         xieguRadio.commandSendA91(a91,0.95f,baseFreq);

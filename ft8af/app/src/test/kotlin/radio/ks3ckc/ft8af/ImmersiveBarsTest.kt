@@ -13,7 +13,7 @@ import org.robolectric.RobolectricTestRunner
  * Guards the edge-to-edge immersive system-bar configuration.
  *
  * The app migrated off the deprecated FLAG_FULLSCREEN / window.statusBarColor
- * APIs (no-ops on Android 15 / targetSdk 35) to enableEdgeToEdge plus an insets
+ * APIs (no-ops since Android 15 / API 35) to enableEdgeToEdge plus an insets
  * controller that hides the bars. [ImmersiveBars] must request the
  * transient-by-swipe behavior so a swipe still reveals the bars and they then
  * re-hide — losing that constant would either pin the bars open or make them

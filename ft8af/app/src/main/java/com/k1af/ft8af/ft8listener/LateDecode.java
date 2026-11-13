@@ -17,6 +17,16 @@ import java.util.concurrent.locks.ReentrantLock;
  * second buffer; the still-running decode thread picks that buffer up after the early
  * passes finish and decodes it as an extra, late delivery.
  *
+ * <p>The two buffers are complementary, not competing: the early pass exists for SPEED
+ * (its fast results feed the auto-sequencer in time for the next slot's TX), the
+ * full-slot pass for DEPTH (high-DT recovery, and — with deep decode on — the
+ * subtract-and-redecode loop, which runs here instead of on the truncated early buffer;
+ * see {@link #deepLoopRunsOnEarlyBuffer}). The full-slot pass is bounded by
+ * {@link #latePassDeadlineMillis} so it normally finishes before the next slot's early
+ * decode starts rather than colliding with it, with the {@link AnalysisGate} contention
+ * abort as the backstop when it can't (per-candidate overrun, or a mid-slot timer
+ * rebuild moving the next boundary).
+ *
  * <p>This class holds the parts of that feature that are decisions/state rather than
  * native-decoder plumbing, so they stay unit-testable: the should-run predicate, the
  * bounded-wait math, and the one-shot buffer handoff between the recorder's monitor
@@ -34,7 +44,62 @@ public final class LateDecode {
      */
     static final long DELIVERY_GRACE_MS = 3000;
 
+    /**
+     * Safety margin subtracted from the late pass's absolute deadline (next slot boundary
+     * + early window = the instant the next slot's early decode thread starts). The
+     * deadline is only checked between candidates, so the late pass can overrun it by one
+     * candidate's analysis — deep multi-iteration LDPC on a busy band runs into the
+     * hundreds of milliseconds. The margin absorbs that plus scheduling jitter, so the
+     * analysis-gate abort stays a backstop instead of the routine exit path.
+     */
+    static final long LATE_PASS_SAFETY_MS = 750;
+
     private LateDecode() {}
+
+    /**
+     * Absolute wall-clock instant the late full-slot pass must finish by: when the NEXT
+     * slot's early decode thread starts (next boundary + early window), minus
+     * {@link #LATE_PASS_SAFETY_MS}. Computed from the slot's RECORD-TIME mode snapshot,
+     * so it assumes the next slot keeps the same cycle timing; if the operator switches
+     * modes mid-slot, {@code FT8SignalListener.rebuildTimer(...)} moves the actual next
+     * boundary and this bound no longer tracks it — in that (rare) case the
+     * {@link AnalysisGate} contention abort is the backstop, exactly as it is for a
+     * per-candidate overrun. Before this bound existed the late pass was only
+     * budget-bounded; with deep decode on, the early buffer's subtraction loop pushed its
+     * start right up against the next early decode, so its first gate contention aborted
+     * the whole candidate scan almost every slot — the two decode passes fought instead
+     * of cooperating.
+     *
+     * @param registeredAtMs wall-clock time the full-slot monitor was registered
+     *                       (the slot boundary)
+     * @param mode           the slot's RECORD-TIME mode snapshot
+     */
+    static long latePassDeadlineMillis(long registeredAtMs, ModeProfile mode) {
+        return registeredAtMs + mode.slotMillis + mode.earlyDecodeMillis - LATE_PASS_SAFETY_MS;
+    }
+
+    /**
+     * The deadline the late full-slot pass actually runs under: the window bound above
+     * capped by the mode's deep budget (a slow device must not chain late work across
+     * multiple later slots even when the window would allow it).
+     */
+    public static long effectiveLatePassDeadline(long windowDeadlineEpochMs,
+                                                 long budgetDeadlineEpochMs) {
+        return Math.min(windowDeadlineEpochMs, budgetDeadlineEpochMs);
+    }
+
+    /**
+     * Where this slot's deep subtract-and-redecode loop runs. With no late pass scheduled
+     * (early decode off, or FT4/FT2) the early buffer is the only buffer, so the loop runs
+     * there. When a late full-slot pass IS scheduled, the early buffer is a strict prefix
+     * of the full-slot buffer — running the loop on both would duplicate the deep work AND
+     * delay the late pass past the next slot's early decode (the "decoders fighting"
+     * failure). So the loop is deferred to the full-slot pass, which becomes the slot's
+     * single deep engine.
+     */
+    public static boolean deepLoopRunsOnEarlyBuffer(Handoff lateHandoff) {
+        return lateHandoff == null;
+    }
 
     /**
      * Whether this cycle should schedule the second, full-slot decode pass.
@@ -68,7 +133,7 @@ public final class LateDecode {
     public static SlotPlan planSlot(boolean earlyDecode, ModeProfile mode, long nowMs) {
         int recordMillis = earlyDecode ? mode.earlyDecodeMillis : mode.slotMillis;
         Handoff lateHandoff = shouldRunLatePass(earlyDecode, mode)
-                ? new Handoff(nowMs, mode.slotMillis)
+                ? new Handoff(nowMs, mode)
                 : null;
         return new SlotPlan(mode, recordMillis, lateHandoff);
     }
@@ -120,13 +185,20 @@ public final class LateDecode {
     public static final class Handoff {
         private final ArrayBlockingQueue<float[]> queue = new ArrayBlockingQueue<>(1);
         private final long deadlineEpochMs;
+        /**
+         * Absolute instant the late full-slot pass must finish by — the next slot's
+         * early-decode start minus the safety margin. See {@link #latePassDeadlineMillis}.
+         */
+        public final long latePassDeadlineEpochMs;
 
         /**
          * @param registeredAtMs wall-clock time the full-slot voice monitor was registered
-         * @param slotMillis     the mode's slot length (== the monitor's duration)
+         *                       (the slot boundary)
+         * @param mode           the slot's RECORD-TIME mode snapshot
          */
-        public Handoff(long registeredAtMs, int slotMillis) {
-            this.deadlineEpochMs = deliveryDeadlineMillis(registeredAtMs, slotMillis);
+        public Handoff(long registeredAtMs, ModeProfile mode) {
+            this.deadlineEpochMs = deliveryDeadlineMillis(registeredAtMs, mode.slotMillis);
+            this.latePassDeadlineEpochMs = latePassDeadlineMillis(registeredAtMs, mode);
         }
 
         /**

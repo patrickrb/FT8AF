@@ -45,6 +45,9 @@ public class RxForegroundService extends Service {
      */
     private static volatile Runnable exitHandler;
 
+    /** The running service, for {@link #refreshNotification}; null when stopped. */
+    private static volatile RxForegroundService instance;
+
     public static void setExitHandler(Runnable handler) {
         exitHandler = handler;
     }
@@ -52,6 +55,24 @@ public class RxForegroundService extends Service {
     public static void start(Context context) {
         ContextCompat.startForegroundService(
                 context, new Intent(context, RxForegroundService.class));
+    }
+
+    /**
+     * Re-post the ongoing notification so its text follows the rig-handoff state.
+     * Posted through the NotificationManager on the live instance rather than by
+     * re-starting the service: a start from the background can be refused on Android
+     * 12+, and the failure path of onStartCommand stops the keeper service.
+     */
+    public static void refreshNotification(Context context) {
+        RxForegroundService service = instance;
+        if (service == null) return; // not running: nothing on screen to update
+        try {
+            NotificationManager nm = (NotificationManager)
+                    service.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.notify(NOTIF_ID, service.buildNotification());
+        } catch (RuntimeException e) {
+            GeneralVariables.fileLog("RxForegroundService refresh failed: " + e);
+        }
     }
 
     public static void stop(Context context) {
@@ -67,6 +88,7 @@ public class RxForegroundService extends Service {
     public void onCreate() {
         super.onCreate();
         createChannel();
+        instance = this;
     }
 
     @Override
@@ -107,6 +129,7 @@ public class RxForegroundService extends Service {
 
     @Override
     public void onDestroy() {
+        instance = null;
         releaseWakeLock();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             stopForeground(Service.STOP_FOREGROUND_REMOVE);
@@ -160,7 +183,12 @@ public class RxForegroundService extends Service {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(getString(R.string.rx_service_title))
-                .setContentText(getString(R.string.rx_service_text))
+                .setContentText(RxServiceController.rigYielded(
+                        com.k1af.ft8af.handoff.RigHandoffGate.yieldedTo())
+                        ? getString(R.string.rig_handoff_yielded,
+                                com.k1af.ft8af.handoff.RigHandoffProtocol.displayName(
+                                        com.k1af.ft8af.handoff.RigHandoffGate.yieldedTo()))
+                        : getString(R.string.rx_service_text))
                 .setOngoing(true)
                 .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setCategory(NotificationCompat.CATEGORY_SERVICE)

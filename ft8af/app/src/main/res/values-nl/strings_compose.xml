@@ -139,6 +139,7 @@
     <string name="qsopanel_qsoing_with">QSO met %1$s</string>
     <string name="qsopanel_waiting_for">Wachten op %1$s</string>
     <string name="qsopanel_tap_to_view">tik om te bekijken ↗</string>
+    <string name="qsopanel_sent_report">verzonden %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Wachten op berichten...</string>
     <string name="qsopanel_log_action">LOGGEN</string>
@@ -237,9 +238,11 @@
     <string name="log_sync_title_no_services">GEEN DIENSTEN INGESCHAKELD</string>
     <string name="log_sync_title_syncing">SYNCHRONISEREN…</string>
     <string name="log_sync_title_complete">SYNCHRONISATIE VOLTOOID</string>
-    <string name="log_sync_enable_services">Schakel Cloudlog/Wavelog/Nextlog of QRZ in bij Instellingen en probeer het opnieuw.</string>
+    <string name="log_sync_enable_services">Schakel Cloudlog/Wavelog/Nextlog, QRZ of World Radio League in bij Instellingen en probeer het opnieuw.</string>
     <string name="log_sync_progress_count">%1$d van %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d geaccepteerd</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d al in logboek</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d gedownload</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d geaccepteerd</string>
     <string name="log_sync_nothing_to_upload">Nog geen QSOs in het logboek om te uploaden.</string>
     <string name="log_sync_working">Bezig…</string>
@@ -248,6 +251,25 @@
     <string name="pota_tab_activate">Activeren</string>
     <string name="pota_tab_hunt">Hunt</string>
     <string name="pota_tab_history">Geschiedenis</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">zojuist</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="one">%d s geleden</item>
+        <item quantity="other">%d s geleden</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="one">%d min geleden</item>
+        <item quantity="other">%d min geleden</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="one">%d u geleden</item>
+        <item quantity="other">%d u geleden</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="one">%d d geleden</item>
+        <item quantity="other">%d d geleden</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">UTC-tijd tonen</string>
     <string name="pota_start_activation">Activatie starten</string>
     <string name="pota_park_reference_label">Parkreferentie (bijv. K-1234)</string>
     <string name="pota_notes_optional_label">Notities (optioneel)</string>
@@ -259,6 +281,7 @@
     <string name="pota_self_spot_failed">Self-spot mislukt — controleer log</string>
     <string name="pota_active_park">ACTIEF — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">duplicaat</string>
     <string name="pota_contacts_map">Contactenkaart</string>
     <string name="pota_back">Terug</string>
     <string name="pota_valid_activation">geldige activatie</string>
@@ -406,6 +429,9 @@
     <string name="settings_tx_watchdog_desc">Uitzending automatisch stoppen na time-out</string>
     <string name="settings_stop_after">Stoppen na</string>
     <string name="settings_stop_after_desc">Stop met roepen na N onbeantwoorde pogingen</string>
+    <string name="settings_max_73">Max. 73-zendingen</string>
+    <string name="settings_max_73_desc">Maximaal aantal RR73/73-uitzendingen per verbinding voordat wordt doorgegaan</string>
+    <string name="settings_max_73_auto">Auto</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Hunt (CQ automatisch beantwoorden)</string>
@@ -473,6 +499,9 @@
     <string name="settings_qrz_profile_lookup_desc">Gebruikersnaam + wachtwoord voor QRZ XML API (avatars)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">QSO\'s automatisch uploaden naar een Cloudlog-, Wavelog- of Nextlog-instantie</string>
+    <string name="settings_cloudlog_download">QSO\'s van Wavelog downloaden bij synchroniseren</string>
+    <string name="settings_cloudlog_download_desc">Synchroniseren voegt ook QSO\'s toe die in je Wavelog-logboek staan maar niet in dit logboek. Ze worden niet doorgestuurd naar QRZ of World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">Vereist Wavelog: deze server kan zijn QSO\'s niet opsommen.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">PTT-vertraging</string>
@@ -489,8 +518,11 @@
     <string name="bug_report_send_email">E-mail verzenden</string>
     <string name="bug_report_no_email_app">Geen e-mailapp gevonden om de melding te verzenden</string>
     <string name="bug_report_open_github">GitHub-issue openen</string>
-    <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">debug.log bekijken / delen</string>
+    <string name="settings_share_logs">Logs delen</string>
+    <string name="settings_share_logs_desc">debug.log versturen via e-mail, Discord, Drive…</string>
+    <string name="settings_view_logs">Logs bekijken</string>
+    <string name="settings_share_logs_empty">Nog geen log vastgelegd</string>
     <string name="settings_about_body">Versie %1$s (build %2$s)\nBuilddatum %3$s\n\nFT8, eenvoudig gemaakt.\n\nEen zelfstandige FT8-transceiver-app voor Android. USB-, Bluetooth- en netwerk-rigbesturing met automatische sequentie en logboek.</string>
     <string name="settings_website">Website</string>
     <string name="settings_community">Community</string>
@@ -510,8 +542,6 @@
     <string name="settings_conn_network">Netwerk</string>
     <string name="settings_no_usb_serial">Geen USB-seriële apparaten gedetecteerd. Sluit een USB-kabel aan op je radio en probeer het opnieuw.</string>
     <string name="settings_no_bluetooth_devices">Geen gekoppelde Bluetooth-apparaten gevonden. Koppel eerst een apparaat in de Bluetooth-instellingen van Android.</string>
-    <string name="settings_debug_mode_enabled">Debugmodus ingeschakeld</string>
-    <string name="settings_debug_mode_disabled">Debugmodus uitgeschakeld</string>
     <string name="settings_edit_operator_identity">Operatoridentiteit bewerken</string>
     <string name="settings_callsign">Roepnaam</string>
     <string name="settings_callsign_hint">bijv. W1AW</string>
@@ -534,6 +564,7 @@
     <string name="settings_username_hint">Je QRZ.com-gebruikersnaam</string>
     <string name="settings_password">Wachtwoord</string>
     <string name="settings_enabled_bands_dialog_desc">Verborgen banden verschijnen niet in de frequentiekiezers.</string>
+    <string name="settings_enabled_bands_keep_one">Er moet minstens één band ingeschakeld blijven.</string>
     <string name="settings_select_serial_port">Seriële poort selecteren</string>
     <string name="settings_tx_volume_advice">Pas live aan — je volgende TX gebruikt dit niveau. Houd de ALC van je radio in de gaten en draai terug tot deze net de lijn raakt.</string>
     <string name="settings_input_volume">Ingangsvolume</string>
@@ -560,6 +591,8 @@
     <string name="cq_offset_moved">CQ-offset verplaatst naar een vrije plek: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Automatisch vrije TX-offset</string>
     <string name="settings_auto_clear_tx_desc">Kiest bij het roepen van CQ een vrije plek op basis van recente bandactiviteit en wijkt uit als die bezet raakt</string>
+    <string name="settings_auto_clear_tx_min">Laagste automatische offset</string>
+    <string name="settings_auto_clear_tx_min_desc">Automatisch kiezen gaat nooit onder deze offset. Verhoog hem om audioharmonischen buiten de doorlaatband te houden</string>
     <string name="tune_content_description">Tune: start de tuner van de radio of zendt een continue draaggolf uit voor antenne-afstemming</string>
     <string name="tune_stopped_timeout">Tune gestopt na %1$d s</string>
     <string name="tune_blocked_tx">Stop de CQ/QSO voordat je Tune gebruikt</string>
@@ -591,4 +624,15 @@
     <string name="settings_bin_agg_max">Maximum</string>
     <string name="settings_bin_agg_avg">Gemiddelde</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d geaccepteerd</string>
+    <string name="settings_wrl_desc">QSO\'s automatisch uploaden naar je World Radio League-logboek (vereist een Developer API-sleutel)</string>
+    <string name="settings_wrl_dialog_desc">Maak een sleutel aan in World Radio League onder Integrations → Developer API. Eén sleutel geldt voor je hele account.</string>
+    <string name="settings_wrl_logbook">Logboek</string>
+    <string name="settings_wrl_logbook_default">Standaardlogboek</string>
+    <string name="settings_wrl_loading_logbooks">Logboeken laden…</string>
+    <string name="settings_wrl_no_logbooks">Je World Radio League-account heeft nog geen logboeken.</string>
+    <string name="settings_wrl_create_logbook">Logboek “%1$s” aanmaken</string>
+    <string name="settings_wrl_creating_logbook">Logboek aanmaken…</string>
 </resources>

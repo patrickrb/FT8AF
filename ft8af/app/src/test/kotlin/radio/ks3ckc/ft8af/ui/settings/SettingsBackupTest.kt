@@ -39,6 +39,15 @@ class SettingsBackupTest {
         assertThat(filtered).hasSize(sampleConfig.size)
     }
 
+    @Test
+    fun `world radio league api key is treated as sensitive`() {
+        val config = mapOf("wrlApiKey" to "wrl_live_secret", "enableWRL" to "1", "wrlLogbookId" to "abc")
+        val filtered = SettingsBackup.filterConfig(config, includeSensitive = false)
+        assertThat(filtered).doesNotContainKey("wrlApiKey")
+        // The toggle and logbook choice are not secrets and still round-trip.
+        assertThat(filtered.keys).containsExactly("enableWRL", "wrlLogbookId")
+    }
+
     // -- buildBackupJson --
 
     @Test

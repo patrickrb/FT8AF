@@ -97,6 +97,7 @@ class LanguagePickerTest {
     private fun valuesDir(tag: String): String = when (tag) {
         "zh-CN" -> "values-zh-rCN"
         "zh-TW" -> "values-zh-rTW"
+        "pt-BR" -> "values-pt-rBR"
         // Indonesian: AAPT2 canonicalizes the obsolete "id" code to the legacy
         // "in", so the resources live in values-in even though the BCP-47 tag is "id".
         "id" -> "values-in"

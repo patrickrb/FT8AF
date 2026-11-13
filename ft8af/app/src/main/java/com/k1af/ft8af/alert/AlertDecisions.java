@@ -1,5 +1,7 @@
 package com.k1af.ft8af.alert;
 
+import java.util.Set;
+
 /**
  * Pure, Android-free decision + dedup logic for {@link DxAlertNotifier}, extracted so the
  * branching can be unit-tested without a device (the notifier itself touches
@@ -18,6 +20,28 @@ package com.k1af.ft8af.alert;
  */
 public final class AlertDecisions {
     private AlertDecisions() {}
+
+    /**
+     * Claim the right to post an alert for {@code dedupKey}, returning {@code true} only when
+     * the caller should proceed to post.
+     *
+     * <p>The permission gate ({@code canPost}) is evaluated <b>before</b> the dedup set is
+     * touched. Consuming the key while notifications are denied would permanently suppress the
+     * station: {@code alerted} lives for the whole process and is never cleared, so once the
+     * key is burned the same station never fires again this session — even after the user
+     * grants POST_NOTIFICATIONS. Gate first, then dedup, so a station first heard during the
+     * permission-denied window still alerts on its next decode once permission is granted.
+     *
+     * @param alerted  per-session set of already-claimed dedup keys; mutated only when this
+     *                 returns {@code true}
+     * @param dedupKey namespaced key for this alert
+     * @param canPost  whether a notification can actually be posted right now (permission
+     *                 present / pre-Android-13)
+     */
+    public static boolean claimAlert(Set<String> alerted, String dedupKey, boolean canPost) {
+        if (!canPost) return false;          // gate FIRST — do not burn the key while denied
+        return alerted.add(dedupKey);        // consume the key only when we can post
+    }
 
     /**
      * @param enabled       the {@code alertOnCqReply} user setting
@@ -40,6 +64,27 @@ public final class AlertDecisions {
      */
     public static String qsoCompleteDedupKey(String toCallsign, String endTime) {
         return "QSO:" + norm(toCallsign) + "|" + norm(endTime);
+    }
+
+    /**
+     * Watchlist alert — fire when a decoded station matches the user's callsign
+     * watchlist (a rare DXpedition prefix, a needed call, a friend). Unlike the
+     * needed-DX alerts this is not CQ-gated: the point is to know the instant the
+     * station is on the air, whatever it's transmitting.
+     *
+     * @param hasWatchlist whether the user has any watchlist entries (the feature is
+     *                     active purely by having a non-empty list — no separate toggle)
+     * @param matched      whether the decoded sender matches a watchlist entry
+     *                     (resolved by the caller via {@code checkIsWatchedCallsign})
+     * @param blocked      whether the message is filtered by the user's block list
+     */
+    public static boolean shouldAlertWatch(boolean hasWatchlist, boolean matched, boolean blocked) {
+        return hasWatchlist && matched && !blocked;
+    }
+
+    /** Dedup key for a watchlist alert: alert once per session per watched station. */
+    public static String watchDedupKey(String fromCallsign) {
+        return "WATCH:" + norm(fromCallsign);
     }
 
     private static String norm(String s) {

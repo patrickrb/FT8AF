@@ -1,0 +1,169 @@
+package com.k1af.ft8af.rigs;
+
+/**
+ * Rate limiting for {@code MainViewModel.setOperationBand()} — the CAT retune that pushes
+ * the app's dial and USB mode to the rig.
+ *
+ * <p>Motivating data (2026-07-30 POTA activation, from {@code debug.log}): {@code
+ * setOperationBand()} ran in a continuous ~1 Hz loop for the ENTIRE session, re-sending
+ * {@code FA014074000; MD0C; NA00;SH0117;} about 57 times a minute to a rig that was
+ * already on that exact frequency and mode — {@code rig.getFreq} matched the target on
+ * every single iteration. 20,124 occurrences across the pulled log, present in every POTA
+ * session in it.
+ *
+ * <p><strong>This is containment, not a root-cause fix.</strong> The caller driving that
+ * loop has not been identified. It is provably not the connect path (only 11 autoConnect
+ * attempts in the whole window, and no connect/disconnect churn logged), not a band change
+ * (no {@code bandSelect:} lines), and not self-triggering through {@code onFreqChanged}
+ * ({@code BaseRig.setFreq} early-returns on an unchanged dial, and the dial never changed).
+ * Two independent ~1.05 s series interleave about 0.53 s apart, one always observing the
+ * rig connected and one always observing it disconnected, which suggests duplicated
+ * observers or two live view-model instances rather than one runaway timer.
+ *
+ * <p>So this class does two things: makes the retune idempotent so the spam stops whatever
+ * the caller turns out to be, and gives {@code setOperationBand()} a rate-limited
+ * suppression log that names the caller — so the next activation's {@code debug.log}
+ * identifies the culprit instead of leaving it to inference.
+ */
+public final class RetunePolicy {
+
+    /**
+     * How often an unchanged dial is re-asserted to the rig anyway. A push that changes
+     * nothing is not useless — a rig can be moved at the front panel, or drop a command —
+     * so we keep a slow heartbeat rather than going fully edge-triggered. 30 s is two
+     * orders of magnitude below the observed 1 Hz loop and far above any legitimate
+     * retune cadence.
+     */
+    public static final long REASSERT_INTERVAL_MS = 30_000L;
+
+    /** Minimum gap between "suppressed N retunes" log lines, so the fix can't itself spam. */
+    public static final long SUPPRESSION_LOG_INTERVAL_MS = 10_000L;
+
+    /**
+     * How far apart two {@code onConnected()} callbacks must be to count as two separate
+     * connections for the purpose of re-arming the rate limit.
+     *
+     * <p>Resetting on every {@code onConnected()} looked right — a new link genuinely is a
+     * new session — but the 2026-07-31 activation showed that callback IS the runaway. The
+     * suppression log named it directly:
+     * {@code caller=com.k1af.ft8af.MainViewModel$1$$ExternalSyntheticLambda0.run:0}, i.e.
+     * the {@code MainViewModel.this::setOperationBand} posted from {@code onConnected()}.
+     * {@code CableSerialPort} fires that callback on every successful port {@code open()},
+     * and the port was re-opening about once a second, so the reset re-armed the limiter on
+     * every iteration of the loop it exists to contain — retunes went UP, to 73/min from
+     * the 57/min measured before the rate limit existed.
+     *
+     * <p>Debouncing distinguishes the two cases without needing to know why the port
+     * churns: a burst of connects seconds apart is one flapping link and must not re-arm
+     * anything, while a reconnect after a real outage is minutes later and should. The
+     * underlying re-open storm is a separate bug still to be fixed.
+     */
+    public static final long CONNECT_RESET_DEBOUNCE_MS = 30_000L;
+
+    /** {@link #shouldResetOnConnect} sentinel for "no connect seen yet this run". */
+    public static final long NO_CONNECT = Long.MIN_VALUE;
+
+    /** {@link #shouldRetune} sentinel for "nothing pushed yet this session". */
+    public static final long NO_PUSH = 0L;
+
+    /** {@link #shouldLogSuppression} sentinel for "no suppression logged yet". */
+    public static final long NEVER_LOGGED = Long.MIN_VALUE;
+
+    private RetunePolicy() {}
+
+    /**
+     * Milliseconds from {@code thenMs} to {@code nowMs}, treating a clock that has moved
+     * BACKWARDS as "the interval has elapsed".
+     *
+     * <p>Both intervals here are measured with {@link System#currentTimeMillis()}, which is
+     * not monotonic — an OS time correction can move it backwards under us, and this app
+     * runs on devices whose clocks are actively disciplined. A raw subtraction would then
+     * go negative and wedge the caller: retunes suppressed, or the suppression log silenced,
+     * until wall time caught back up. Saturating at "elapsed" fails safe in both cases (one
+     * extra CAT write, one extra log line) instead of silently disabling them.
+     */
+    static long elapsedSince(long nowMs, long thenMs) {
+        long delta = nowMs - thenMs;
+        return delta < 0 ? Long.MAX_VALUE : delta;
+    }
+
+    /**
+     * Whether this retune request should actually reach the rig.
+     *
+     * <p>Ordered so correctness always beats the rate limit: a genuinely new target, or a
+     * rig that is not where we want it, is pushed immediately and unconditionally. Only a
+     * request that is redundant in BOTH senses — same target as last time, and the rig
+     * already reports being there — is subject to the reassert interval.
+     *
+     * @param requestedFreq  the dial we want the rig on ({@code GeneralVariables.band})
+     * @param rigFreq        what the rig last reported ({@code baseRig.getFreq()})
+     * @param lastPushedFreq the dial we last actually pushed, or {@link #NO_PUSH}
+     * @param nowMs          current wall clock
+     * @param lastPushAtMs   when we last actually pushed (meaningless if {@link #NO_PUSH})
+     */
+    public static boolean shouldRetune(long requestedFreq, long rigFreq, long lastPushedFreq,
+                                       long nowMs, long lastPushAtMs) {
+        // Never throttle the first push of a session: on connect the rig may still be on
+        // whatever frequency it powered up on, and its cached freq may coincidentally
+        // match ours without the mode ever having been sent.
+        if (lastPushedFreq == NO_PUSH) return true;
+        // A real band/dial change must go out at once — this is the whole point of the
+        // call, and delaying it would leave the operator transmitting on the old dial.
+        if (requestedFreq != lastPushedFreq) return true;
+        // The rig disagrees with us (front-panel move, dropped command): correct it now.
+        if (rigFreq != requestedFreq) return true;
+        // Fully redundant. Re-assert only on the slow heartbeat.
+        return elapsedSince(nowMs, lastPushAtMs) >= REASSERT_INTERVAL_MS;
+    }
+
+    /**
+     * Whether this {@code onConnected()} represents a genuinely new connection, and so
+     * should re-arm the retune rate limit. See {@link #CONNECT_RESET_DEBOUNCE_MS}.
+     *
+     * @param nowMs           current wall clock
+     * @param lastConnectAtMs when the previous connect callback arrived, or
+     *                        {@link #NO_CONNECT} if this is the first
+     */
+    public static boolean shouldResetOnConnect(long nowMs, long lastConnectAtMs) {
+        if (lastConnectAtMs == NO_CONNECT) return true;
+        return elapsedSince(nowMs, lastConnectAtMs) >= CONNECT_RESET_DEBOUNCE_MS;
+    }
+
+    /**
+     * Whether enough time has passed to emit another suppression summary.
+     *
+     * <p>{@link #NEVER_LOGGED} is handled explicitly rather than relying on a sentinel of 0
+     * being far enough below an epoch {@code nowMs} to clear the interval by arithmetic —
+     * that coupling would silently delay the first line if this were ever fed a monotonic
+     * clock.
+     */
+    public static boolean shouldLogSuppression(long nowMs, long lastLogAtMs) {
+        if (lastLogAtMs == NEVER_LOGGED) return true;
+        return elapsedSince(nowMs, lastLogAtMs) >= SUPPRESSION_LOG_INTERVAL_MS;
+    }
+
+    /**
+     * First stack frame outside {@code selfClassName} — i.e. whoever called the method
+     * doing the logging. Returns {@code "unknown"} rather than throwing on a stack that
+     * doesn't contain one (possible under aggressive inlining or a synthetic frame).
+     *
+     * <p>Exists so the suppression log can name the runaway caller. Only ever invoked on
+     * the rate-limited log path, never per suppressed call.
+     */
+    public static String callerOf(StackTraceElement[] stack, String selfClassName) {
+        if (stack == null || selfClassName == null) return "unknown";
+        boolean seenSelf = false;
+        for (StackTraceElement frame : stack) {
+            String cls = frame.getClassName();
+            if (cls == null) continue;
+            // Skip the Thread.getStackTrace()/Throwable frames that precede the caller.
+            if (cls.equals(selfClassName)) {
+                seenSelf = true;
+                continue;
+            }
+            if (!seenSelf) continue;
+            return cls + "." + frame.getMethodName() + ":" + frame.getLineNumber();
+        }
+        return "unknown";
+    }
+}

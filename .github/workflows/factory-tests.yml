@@ -1,0 +1,40 @@
+name: Factory & release script tests
+
+# Every offline test under .github/scripts: the release lane truth tables,
+# release notes, store listings, the pr-gate script, and the software factory's
+# own tools (guard hook, re-run wrapper, FT8AF social poster with mocked HTTP).
+# No secrets, nothing published.
+
+on:
+  pull_request:
+    branches: [dev, main]
+    paths:
+      - '.github/scripts/**'
+      - '.github/workflows/**'
+      - 'scripts/factory/**'
+      - '.claude/**'
+  push:
+    branches: [dev, main]
+    paths:
+      - '.github/scripts/**'
+      - '.github/workflows/**'
+      - 'scripts/factory/**'
+      - '.claude/**'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: script tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install --quiet requests
+      - name: Run every .github/scripts test
+        run: python -m unittest discover -s .github/scripts -p 'test_*.py' -v

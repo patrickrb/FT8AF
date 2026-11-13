@@ -21,18 +21,22 @@ class ThirdPartyServiceUnsyncedCountTest {
     private lateinit var db: SQLiteDatabase
     private var savedCloudlog = false
     private var savedQrz = false
+    private var savedWrl = false
 
     @Before
     fun setUp() {
         savedCloudlog = GeneralVariables.enableCloudlog
         savedQrz = GeneralVariables.enableQRZ
+        savedWrl = GeneralVariables.enableWRL
+        GeneralVariables.enableWRL = false
         db = SQLiteDatabase.create(null)
         db.execSQL(
             """
             CREATE TABLE QSLTable (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 synced_cloudlog INTEGER DEFAULT 0,
-                synced_qrz INTEGER DEFAULT 0
+                synced_qrz INTEGER DEFAULT 0,
+                synced_wrl INTEGER DEFAULT 0
             )
             """.trimIndent(),
         )
@@ -43,13 +47,36 @@ class ThirdPartyServiceUnsyncedCountTest {
         db.close()
         GeneralVariables.enableCloudlog = savedCloudlog
         GeneralVariables.enableQRZ = savedQrz
+        GeneralVariables.enableWRL = savedWrl
     }
 
-    private fun insert(cloudlog: Int, qrz: Int) {
+    private fun insert(cloudlog: Int, qrz: Int, wrl: Int = 0) {
         db.execSQL(
-            "INSERT INTO QSLTable (synced_cloudlog, synced_qrz) VALUES (?, ?)",
-            arrayOf<Any>(cloudlog, qrz),
+            "INSERT INTO QSLTable (synced_cloudlog, synced_qrz, synced_wrl) VALUES (?, ?, ?)",
+            arrayOf<Any>(cloudlog, qrz, wrl),
         )
+    }
+
+    @Test
+    fun countsWrlPending_whenOnlyWrlEnabled() {
+        GeneralVariables.enableCloudlog = false
+        GeneralVariables.enableQRZ = false
+        GeneralVariables.enableWRL = true
+        insert(cloudlog = 0, qrz = 0, wrl = 0) // needs wrl
+        insert(cloudlog = 0, qrz = 0, wrl = 1) // wrl done -> not counted (others disabled)
+        insert(cloudlog = 1, qrz = 1, wrl = 0) // needs wrl
+        assertThat(ThirdPartyService.countUnsyncedQSOs(db)).isEqualTo(2)
+    }
+
+    @Test
+    fun countsAnyPending_whenAllThreeEnabled() {
+        GeneralVariables.enableCloudlog = true
+        GeneralVariables.enableQRZ = true
+        GeneralVariables.enableWRL = true
+        insert(cloudlog = 1, qrz = 1, wrl = 1) // fully synced -> not counted
+        insert(cloudlog = 1, qrz = 1, wrl = 0) // needs wrl -> counted
+        insert(cloudlog = 0, qrz = 1, wrl = 1) // needs cloudlog -> counted
+        assertThat(ThirdPartyService.countUnsyncedQSOs(db)).isEqualTo(2)
     }
 
     @Test

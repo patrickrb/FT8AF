@@ -1,0 +1,4 @@
+# Cross-compiled hamlib static libs are large and rebuildable — not tracked.
+# Produced on demand by build_android.sh (invoked from CMake on Linux/macOS/CI;
+# run once under WSL on Windows). See HAMLIB_PIN.txt.
+prebuilt/

@@ -15,6 +15,8 @@ import com.k1af.ft8af.ui.ToastMessage;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import radio.core.cat.CivFrameSplitter;
+
 public class XieGuRig extends BaseRig {
     private static final String TAG = "XieGu6100Rig";
 
@@ -45,6 +47,7 @@ public class XieGuRig extends BaseRig {
                         return; // skip this tick; timer stays alive for reconnect
                     }
                     if (isPttOn()) {
+                        onPollingWhileTransmitting();
                         readSWRMeter();
                     } else {
                         readFreqFromRig();
@@ -57,6 +60,11 @@ public class XieGuRig extends BaseRig {
         };
     }
 
+    /** Hook for Xiegu models that require a command while each TX poll runs. */
+    protected void onPollingWhileTransmitting() {
+        // Default Xiegu radios need no additional action.
+    }
+
 
     @Override
     public void setPTT(boolean on) {
@@ -65,8 +73,7 @@ public class XieGuRig extends BaseRig {
         if (getConnector() != null) {
             switch (getControlMode()) {
                 case ControlMode.CAT://via CAT command
-                    getConnector().setPttOn(IcomRigConstant.setPTTState(ctrAddress, getCivAddress()
-                            , on ? IcomRigConstant.PTT_ON : IcomRigConstant.PTT_OFF));
+                    getConnector().setPttOn(catPttFrame(on));
                     break;
                 case ControlMode.RTS:
                 case ControlMode.DTR:
@@ -74,6 +81,12 @@ public class XieGuRig extends BaseRig {
                     break;
             }
         }
+    }
+
+    /** The CI-V PTT on/off frame for this rig's address. */
+    protected byte[] catPttFrame(boolean on) {
+        return IcomRigConstant.setPTTState(ctrAddress, getCivAddress()
+                , on ? IcomRigConstant.PTT_ON : IcomRigConstant.PTT_OFF);
     }
 
     @Override
@@ -110,21 +123,6 @@ public class XieGuRig extends BaseRig {
             getConnector().sendData(IcomRigConstant.setOperationFrequency(ctrAddress
                     , getCivAddress(), getFreq()));
         }
-    }
-
-    /**
-     * Find the position of the command end marker. Returns -1 if not found.
-     *
-     * @param data data
-     * @return position
-     */
-    private int getCommandEnd(byte[] data) {
-        for (int i = 0; i < data.length; i++) {
-            if (data[i] == (byte) 0xFD) {
-                return i;
-            }
-        }
-        return -1;
     }
 
     /**
@@ -233,31 +231,15 @@ public class XieGuRig extends BaseRig {
 
     @Override
     public void onReceiveData(byte[] data) {
-        int commandEnd = getCommandEnd(data);
-        if (commandEnd <= -1) {//no command end marker
-            byte[] temp = new byte[dataBuffer.length + data.length];
-            System.arraycopy(dataBuffer, 0, temp, 0, dataBuffer.length);
-            System.arraycopy(data, 0, temp, dataBuffer.length, data.length);
-            dataBuffer = temp;
-        } else {
-            byte[] temp = new byte[dataBuffer.length + commandEnd + 1];
-            System.arraycopy(dataBuffer, 0, temp, 0, dataBuffer.length);
-            dataBuffer = temp;
-            System.arraycopy(data, 0, dataBuffer, dataBuffer.length - commandEnd - 1, commandEnd + 1);
+        // Append to any partial command buffered from a previous callback, then
+        // process every complete command (each ending in 0xFD) and keep only the
+        // trailing incomplete bytes for next time. See CivFrameSplitter for why the
+        // previous hand-rolled reassembly dropped fragments and injected stray bytes.
+        CivFrameSplitter.Result result = CivFrameSplitter.split(dataBuffer, data);
+        for (byte[] command : result.commands) {
+            analysisCommand(command);
         }
-        if (commandEnd != -1) {
-            analysisCommand(dataBuffer);
-        }
-        dataBuffer = new byte[0];//clear buffer
-        if (commandEnd <= -1 || commandEnd < data.length) {
-            byte[] temp = new byte[data.length - commandEnd + 1];
-            for (int i = 0; i < data.length - commandEnd - 1; i++) {
-                temp[i] = data[commandEnd + i + 1];
-            }
-            dataBuffer = temp;
-        }
-
-
+        dataBuffer = result.remainder;
     }
 
     @Override
@@ -297,11 +279,16 @@ public class XieGuRig extends BaseRig {
         return BaseRigOperation.getFrequencyStr(getFreq());
     }
 
-    public XieGuRig(int civAddress) {
+    protected XieGuRig(int civAddress, long pollingIntervalMs) {
         Log.d(TAG, "XieGuRig 6100: Create.");
         setCivAddress(civAddress);
 
-        readFreqTimer.schedule(readTask(), START_QUERY_FREQ_DELAY, QUERY_FREQ_TIMEOUT);
+        long initialDelayMs = Math.min(START_QUERY_FREQ_DELAY, pollingIntervalMs);
+        readFreqTimer.schedule(readTask(), initialDelayMs, pollingIntervalMs);
         //readFreqTimer.schedule(readTask(),START_QUERY_FREQ_DELAY,1000);
+    }
+
+    public XieGuRig(int civAddress) {
+        this(civAddress, QUERY_FREQ_TIMEOUT);
     }
 }

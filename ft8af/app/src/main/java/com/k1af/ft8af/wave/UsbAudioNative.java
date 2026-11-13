@@ -92,6 +92,28 @@ public final class UsbAudioNative {
     }
 
     /**
+     * Force a USB port-level reset ({@code USBDEVFS_RESET}) on the device
+     * behind {@code fd} — the software equivalent of unplugging and replugging
+     * the cable. The kernel re-enumerates the device and rebuilds its endpoint
+     * state, which is the only remedy for a serial chip RF has wedged into a
+     * state where the port re-opens fine but every URB submit fails
+     * ("Queueing USB request failed"). Used by the CAT auto-reconnect
+     * escalation; see {@code CatReconnectPolicy#shouldResetDevice}.
+     *
+     * @param fd file descriptor from
+     *           {@link android.hardware.usb.UsbDeviceConnection#getFileDescriptor()}
+     * @return true if the ioctl succeeded (false also when the native lib
+     *         isn't loaded — callers just continue with a plain reopen)
+     */
+    public static boolean resetUsbDevice(int fd) {
+        if (!LIBRARY_LOADED) return false;
+        return nativeResetDevice(fd) == 0;
+    }
+
+    /** {@code ioctl(fd, USBDEVFS_RESET)}; 0 on success, negated errno on failure. */
+    private static native int nativeResetDevice(int fd);
+
+    /**
      * Callback for audio samples coming off the iso transfer pipeline.
      * Methods are invoked on the libusb event-loop worker thread; callers
      * must not block.
@@ -136,9 +158,14 @@ public final class UsbAudioNative {
      * @param endpointAddress     bEndpointAddress of the iso IN endpoint.
      * @param maxPacketSize       wMaxPacketSize from the endpoint descriptor.
      * @param inputSampleRate     device sample rate (typically 48000).
-     * @param inputChannels       1 (mono) or 2 (stereo); stereo is averaged.
+     * @param inputChannels       1 (mono) or 2 (stereo); stereo is folded to
+     *                            mono per {@code channelSelect}.
      * @param inputBytesPerSample 2 for 16-bit PCM (the only format we handle).
      * @param targetSampleRate    rate we emit to the callback (12000 for FT8).
+     * @param channelSelect       stereo fold, mirroring {@link AudioChannelSelect}:
+     *                            0 = mix L+R, 1 = left only, 2 = right only.
+     *                            Fixed for the session; MicRecorder restarts
+     *                            capture when the operator changes it.
      * @param callback            invoked from native worker thread.
      * @return                    opaque session handle for {@link #nativeStop},
      *                            or 0 on failure.
@@ -153,6 +180,7 @@ public final class UsbAudioNative {
             int inputChannels,
             int inputBytesPerSample,
             int targetSampleRate,
+            int channelSelect,
             AudioInputCallback callback);
 
     /** Stop a session started by {@link #nativeStart}. Blocks until the

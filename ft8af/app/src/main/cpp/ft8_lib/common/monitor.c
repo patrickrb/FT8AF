@@ -176,7 +176,8 @@ void monitor_process(monitor_t* me, const float* frame)
                 float mag2 = (freqdata[src_bin].i * freqdata[src_bin].i) + (freqdata[src_bin].r * freqdata[src_bin].r);
                 float db = 10.0f * log10f(1E-12f + mag2);
                 // Scale decibels to unsigned 8-bit range and clamp the value
-                // Range 0-240 covers -120..0 dB in 0.5 dB steps
+                // Range 0-240 covers -120..0 dB in 0.5 dB steps. ft8_snr() converts
+                // these bytes back to power with kMagToPower (ft8/decode.c); change both.
                 int scaled = (int)(2 * db + 240);
 
                 me->wf.mag[offset] = (scaled < 0) ? 0 : ((scaled > 255) ? 255 : scaled);

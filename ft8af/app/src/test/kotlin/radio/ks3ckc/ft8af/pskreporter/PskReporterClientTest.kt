@@ -36,6 +36,24 @@ class PskReporterClientTest {
         PskReporterClient.resetForTests()
     }
 
+    /** A demo override short-circuits the fetch: no request, no cooldown, override returned as-is. */
+    @Test
+    fun fetchSpots_spotsOverride_bypassesNetworkAndCooldown() = runBlocking<Unit> {
+        val demo = listOf(PskReporterSpot("VE3XYZ", "FN03", 43.5, -79.5, 14_074_000L, -10, "FT8", 0L))
+        PskReporterClient.spotsOverride = demo
+
+        assertThat(PskReporterClient.fetchSpotsForMe("W1AW", secondsBack = 900)).isEqualTo(demo)
+        // A second call inside the cooldown window still returns the override.
+        assertThat(PskReporterClient.fetchSpotsForMe("W1AW", secondsBack = 900)).isEqualTo(demo)
+        assertThat(server.requestCount).isEqualTo(0)
+
+        // Clearing the override restores the live path.
+        PskReporterClient.spotsOverride = null
+        server.enqueue(MockResponse().setBody(fixture("pskreporter/reception-report.xml")))
+        assertThat(PskReporterClient.fetchSpotsForMe("W1AW", secondsBack = 900)!!).hasSize(2)
+        assertThat(server.requestCount).isEqualTo(1)
+    }
+
     @Test
     fun fetchSpots_happyPath_parsesAllValidReceptionReports() = runBlocking<Unit> {
         server.enqueue(MockResponse().setBody(fixture("pskreporter/reception-report.xml")))

@@ -17,6 +17,11 @@ import java.nio.ByteOrder
 @RunWith(RobolectricTestRunner::class)
 class PskReporterSenderTest {
 
+    // Upper bound on how long a worker thread may run before a bounded join() gives up and
+    // the test fails deterministically instead of hanging the whole run. Generous vs. the
+    // sub-millisecond work so it never flakes on a slow/loaded CI box.
+    private val JOIN_TIMEOUT_MS = 30_000L
+
     private val captured = mutableListOf<ByteArray>()
 
     @Before
@@ -494,6 +499,186 @@ class PskReporterSenderTest {
     fun `buildSoftwareString null rig`() {
         assertThat(PskReporterSender.buildSoftwareString("1.0.2", null))
             .isEqualTo("FT8AF 1.0.2")
+    }
+
+    // ---------------------------------------------------------------
+    // Sender locator sanitation (reportableLocator)
+    // ---------------------------------------------------------------
+
+    @Test
+    fun `reportableLocator keeps a genuine 4-char grid`() {
+        assertThat(PskReporterSender.reportableLocator("FN31")).isEqualTo("FN31")
+    }
+
+    @Test
+    fun `reportableLocator keeps a 6-char grid`() {
+        assertThat(PskReporterSender.reportableLocator("IO91wm")).isEqualTo("IO91wm")
+    }
+
+    @Test
+    fun `reportableLocator drops the RR73 signoff token`() {
+        // "RR73" is a syntactic grid look-alike (R,R + 7,3) but is the roger-73
+        // sign-off, never a Maidenhead locator. It must not be uploaded to the
+        // global PSKReporter database. The old `length >= 4` check let it through.
+        assertThat(PskReporterSender.reportableLocator("RR73")).isNull()
+        assertThat(PskReporterSender.reportableLocator("rr73")).isNull()
+    }
+
+    @Test
+    fun `reportableLocator drops absent or too-short grids`() {
+        assertThat(PskReporterSender.reportableLocator(null)).isNull()
+        assertThat(PskReporterSender.reportableLocator("")).isNull()
+        assertThat(PskReporterSender.reportableLocator("FN")).isNull()
+    }
+
+    // ---------------------------------------------------------------
+    // Dedup window bookkeeping (markIfFresh) + thread-safety
+    // ---------------------------------------------------------------
+
+    // Mirrors PskReporterSender.DEDUP_WINDOW_MS (private const): 5 minutes.
+    private val dedupWindowMs = 5 * 60 * 1000L
+
+    @Test
+    fun `markIfFresh reports first sighting then dedups within the window`() {
+        val key = "W1AW|14"
+        // First sighting → reportable, and now marked.
+        assertThat(PskReporterSender.markIfFresh(key, 1_000L)).isTrue()
+        // Same key well inside the window → duplicate.
+        assertThat(PskReporterSender.markIfFresh(key, 1_000L + 1_000L)).isFalse()
+        assertThat(PskReporterSender.markIfFresh(key, 1_000L + dedupWindowMs - 1)).isFalse()
+        // Once the window has fully elapsed → reportable again.
+        assertThat(PskReporterSender.markIfFresh(key, 1_000L + dedupWindowMs)).isTrue()
+    }
+
+    @Test
+    fun `markIfFresh dedups per callsign-band key independently`() {
+        assertThat(PskReporterSender.markIfFresh("W1AW|14", 1_000L)).isTrue()
+        // Different band for the same call is a separate spot.
+        assertThat(PskReporterSender.markIfFresh("W1AW|7", 1_000L)).isTrue()
+        // Different call, same band is a separate spot.
+        assertThat(PskReporterSender.markIfFresh("K2ABC|14", 1_000L)).isTrue()
+        // Repeats of each are suppressed.
+        assertThat(PskReporterSender.markIfFresh("W1AW|14", 1_000L)).isFalse()
+        assertThat(PskReporterSender.markIfFresh("W1AW|7", 1_000L)).isFalse()
+        assertThat(PskReporterSender.markIfFresh("K2ABC|14", 1_000L)).isFalse()
+    }
+
+    /**
+     * Overlapping decode passes (#398) call enqueue()/toSpotRecord()/markIfFresh()
+     * on two decode threads at once. When many threads race on the SAME key, the
+     * get-then-put must be atomic so exactly one spot is reported — a non-atomic
+     * check (or a plain HashMap) lets several threads see "absent" and each report
+     * the same spot. Barrier-synchronized rounds maximize overlap so a
+     * non-atomic implementation would let more than one through.
+     */
+    @Test
+    fun `markIfFresh admits exactly one thread per key under concurrent access`() {
+        val threadCount = 8
+        repeat(30) { round ->
+            PskReporterSender.resetForTests()
+            PskReporterSender.sendDatagram = { data -> captured.add(data.copyOf()) }
+            val key = "RACE|14"
+            val now = 1_000L + round
+            val admitted = java.util.concurrent.atomic.AtomicInteger(0)
+            val barrier = java.util.concurrent.CyclicBarrier(threadCount)
+            val threads = (0 until threadCount).map {
+                Thread {
+                    barrier.await()
+                    if (PskReporterSender.markIfFresh(key, now)) admitted.incrementAndGet()
+                }
+            }
+            threads.forEach { it.start() }
+            // Bounded join: a regression could wedge/spin a thread (one of the failure modes
+            // this test guards against); without a timeout that would hang the whole run
+            // instead of failing. Assert every thread actually finished.
+            threads.forEach { it.join(JOIN_TIMEOUT_MS) }
+            assertThat(threads.none { it.isAlive }).isTrue()
+            assertThat(admitted.get()).isEqualTo(1)
+        }
+    }
+
+    /**
+     * Concurrent inserts of many DISTINCT keys hammer the shared map's resize path.
+     * A plain HashMap mutated from multiple threads can corrupt its buckets, lose
+     * entries, or spin — the guarded map must simply complete, admitting every key
+     * exactly once.
+     */
+    @Test
+    fun `markIfFresh handles concurrent distinct keys without corruption`() {
+        val threadCount = 8
+        val perThread = 500
+        val admitted = java.util.concurrent.atomic.AtomicInteger(0)
+        val barrier = java.util.concurrent.CyclicBarrier(threadCount)
+        val threads = (0 until threadCount).map { t ->
+            Thread {
+                barrier.await()
+                for (i in 0 until perThread) {
+                    if (PskReporterSender.markIfFresh("CALL_${t}_$i|14", 1_000L)) {
+                        admitted.incrementAndGet()
+                    }
+                }
+            }
+        }
+        threads.forEach { it.start() }
+        // Bounded join (see the same-key test): a wedged/spinning thread must fail the run,
+        // not hang it. Assert every thread finished within the timeout.
+        threads.forEach { it.join(JOIN_TIMEOUT_MS) }
+        assertThat(threads.none { it.isAlive }).isTrue()
+        // Every distinct key is fresh exactly once — no lost or double inserts.
+        assertThat(admitted.get()).isEqualTo(threadCount * perThread)
+    }
+
+    // ---------------------------------------------------------------
+    // Dedup map eviction (pruneDedup) — bounded-memory guarantee
+    // ---------------------------------------------------------------
+
+    @Test
+    fun `pruneDedup evicts entries aged past the window and keeps fresh ones`() {
+        // Two stations marked at t=1000; one refreshed just before pruning.
+        assertThat(PskReporterSender.markIfFresh("OLD|14", 1_000L)).isTrue()
+        assertThat(PskReporterSender.markIfFresh("NEW|14", 1_000L)).isTrue()
+        assertThat(PskReporterSender.dedupSize()).isEqualTo(2)
+
+        // Refresh NEW right at the prune instant so it is still inside the window.
+        val now = 1_000L + dedupWindowMs
+        assertThat(PskReporterSender.markIfFresh("NEW|14", now)).isTrue()
+
+        // OLD is exactly window-old (nowMs - lastSeen == window) → aged out; NEW stays.
+        PskReporterSender.pruneDedup(now)
+        assertThat(PskReporterSender.dedupSize()).isEqualTo(1)
+        // OLD is gone, so it reports fresh again; NEW is still deduped.
+        assertThat(PskReporterSender.markIfFresh("OLD|14", now)).isTrue()
+        assertThat(PskReporterSender.markIfFresh("NEW|14", now)).isFalse()
+    }
+
+    @Test
+    fun `pruneDedup keeps entries still inside the window`() {
+        assertThat(PskReporterSender.markIfFresh("W1AW|14", 1_000L)).isTrue()
+        // One millisecond short of the full window → not yet stale.
+        PskReporterSender.pruneDedup(1_000L + dedupWindowMs - 1)
+        assertThat(PskReporterSender.dedupSize()).isEqualTo(1)
+    }
+
+    @Test
+    fun `pruneDedup on an empty map is a no-op`() {
+        PskReporterSender.pruneDedup(10_000_000L)
+        assertThat(PskReporterSender.dedupSize()).isEqualTo(0)
+    }
+
+    @Test
+    fun `flush prunes stale dedup entries so the map stays bounded`() {
+        // Populate the dedup map with entries that are already stale relative to the
+        // real clock flush() uses, then flush an empty spot queue: without eviction
+        // the map would retain every historical entry forever (the leak).
+        assertThat(PskReporterSender.markIfFresh("STALE1|14", 1_000L)).isTrue()
+        assertThat(PskReporterSender.markIfFresh("STALE2|7", 2_000L)).isTrue()
+        assertThat(PskReporterSender.dedupSize()).isEqualTo(2)
+
+        kotlinx.coroutines.runBlocking { PskReporterSender.flush() }
+
+        // System.currentTimeMillis() is vastly larger than the fixture timestamps, so
+        // every entry has aged past the 5-minute window and flush() evicts them all.
+        assertThat(PskReporterSender.dedupSize()).isEqualTo(0)
     }
 
     /** Decode a hex string (all whitespace ignored) into bytes for golden-vector comparison. */

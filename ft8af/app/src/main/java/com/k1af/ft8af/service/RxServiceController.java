@@ -26,6 +26,14 @@ public final class RxServiceController {
     }
 
     /**
+     * Whether the notification should say the rig is on loan to a sibling app rather than
+     * that this app is receiving.
+     */
+    public static boolean rigYielded(String yieldedToPackage) {
+        return yieldedToPackage != null && !yieldedToPackage.isEmpty();
+    }
+
+    /**
      * Maps a start-command intent action to a {@link Command}. Anything other than the exact
      * exit action (including null, from plain {@code start()} intents or a system restart)
      * means "run normally".

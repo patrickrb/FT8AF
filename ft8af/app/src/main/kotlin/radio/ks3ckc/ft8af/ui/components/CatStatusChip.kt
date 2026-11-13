@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -41,32 +43,44 @@ internal data class CatChipVisuals(
     val dotColor: Color,
     val pulsing: Boolean,
     val contentDescriptionRes: Int,
+    /**
+     * Visible plain-language label for the redesigned strip: "Radio linked" once a link is
+     * up, "Radio not linked" otherwise. The dot color still varies per state (amber while
+     * connecting, red on error); only the two-word status text is collapsed so non-expert
+     * operators aren't shown "CAT connecting…".
+     */
+    val labelRes: Int,
 )
 
 /**
- * Map a CAT connection state to its dot color / pulse / accessibility label.
- * grey = disconnected, amber pulsing = connecting, green = connected, red = error.
+ * Map a CAT connection state to its dot color / pulse / accessibility label / visible label.
+ * grey = disconnected, amber pulsing = connecting, green = connected, red = error. The visible
+ * label reads "Radio linked" only when CONNECTED, "Radio not linked" in every other state.
  */
 internal fun catChipVisuals(state: CatConnectionState): CatChipVisuals = when (state) {
     CatConnectionState.DISCONNECTED -> CatChipVisuals(
         dotColor = TextMuted,
         pulsing = false,
         contentDescriptionRes = R.string.cat_status_disconnected,
+        labelRes = R.string.cat_status_not_linked,
     )
     CatConnectionState.CONNECTING -> CatChipVisuals(
         dotColor = Accent,
         pulsing = true,
         contentDescriptionRes = R.string.cat_status_connecting,
+        labelRes = R.string.cat_status_not_linked,
     )
     CatConnectionState.CONNECTED -> CatChipVisuals(
         dotColor = StatusConfirmed,
         pulsing = false,
         contentDescriptionRes = R.string.cat_status_connected,
+        labelRes = R.string.cat_status_linked,
     )
     CatConnectionState.ERROR -> CatChipVisuals(
         dotColor = StatusBad,
         pulsing = false,
         contentDescriptionRes = R.string.cat_status_error,
+        labelRes = R.string.cat_status_not_linked,
     )
 }
 
@@ -78,6 +92,42 @@ internal fun catChipVisuals(state: CatConnectionState): CatChipVisuals = when (s
  */
 internal fun shouldShowCatChip(controlMode: Int, state: CatConnectionState): Boolean =
     controlMode != ControlMode.VOX || state != CatConnectionState.DISCONNECTED
+
+/**
+ * Whether Call CQ should ask for confirmation before starting (#989): a rig-control mode is
+ * configured (anything but VOX, which keys via audio) and the chip reads "Radio not linked".
+ * A confirmation rather than a hard disable — a marginal link can flap between linked and not
+ * linked every few seconds, and some rigs still key without a live CAT reply.
+ */
+internal fun shouldConfirmCqWithoutRadio(controlMode: Int, state: CatConnectionState): Boolean =
+    controlMode != ControlMode.VOX && state != CatConnectionState.CONNECTED
+
+/**
+ * Shown when Call CQ is tapped while the radio isn't linked: transmitting into a radio the app
+ * can't reach may not key it at all. [onConfirm] starts the CQ anyway; [onDismiss] cancels.
+ */
+@Composable
+fun RadioNotLinkedCqDialog(
+    visible: Boolean,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!visible) return
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.cq_radio_not_linked_title)) },
+        text = { Text(stringResource(R.string.cq_radio_not_linked_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(stringResource(R.string.cq_radio_not_linked_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
 
 /**
  * A small CAT (rig control) connection indicator for the TX strip. Tappable to
@@ -95,22 +145,21 @@ fun CatStatusChip(
 
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(BgSurface3)
             .clickable(onClickLabel = description) { onReconnect() }
             .semantics { contentDescription = description }
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         StatusDot(color = visuals.dotColor, pulsing = visuals.pulsing)
         Text(
-            text = stringResource(R.string.cat_status_chip_label),
+            text = stringResource(visuals.labelRes),
             color = TextMuted,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontFamily = GeistMonoFamily,
-            letterSpacing = 0.02.sp,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            fontFamily = InterFamily,
             maxLines = 1,
             softWrap = false,
         )

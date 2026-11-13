@@ -53,10 +53,17 @@ public class X6100Meters {
             return -150f;
         } else if (value <= 120f) {
             return (value * 54f / 120f - 129f);
-        } else if (value < 242) {
-            return (value * 60f) / (242f - 120f) - 120f * 60f / (242f - 120f);
-
+        } else if (value <= 242) {
+            // S9..S9+60: continue up from the S9 = -75 dBm base the middle branch
+            // (and the inverse getMeters) fix. The base offset was previously
+            // dropped, reading 75 dB too high (even positive dBm) above S9.
+            // 242 is inclusive: it is the documented S9+60 endpoint of the scale
+            // (header comment) and getMeters(-15) returns exactly 242, so excluding
+            // it made the top of the scale fall through to the 0 sentinel — a 60 dB
+            // discontinuity at the one value the inverse maps to.
+            return (value - 120f) * 60f / (242f - 120f) - 75f;
         } else {
+            // Above the documented scale: out-of-range marker, not a reading.
             return 0;
         }
     }
@@ -68,8 +75,12 @@ public class X6100Meters {
      * @return voltage
      */
     public static float getMeter_volt(float value) {
+        // Calibration (see class header): 0000=0V, 0075=5V, 0241=16V.
+        // Low segment 0..75 is linear 0V..5V (slope 5/75 = 1/15); the previous
+        // 1/25 divisor under-read the supply (75 -> 3V, not 5V) and left a
+        // discontinuity with the upper segment at value == 75.
         if (value <= 75) {
-            return value / 25f;
+            return value / 15f;
         } else {
             return (value - 75f) * 11 / 166f + 5;
         }

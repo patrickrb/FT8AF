@@ -37,9 +37,12 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import com.k1af.ft8af.database.OnAfterQueryConfig
+import com.k1af.ft8af.ft8listener.DecodeDepth
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import radio.ks3ckc.ft8af.ScreenWake
+import radio.ks3ckc.ft8af.crash.CrashReporting
 import radio.ks3ckc.ft8af.theme.Accent
 import radio.ks3ckc.ft8af.theme.BgSurface2
 import radio.ks3ckc.ft8af.theme.TextMuted
@@ -86,6 +89,7 @@ internal val SUPPORTED_LANGUAGES: List<AppLanguage> = listOf(
     AppLanguage("id", R.string.language_name_id),
     AppLanguage("uk", R.string.language_name_uk),
     AppLanguage("ar", R.string.language_name_ar),
+    AppLanguage("pt-BR", R.string.language_name_pt_br),
 )
 
 /**
@@ -158,6 +162,14 @@ fun AdvancedSettings(
     var txDelay by remember { mutableIntStateOf(GeneralVariables.transmitDelay) }
     var lateStartMs by remember { mutableIntStateOf(GeneralVariables.lateStartTolerance) }
     var currentTheme by remember { mutableStateOf(loadTheme(context)) }
+
+    // Power & heat knobs. Seeded from GeneralVariables, which config hydration
+    // has already populated by the time settings can be opened.
+    var keepScreenOn by remember { mutableStateOf(GeneralVariables.keepScreenOn) }
+    var decodeDepth by remember { mutableIntStateOf(DecodeDepth.clamp(GeneralVariables.decodeDepth)) }
+
+    // Opt-in crash reporting (Sentry). Only surfaced when a DSN was compiled in.
+    var crashReportingEnabled by remember { mutableStateOf(CrashReporting.isOptedIn(context)) }
 
     var showPttDelay by remember { mutableStateOf(false) }
     var showTxDelay by remember { mutableStateOf(false) }
@@ -557,6 +569,59 @@ fun AdvancedSettings(
         }
 
         // =====================================================================
+        // POWER & HEAT
+        // =====================================================================
+        // Both knobs exist because a long portable session cooks the phone until
+        // it browns out its own OTG accessory rail and drops the CAT link (field
+        // log 2026-07-23: 48.6C battery, twelve USB re-enumerations). The screen
+        // flag used to be hard-coded on; deep decode was only reachable from the
+        // retired legacy settings fragment, so neither was adjustable in the
+        // shipping UI.
+        SettingsSection(title = stringResource(R.string.settings_section_power)) {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_keep_screen_on),
+                        description = stringResource(R.string.settings_keep_screen_on_desc),
+                        toggle = keepScreenOn,
+                        onToggleChange = { on ->
+                            keepScreenOn = on
+                            GeneralVariables.keepScreenOn = on
+                            mainViewModel.databaseOpr.writeConfig(
+                                "keepScreenOn", if (on) "1" else "0", null,
+                            )
+                            // Apply live rather than waiting for the next onResume,
+                            // so the effect is visible from the settings screen.
+                            (context as? android.app.Activity)?.let {
+                                ScreenWake.apply(it.window, on)
+                            }
+                        },
+                    )
+                    SectionDivider()
+                    SegmentedSelectRow(
+                        label = stringResource(R.string.settings_deep_decode),
+                        description = stringResource(R.string.settings_deep_decode_desc),
+                        optionLabels = listOf(
+                            DecodeDepth.FAST to stringResource(R.string.fast_mode),
+                            DecodeDepth.BALANCED to stringResource(R.string.balanced_mode),
+                            DecodeDepth.DEEP to stringResource(R.string.deep_mode),
+                        ),
+                        selected = decodeDepth,
+                        enabled = true,
+                        disabledNote = "",
+                        onSelect = { value ->
+                            decodeDepth = value
+                            GeneralVariables.decodeDepth = value
+                            mainViewModel.databaseOpr.writeConfig(
+                                "decodeDepth", value.toString(), null,
+                            )
+                        },
+                    )
+                }
+            }
+        }
+
+        // =====================================================================
         // APPEARANCE
         // =====================================================================
         SettingsSection(title = stringResource(R.string.settings_section_appearance)) {
@@ -606,6 +671,27 @@ fun AdvancedSettings(
                         description = stringResource(R.string.settings_import_desc),
                         showChevron = true,
                         onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                    )
+                }
+            }
+        }
+
+        // =====================================================================
+        // DIAGNOSTICS (opt-in crash reporting)
+        // =====================================================================
+        // Only shown when a Sentry DSN was compiled in — a contributor build with
+        // no DSN has nowhere to report, so the toggle would be dead weight.
+        if (CrashReporting.isAvailable()) {
+            SettingsSection(title = stringResource(R.string.settings_section_diagnostics)) {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_crash_reporting),
+                        description = stringResource(R.string.settings_crash_reporting_desc),
+                        toggle = crashReportingEnabled,
+                        onToggleChange = { enabled ->
+                            crashReportingEnabled = enabled
+                            CrashReporting.setEnabled(context, enabled)
+                        },
                     )
                 }
             }

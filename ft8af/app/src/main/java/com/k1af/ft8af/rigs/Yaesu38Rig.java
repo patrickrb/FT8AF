@@ -10,6 +10,8 @@ import com.k1af.ft8af.R;
 import com.k1af.ft8af.database.ControlMode;
 import com.k1af.ft8af.ui.ToastMessage;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
@@ -130,51 +132,85 @@ public class Yaesu38Rig extends BaseRig {
 
     @Override
     public void onReceiveData(byte[] data) {
-        String s = new String(data);
-        if (!s.contains(";")) {
-            buffer.append(s);
-            if (buffer.length() > 1000) clearBufferData();
-            return;//data reception not yet complete.
-        } else {
-            if (s.indexOf(";") > 0) {//received end-of-data, and delimiter is not the first character
-                buffer.append(s.substring(0, s.indexOf(";")));
-            }
+        buffer.append(new String(data));
 
-            //begin parsing data
-            Yaesu3Command yaesu3Command = Yaesu3Command.getCommand(buffer.toString());
-            clearBufferData();//clear buffer
-            //put remaining data into buffer
-            buffer.append(s.substring(s.indexOf(";") + 1));
+        // Drain EVERY complete ';'-terminated command, keeping only the
+        // unterminated tail. The meter poll sends two reads back-to-back
+        // (RM4; ALC then RM6; SWR), so the transport frequently coalesces both
+        // replies into one chunk ("RM4nnn;RM6nnn;"). The old parser handled only
+        // the first command and re-buffered the rest with its terminator, where
+        // the next poll's clearBufferData() wiped it — permanently losing the
+        // SWR reading. See splitCommands / processCommand.
+        Frames frames = splitCommands(buffer.toString());
+        clearBufferData();
+        buffer.append(frames.remainder);
+        // Guard against unbounded growth if a terminator never arrives.
+        if (buffer.length() > 1000) clearBufferData();
 
-            if (yaesu3Command == null) {
-                return;
-            }
-            //long tempFreq = Yaesu3Command.getFrequency(yaesu3Command);
-            //if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
-            //    setFreq(Yaesu3Command.getFrequency(yaesu3Command));
-            //}
-
-
-            if (yaesu3Command.getCommandID().equalsIgnoreCase("FA")
-                    || yaesu3Command.getCommandID().equalsIgnoreCase("FB")) {
-                long tempFreq = Yaesu3Command.getFrequency(yaesu3Command);
-                if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
-                    setFreq(Yaesu3Command.getFrequency(yaesu3Command));
-                }
-            } else if (yaesu3Command.getCommandID().equalsIgnoreCase("RM")) {//METER
-                if (Yaesu3Command.isSWRMeter38(yaesu3Command)) {
-                    swr = Yaesu3Command.getALCOrSWR38(yaesu3Command);
-                }
-                if (Yaesu3Command.isALCMeter38(yaesu3Command)) {
-                    alc = Yaesu3Command.getALCOrSWR38(yaesu3Command);
-                }
-                showAlert();
-                notifyMeterData(alc, swr);
-            }
-
-
+        for (String command : frames.commands) {
+            processCommand(command);
         }
+    }
 
+    /**
+     * Parse and act on a single ';'-terminated command (terminator stripped).
+     * Extracted so {@link #onReceiveData} stays a thin drain loop.
+     */
+    private void processCommand(String command) {
+        Yaesu3Command yaesu3Command = Yaesu3Command.getCommand(command);
+        if (yaesu3Command == null) {
+            return;
+        }
+        if (yaesu3Command.getCommandID().equalsIgnoreCase("FA")
+                || yaesu3Command.getCommandID().equalsIgnoreCase("FB")) {
+            long tempFreq = Yaesu3Command.getFrequency(yaesu3Command);
+            if (tempFreq != 0) {//if tempFreq==0, frequency is invalid
+                setFreq(tempFreq);
+            }
+        } else if (yaesu3Command.getCommandID().equalsIgnoreCase("RM")) {//METER
+            if (Yaesu3Command.isSWRMeter38(yaesu3Command)) {
+                swr = Yaesu3Command.getALCOrSWR38(yaesu3Command);
+            }
+            if (Yaesu3Command.isALCMeter38(yaesu3Command)) {
+                alc = Yaesu3Command.getALCOrSWR38(yaesu3Command);
+            }
+            showAlert();
+            notifyMeterData(alc, swr);
+        }
+    }
+
+    /** Complete commands (terminator stripped) plus the trailing unterminated tail. */
+    static final class Frames {
+        /** Every ';'-terminated command in arrival order, terminator removed. */
+        final List<String> commands;
+        /** Text after the last ';' — an incomplete command to carry over. */
+        final String remainder;
+
+        Frames(List<String> commands, String remainder) {
+            this.commands = commands;
+            this.remainder = remainder;
+        }
+    }
+
+    /**
+     * Split accumulated CAT text into complete {@code ';'}-terminated commands
+     * and the trailing unterminated remainder.
+     *
+     * <p>Pure logic — no rig or Android state — so it is unit-testable without
+     * the Timer-scheduling constructor.
+     *
+     * @param accumulated buffered text so far (never null; may be empty)
+     * @return the complete commands and the bytes to carry into the next read
+     */
+    static Frames splitCommands(String accumulated) {
+        List<String> commands = new ArrayList<>();
+        int start = 0;
+        int semi;
+        while ((semi = accumulated.indexOf(';', start)) >= 0) {
+            commands.add(accumulated.substring(start, semi));
+            start = semi + 1;
+        }
+        return new Frames(commands, accumulated.substring(start));
     }
 
     @Override

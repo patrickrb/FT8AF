@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import radio.ks3ckc.ft8af.theme.*
@@ -36,11 +37,29 @@ enum class QsoStatus(
         Color(0x1FC084FC),  // rgba(192,132,252,0.12)
         Color(0x47C084FC),  // rgba(192,132,252,0.28)
     ),
+    NEW_ZONE(
+        R.string.status_new_zone,
+        StatusZone,
+        Color(0x1F60A5FA),  // rgba(96,165,250,0.12)
+        Color(0x4760A5FA),  // rgba(96,165,250,0.28)
+    ),
+    NEW_STATE(
+        R.string.status_new_state,
+        StatusState,
+        Color(0x1F2DD4BF),  // rgba(45,212,191,0.12)
+        Color(0x472DD4BF),  // rgba(45,212,191,0.28)
+    ),
     NEW_GRID(
         R.string.status_new_grid,
         StatusWarn,
         Color(0x1FFACC15),  // rgba(250,204,21,0.12)
         Color(0x47FACC15),  // rgba(250,204,21,0.28)
+    ),
+    NEW_PREFIX(
+        R.string.status_new_prefix,
+        StatusPrefix,
+        Color(0x1FF472B6),  // rgba(244,114,182,0.12)
+        Color(0x47F472B6),  // rgba(244,114,182,0.28)
     ),
     NEW_BAND(
         R.string.status_new_band,
@@ -130,6 +149,9 @@ fun StatusPill(
             fontSize = if (compact) 9.5.sp else 11.sp,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.04.sp,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

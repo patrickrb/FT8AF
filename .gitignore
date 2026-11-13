@@ -4,5 +4,23 @@ ft8af/.gitignore 2
 .FT8CN软件设计初衷及使用说明0.88版.pdf.icloud
 ft8af/app/src/main/assets/.nightUSGS4Layer.sqlite.icloud
 
-# Per-contributor Claude Code notes (machine paths, device serials) - see CLAUDE.md
+# Per-contributor agent notes (machine paths, device serials) - see AGENTS.md
+AGENTS.local.md
 CLAUDE.local.md
+
+# Accidental scratch/build-artifact trees (see PR #524)
+uiaar/
+hamlib-4.7.2/
+
+# Python bytecode (.github/scripts unit tests)
+__pycache__/
+*.pyc
+
+# Amp runtime portal metadata (not project configuration)
+.amp/portals/*
+
+# Kotlin compiler sessions created by a fresh Gradle build
+.kotlin/
+
+# Tauri generates this platform schema on the first Linux build
+/desktop/src-tauri/gen/schemas/linux-schema.json

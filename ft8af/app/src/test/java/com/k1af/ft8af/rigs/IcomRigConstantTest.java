@@ -108,4 +108,13 @@ public class IcomRigConstantTest {
         assertThat(IcomRigConstant.twoByteBcdToInt(new byte[]{0x12})).isEqualTo(0);
         assertThat(IcomRigConstant.twoByteBcdToIntBigEnd(new byte[0])).isEqualTo(0);
     }
+
+    @Test
+    public void twoByteBcd_nullInputReturnsZero() {
+        // A meter reply with no data section yields a null payload
+        // (IcomCommand.getData). The BCD decoders must treat that as "no reading"
+        // rather than crashing the CAT thread with an NPE.
+        assertThat(IcomRigConstant.twoByteBcdToInt(null)).isEqualTo(0);
+        assertThat(IcomRigConstant.twoByteBcdToIntBigEnd(null)).isEqualTo(0);
+    }
 }

@@ -6,8 +6,8 @@ exact pure-C FT8 DSP core from the Android app (`ft8af/app/src/main/cpp`,
 kgoba `ft8_lib` @ `6f528128`) — compiled from source, no JNI.
 
 MVP scope: receive/decode FT8, transmit + auto-QSO sequencing, logbook with ADIF
-export, rig control (**Hamlib** embedded library, **FLrig** XML-RPC, or direct
-serial CAT — Yaesu / Kenwood / Icom CI-V), audio device selection, and a
+export, rig control (**Hamlib** embedded library, **FLrig** XML-RPC, or a
+safety-hardened direct Xiegu G106 CI-V profile), audio device selection, and a
 waterfall. Deferred: map, POTA, QRZ photos, Bluetooth, PSKReporter upload.
 
 ## Layout
@@ -24,7 +24,7 @@ desktop/
       audio/        cpal capture/playback, 12 kHz resample, slot buffer
       engine.rs     the runtime: 15 s UTC cycle, decode, QSO, TX/PTT, events
       qso.rs        FT8 QSO auto-sequence state machine (pure, unit-tested)
-      rig.rs        rig control backends: Hamlib (dyn-loaded), FLrig XML-RPC, serial CAT
+      rig.rs        rig control backends: Hamlib, FLrig XML-RPC, direct G106 CI-V
       db.rs         SQLite (rusqlite) qso_log + config + ADIF export
       bands.rs      FT8 band plan
       main.rs       Tauri commands + event forwarding
@@ -33,7 +33,20 @@ desktop/
 ## Prerequisites
 
 - **Rust** (stable, MSVC toolchain on Windows): `winget install Rustlang.Rustup`
-- **Node.js 18+** and npm
+- **Node.js 20+** and npm
+- **Amp Linux orbs:** run `.agents/setup` from the repository root and start a
+  new login shell. It installs the prerequisites below; see
+  [AGENTS.md](../AGENTS.md#fresh-amp-orb-quickstart-linux-x86-64).
+- **Debian / Ubuntu / Linux Mint:** install Tauri's native WebKit/GTK build
+  dependencies plus the ALSA and udev headers used by audio and serial support:
+
+  ```bash
+  sudo apt update
+  sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
+    libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+    libasound2-dev libudev-dev
+  ```
+
 - **Windows only:** the C core uses C99 VLAs that MSVC's `cl.exe` rejects, so the
   build compiles the C with **clang-cl**. Install LLVM: `winget install LLVM.LLVM`
   (build.rs auto-detects `C:\Program Files\LLVM\bin\clang-cl.exe`, or set
@@ -45,7 +58,7 @@ desktop/
 
 ```
 cd desktop
-npm install
+npm ci
 npm run tauri dev      # starts Vite + builds the Rust app + opens the window
 ```
 
@@ -55,11 +68,27 @@ npm run tauri dev      # starts Vite + builds the Rust app + opens the window
 > runtime `LoadLibrary` (for Hamlib via `libloading`). Sign the binaries, or test
 > on a machine without Smart App Control. The app itself is unaffected.
 
+> **macOS location service (grid auto-fill, [#471]):** using the OS location
+> service needs no extra build prerequisite — CoreLocation ships in the base
+> macOS SDK, so the default `clang` + Rust + Node above are enough to *compile*
+> it. Two things are required for it to *work* at runtime, though:
+> - **`Info.plist` usage-description key.** macOS denies location without
+>   `NSLocationWhenInUseUsageDescription`. Set it via `tauri.conf.json`
+>   (`bundle.macOS`); the string is shown to the user in the permission prompt.
+> - **Run as a signed, bundled `.app`.** CoreLocation won't grant location to
+>   the bare `target/release/ft8af` binary, to `npm run tauri dev` / `cargo run`,
+>   or to an unsigned/ad-hoc build. Test the feature from the packaged, signed
+>   `FT8AF.app` — the permission prompt never appears otherwise. (Same class of
+>   caveat as the Windows Smart App Control note above.)
+
+[#471]: https://github.com/patrickrb/FT8AF/issues/471
+
 ### Rig control: Hamlib (bundled)
 
 Hamlib is the default rig backend and is **bundled with the app on Windows** — the
-LGPL Hamlib DLLs live in `src-tauri/hamlib/` and `build.rs` copies them next to
-the built exe, so rig support works out of the box with no separate install.
+LGPL Hamlib DLLs live in `src-tauri/hamlib/<arch>/` (`x64/` for 64-bit, `x86/`
+for 32-bit) and `build.rs` copies the set matching the build target next to the
+built exe, so rig support works out of the box with no separate install.
 Settings → Rig control → **Hamlib** shows a dropdown of every radio Hamlib
 supports (~300+); pick yours, choose **Connection: Serial** (COM port + baud) or
 **Network** (host:port), and Connect. Hamlib handles the model-specific CAT
@@ -72,22 +101,79 @@ SmartSDR API). Note DAX is *audio* (set as the audio device), separate from CAT.
 
 The backend dynamically loads the library at runtime (`libloading`), so there's
 no build-time Hamlib dependency. To update Hamlib, replace the DLLs in
-`src-tauri/hamlib/` (from a hamlib-w64 release). On Linux/macOS, install the
-system `hamlib`/`libhamlib` package; if the library isn't found the rig list is
-empty and you get a clean message rather than a crash.
+`src-tauri/hamlib/x64/` (from a hamlib-w64 release) — and `src-tauri/hamlib/x86/`
+from a hamlib-w32 release for the 32-bit build (see that dir's `README.txt`). On
+Linux/macOS, install the system `hamlib`/`libhamlib` package; if the library
+isn't found the rig list is empty and you get a clean message rather than a crash.
 
-> If you later enable Tauri bundling (`bundle.active`), add `hamlib/*.dll` to the
-> bundle `resources` so they ship in the installer too.
+> If you later enable Tauri bundling (`bundle.active`), add `hamlib/<arch>/*.dll`
+> to the bundle `resources` so they ship in the installer too.
+
+### Xiegu G106 / G106C
+
+For a direct connection, choose **Xiegu G106 (direct CI-V)** in the Rig list. The
+profile selects 19,200 baud and CI-V address `0x70`. CAT PTT is refreshed once
+per second during transmit because the G106 otherwise releases CAT-keyed PTT
+after roughly two seconds. On every serial connect and disconnect FT8AF clears
+both DTR and RTS before issuing CAT commands; this prevents the DE-19 from
+interpreting Linux's default asserted DTR state as PTT. RTS or DTR PTT does not
+use the keepalive. Select the DE-19 (or other interface) capture and playback
+devices separately for FT8 audio; the serial CAT cable does not carry audio.
+
+### Receive timing
+
+Desktop 0.1.2 keeps receive capture windows fixed to the NTP-synchronized UTC
+15-second slots. It ignores and clears the legacy `rx_offset_ms` setting used by
+0.1.1. Decoded DT remains visible as diagnostic information, but one decode can
+no longer shift later windows and cut off the leading FT8 sync block.
 
 ## Build / test
 
+From the repository root (no radio, audio device, or display needed):
+
 ```
-cd desktop/src-tauri
-cargo test            # DSP round-trip, QSO state machine, rig commands, DB/ADIF
-cargo build --release # optimized binary (loads the bundled frontend in ../dist)
+npm --prefix desktop ci
+npm --prefix desktop test       # Vitest, single run (not watch mode)
+npm --prefix desktop run build  # TypeScript + Vite; produces desktop/dist
+cargo test --locked --manifest-path desktop/src-tauri/Cargo.toml -j 2
+cargo build --locked --manifest-path desktop/src-tauri/Cargo.toml -j 2
 ```
 
-The frontend builds independently with `npm run build` (emits to `desktop/dist`).
+Build the frontend **before** running Cargo in a fresh clone: Tauri embeds
+`desktop/dist`, but plain Cargo does not run `beforeBuildCommand`. Rust tests
+cover DSP round-trip, QSO sequencing, rig protocol formatting, DB/ADIF, and
+other host logic; they do not validate USB/RF or real-time audio hardware.
+
+### 32-bit Windows (i686) build
+
+The desktop app also ships a **32-bit (x86 / `i686`) Windows** installer for
+users still on 32-bit Windows, built alongside the 64-bit one. CI cross-compiles
+it on the `windows-latest` runner as a second Windows matrix leg and attaches the
+resulting `FT8AF_<ver>_x86_en-US.msi` (plus the NSIS `..._x86-setup.exe`) to the
+same desktop release as the x64 installers — Tauri's WiX bundler tags the MSI
+filename with the arch, so the two never collide.
+
+To build it locally on a 64-bit Windows host (from `desktop/`):
+
+```
+rustup target add i686-pc-windows-msvc
+npm ci
+# compile check (no installer):
+npm run tauri build -- --no-bundle --target i686-pc-windows-msvc
+# full MSI/NSIS installers:
+npm run tauri build -- --config "{\"bundle\":{\"active\":true}}" --target i686-pc-windows-msvc
+```
+
+What makes the 32-bit build work:
+
+- **C DSP core** — `build.rs` passes `--target=i686-pc-windows-msvc` to
+  `clang-cl` so `ft8core` is compiled as 32-bit objects (clang-cl otherwise
+  defaults to the host x64 arch). See `src-tauri/src/build_support.rs`.
+- **Hamlib DLLs** — the vendored win64 DLLs can't load into a 32-bit process, so
+  `build.rs` copies the arch-matching set from `src-tauri/hamlib/x86/` instead of
+  `x64/`. Drop the win32 Hamlib release DLLs into `src-tauri/hamlib/x86/` (see
+  its `README.txt`); if that dir is empty the build still succeeds and rig
+  control degrades cleanly to "Hamlib unavailable".
 
 ## How it works
 

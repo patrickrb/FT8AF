@@ -1,6 +1,8 @@
 package radio.ks3ckc.ft8af.ui.settings
 
+import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,8 +49,7 @@ import radio.ks3ckc.ft8af.theme.TextPrimary
 import java.io.File
 
 /**
- * In-app log viewer surfaced from Settings -> About -> Debug (only visible
- * after the user taps the version 7 times to unlock debug mode).
+ * In-app log viewer surfaced from Settings -> About -> View logs.
  *
  * Default content is the tail of /Android/data/.../files/debug.log, which the
  * app writes via GeneralVariables.fileLog(). The Logcat toggle additionally
@@ -58,9 +59,7 @@ import java.io.File
 @Composable
 fun DebugLogScreen(onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val debugLogFile = remember {
-        context.getExternalFilesDir(null)?.let { File(it, "debug.log") }
-    }
+    val debugLogFile = remember { debugLogFile(context) }
 
     var lines by remember { mutableStateOf<List<String>>(emptyList()) }
     var captureLogcat by remember { mutableStateOf(false) }
@@ -135,8 +134,9 @@ fun DebugLogScreen(onDismiss: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     TextButton(onClick = {
-                        debugLogFile?.let { shareDebugLog(context, it) }
-                            ?: run { statusMsg = context.getString(R.string.debug_no_log_file) }
+                        if (!shareDebugLog(context)) {
+                            statusMsg = context.getString(R.string.debug_no_log_file)
+                        }
                     }) { Text(stringResource(R.string.debug_share), color = Accent) }
                     TextButton(onClick = {
                         debugLogFile?.takeIf { it.exists() }?.delete()
@@ -224,20 +224,45 @@ private fun buildLogLines(debugLogFile: File?, captureLogcat: Boolean): List<Str
     }
 }
 
-private fun shareDebugLog(context: android.content.Context, debugLogFile: File) {
-    if (!debugLogFile.exists()) return
-    val uri = FileProvider.getUriForFile(
-        context, "radio.ks3ckc.ft8af.fileprovider", debugLogFile,
-    )
+/** The app's debug.log in external files, or null when external storage is unavailable. */
+internal fun debugLogFile(context: Context): File? =
+    context.getExternalFilesDir(null)?.let { File(it, DEBUG_LOG_NAME) }
+
+/**
+ * The share-sheet chooser for [logFile], or null when there is nothing to share
+ * (no file yet, or an empty one after Clear). Split out of [shareDebugLog] so the
+ * intent shape is unit-testable without launching an activity.
+ */
+internal fun buildDebugLogShareIntent(
+    context: Context,
+    logFile: File?,
+    toUri: (File) -> Uri = { debugLogContentUri(context, it) },
+): Intent? {
+    if (logFile == null || !logFile.exists() || logFile.length() == 0L) return null
+    val uri = toUri(logFile)
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_STREAM, uri)
-        putExtra(Intent.EXTRA_SUBJECT, "FT8AF debug.log")
+        putExtra(Intent.EXTRA_SUBJECT, "FT8AF $DEBUG_LOG_NAME")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(
-        Intent.createChooser(send, context.getString(R.string.debug_share_chooser_title)).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        },
-    )
+    return Intent.createChooser(send, context.getString(R.string.debug_share_chooser_title)).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
 }
+
+/** Open the share sheet for debug.log; returns false when there is no log to share. */
+internal fun shareDebugLog(
+    context: Context,
+    toUri: (File) -> Uri = { debugLogContentUri(context, it) },
+): Boolean {
+    val intent = buildDebugLogShareIntent(context, debugLogFile(context), toUri) ?: return false
+    context.startActivity(intent)
+    return true
+}
+
+private fun debugLogContentUri(context: Context, file: File): Uri =
+    FileProvider.getUriForFile(context, FILE_PROVIDER_AUTHORITY, file)
+
+private const val DEBUG_LOG_NAME = "debug.log"
+private const val FILE_PROVIDER_AUTHORITY = "radio.ks3ckc.ft8af.fileprovider"

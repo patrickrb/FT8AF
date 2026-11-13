@@ -3,6 +3,8 @@ package radio.ks3ckc.ft8af.ui.pota
 import android.content.Context
 import android.content.Intent
 import android.database.sqlite.SQLiteDatabase
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.FileProvider
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.log.AdifFormat
@@ -33,8 +35,12 @@ object PotaAdifExporter {
     private const val AUTHORITY = "radio.ks3ckc.ft8af.fileprovider"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** One park's ADIF document plus the filename it should be uploaded/shared under. */
-    data class NamedAdif(val parkRef: String, val filename: String, val content: String)
+    /**
+     * One park's ADIF document plus the filename it should be uploaded/shared under
+     * and the activator [callsign] the log belongs to (the same one embedded in the
+     * filename) — POTA's upload endpoint wants it as a separate form field too.
+     */
+    data class NamedAdif(val parkRef: String, val filename: String, val content: String, val callsign: String)
 
     /**
      * Build one ADIF document per park reference for [activation]. Each document
@@ -109,7 +115,11 @@ object PotaAdifExporter {
         // "nothing to upload/share".
         if (rows.isEmpty()) return emptyList()
 
-        val ts = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date(activation.startedAtMs))
+        val date = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(activation.startedAtMs))
+        // Filename callsign: the log's own STATION_CALLSIGN, falling back to the
+        // activation's operator for imported rows that lack one.
+        val callsign = rows.firstNotNullOfOrNull { it.station?.takeIf(String::isNotBlank) }
+            ?: activation.operator
         return activation.parkRefs.map { parkRef ->
             val sb = StringBuilder()
             sb.append("FT8AF POTA Activation $parkRef\n")
@@ -136,10 +146,48 @@ object PotaAdifExporter {
                 adifField(sb, "SIG_INFO", r.sigInfo)
                 sb.append("<EOR>\n")
             }
-            NamedAdif(parkRef = parkRef, filename = "pota-$parkRef-$ts.adi", content = sb.toString())
+            NamedAdif(
+                parkRef = parkRef,
+                filename = uploadFilename(callsign, parkRef, date),
+                content = sb.toString(),
+                callsign = callsign.orEmpty(),
+            )
         }
     }
 
+    /**
+     * Deliver [result] to [onResult] on the main thread, immediately when the
+     * caller is already there and via the main [Looper] otherwise.
+     *
+     * Every callback out of [shareActivationAdif] goes through here, because the
+     * body that produces them runs on [Dispatchers.IO] and callers legitimately
+     * touch UI in the callback — the existing one shows a Toast, and
+     * `Toast.makeText` throws "Can't toast on a thread that has not called
+     * Looper.prepare()" off the main thread. Issue #700 was exactly that: sharing
+     * an activation with no QSOs takes the empty-documents exit, which reported
+     * failure from an IO worker and crashed the app.
+     *
+     * Making the guarantee the *exporter's* rather than each caller's is the
+     * point. A caller cannot see which thread the callback arrives on, so a fix
+     * at the one Toast would leave the next caller to rediscover this.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun deliverOnMain(
+        result: Boolean,
+        onResult: (Boolean) -> Unit,
+    ) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            onResult(result)
+        } else {
+            Handler(Looper.getMainLooper()).post { onResult(result) }
+        }
+    }
+
+    /**
+     * Build this activation's ADIF documents and hand them to the system share
+     * sheet. [onResult] reports whether anything was shared, and is always
+     * invoked on the main thread — see [deliverOnMain].
+     */
     fun shareActivationAdif(
         context: Context,
         mainViewModel: MainViewModel,
@@ -147,7 +195,7 @@ object PotaAdifExporter {
         onResult: (Boolean) -> Unit,
     ) {
         val db = mainViewModel.databaseOpr?.db ?: run {
-            onResult(false)
+            deliverOnMain(false, onResult)
             return
         }
         scope.launch {
@@ -155,11 +203,11 @@ object PotaAdifExporter {
                 val docs = buildActivationAdif(db, activation)
                 if (docs.isEmpty()) {
                     // No QSOs matched this activation — nothing to share.
-                    onResult(false)
+                    deliverOnMain(false, onResult)
                     return@launch
                 }
                 val dir = context.getExternalFilesDir(null) ?: run {
-                    onResult(false)
+                    deliverOnMain(false, onResult)
                     return@launch
                 }
                 val parks = activation.parkRefs
@@ -190,13 +238,37 @@ object PotaAdifExporter {
                 val chooser = Intent.createChooser(send, "Share POTA ADIF").apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
+                // Legal from a background thread because of FLAG_ACTIVITY_NEW_TASK
+                // above; only the callback has a main-thread requirement.
                 context.startActivity(chooser)
-                onResult(true)
+                deliverOnMain(true, onResult)
             } catch (e: Exception) {
                 e.printStackTrace()
-                onResult(false)
+                deliverOnMain(false, onResult)
             }
         }
+    }
+
+    /**
+     * Build the upload/share filename per POTA's documented convention,
+     * `station_callsign@park_id-yyyymmdd.adi` (e.g. `K8MH@US-1234-20220101.adi`,
+     * from pota.app's upload page). The in-app upload's previous
+     * `pota-<park>-<date>-<time>.adi` name got HTTP 502 from POTA's `/adif`
+     * Lambda on every attempt while the website accepted the same log — the
+     * upload page says ADIF fields "take precedence over the filename",
+     * implying the backend parses the name, so match the convention exactly.
+     *
+     * The callsign is uppercased and any character outside A–Z/0–9 becomes `-`
+     * (a portable suffix like `K1AF/P` must not put a path separator into a
+     * filename handed to [File]). A blank callsign falls back to the legacy
+     * `pota-` name rather than inventing one.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal fun uploadFilename(stationCallsign: String?, parkRef: String, dateYyyymmdd: String): String {
+        val call = stationCallsign.orEmpty().trim().uppercase(Locale.US)
+            .replace(Regex("[^A-Z0-9]"), "-").trim('-')
+        return if (call.isEmpty()) "pota-$parkRef-$dateYyyymmdd.adi"
+        else "$call@$parkRef-$dateYyyymmdd.adi"
     }
 
     /**

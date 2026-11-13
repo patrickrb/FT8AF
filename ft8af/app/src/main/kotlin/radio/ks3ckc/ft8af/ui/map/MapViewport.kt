@@ -47,6 +47,15 @@ internal class EquirectViewport(
     val worldPxW: Float = baseUniform * 2f * userScale
     val worldPxH: Float = baseUniform * 1f * userScale
 
+    /**
+     * Longitude pixels per degree at the current zoom — how much screen the map spends on a
+     * degree of longitude. The world is [worldPxW] px wide and spans 360°, so this is the honest
+     * measure of how much detail the basemap can carry (the raw [userScale] is not: COVER already
+     * blows the world up past the canvas at zoom 1, and by different amounts on a tall phone and a
+     * wide tablet). Drives the state-border fade — see `stateBorderAlpha`.
+     */
+    val pxPerLonDegree: Float get() = worldPxW / 360f
+
     /** Project a normalized point (from [equirectProject]) to canvas pixels. */
     fun project(p: ProjectedPoint): Offset {
         val cx = canvasW / 2f
@@ -75,5 +84,16 @@ internal class EquirectViewport(
         val mx = maxPanX()
         val my = maxPanY()
         return Offset(px.coerceIn(-mx, mx), py.coerceIn(-my, my))
+    }
+
+    /**
+     * The clamped pan that puts geographic [lat]/[lon] as close to the canvas
+     * centre as the clamp allows — used by the "Me" recenter button. Solving
+     * `project(...).x == cx` gives `panX = -p.x * worldPxW/2` (and likewise y),
+     * then [clampPan] keeps the map from being dragged off into empty space.
+     */
+    fun panToCenter(lat: Double, lon: Double): Offset {
+        val p = equirectProject(lat, lon)
+        return clampPan(-p.x * (worldPxW / 2f), -p.y * (worldPxH / 2f))
     }
 }

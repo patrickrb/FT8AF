@@ -139,6 +139,7 @@
     <string name="qsopanel_qsoing_with">QSO s %1$s</string>
     <string name="qsopanel_waiting_for">Čekání na %1$s</string>
     <string name="qsopanel_tap_to_view">klepnutím zobrazit ↗</string>
+    <string name="qsopanel_sent_report">odesláno %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Čekání na zprávy...</string>
     <string name="qsopanel_log_action">ZAPSAT</string>
@@ -237,9 +238,11 @@
     <string name="log_sync_title_no_services">ŽÁDNÉ POVOLENÉ SLUŽBY</string>
     <string name="log_sync_title_syncing">SYNCHRONIZACE…</string>
     <string name="log_sync_title_complete">SYNCHRONIZACE DOKONČENA</string>
-    <string name="log_sync_enable_services">Povolte Cloudlog/Wavelog/Nextlog nebo QRZ v Nastavení a zkuste to znovu.</string>
+    <string name="log_sync_enable_services">Povolte Cloudlog/Wavelog/Nextlog, QRZ nebo World Radio League v Nastavení a zkuste to znovu.</string>
     <string name="log_sync_progress_count">%1$d z %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d přijato</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d již v deníku</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d staženo</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d přijato</string>
     <string name="log_sync_nothing_to_upload">V deníku zatím nejsou žádná QSOs k nahrání.</string>
     <string name="log_sync_working">Pracuji…</string>
@@ -248,6 +251,33 @@
     <string name="pota_tab_activate">Aktivovat</string>
     <string name="pota_tab_hunt">Lov</string>
     <string name="pota_tab_history">Historie</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">právě teď</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="one">před %d s</item>
+        <item quantity="few">před %d s</item>
+        <item quantity="many">před %d s</item>
+        <item quantity="other">před %d s</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="one">před %d min</item>
+        <item quantity="few">před %d min</item>
+        <item quantity="many">před %d min</item>
+        <item quantity="other">před %d min</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="one">před %d h</item>
+        <item quantity="few">před %d h</item>
+        <item quantity="many">před %d h</item>
+        <item quantity="other">před %d h</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="one">před %d d</item>
+        <item quantity="few">před %d d</item>
+        <item quantity="many">před %d d</item>
+        <item quantity="other">před %d d</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">Zobrazit čas UTC</string>
     <string name="pota_start_activation">Zahájit aktivaci</string>
     <string name="pota_park_reference_label">Reference parku (např. K-1234)</string>
     <string name="pota_notes_optional_label">Poznámky (volitelné)</string>
@@ -259,6 +289,7 @@
     <string name="pota_self_spot_failed">Vlastní spot selhal — zkontrolujte log</string>
     <string name="pota_active_park">AKTIVNÍ — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">duplikát</string>
     <string name="pota_contacts_map">Mapa spojení</string>
     <string name="pota_back">Zpět</string>
     <string name="pota_valid_activation">platná aktivace</string>
@@ -406,6 +437,9 @@
     <string name="settings_tx_watchdog_desc">Automaticky zastavit vysílání po vypršení limitu</string>
     <string name="settings_stop_after">Zastavit po</string>
     <string name="settings_stop_after_desc">Zastavit volání po N neúspěšných pokusech</string>
+    <string name="settings_max_73">Max. odeslání 73</string>
+    <string name="settings_max_73_desc">Nejvyšší počet vysílání RR73/73 na spojení, než se pokračuje dál</string>
+    <string name="settings_max_73_auto">Automaticky</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Lov (auto-odpověď na CQ)</string>
@@ -473,6 +507,9 @@
     <string name="settings_qrz_profile_lookup_desc">Uživatelské jméno + heslo pro QRZ XML API (avatary)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">Automaticky nahrávat QSOs do instance Cloudlog, Wavelog nebo Nextlog</string>
+    <string name="settings_cloudlog_download">Při synchronizaci stahovat QSOs z Wavelogu</string>
+    <string name="settings_cloudlog_download_desc">Synchronizace přidá i QSOs, které jsou ve vašem deníku Wavelog, ale ne v tomto deníku. Neodesílají se dál do QRZ ani World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">Vyžaduje Wavelog: tento server neumí vypsat svá QSOs.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">Zpoždění PTT</string>
@@ -489,8 +526,11 @@
     <string name="bug_report_send_email">Odeslat e-mail</string>
     <string name="bug_report_no_email_app">Nebyla nalezena žádná e-mailová aplikace pro odeslání hlášení</string>
     <string name="bug_report_open_github">Otevřít issue na GitHubu</string>
-    <string name="settings_debug">Ladění</string>
     <string name="settings_debug_desc">Zobrazit / sdílet debug.log</string>
+    <string name="settings_share_logs">Sdílet logy</string>
+    <string name="settings_share_logs_desc">Odeslat debug.log e-mailem, na Discord, Drive…</string>
+    <string name="settings_view_logs">Zobrazit logy</string>
+    <string name="settings_share_logs_empty">Zatím není zaznamenán žádný log</string>
     <string name="settings_about_body">Verze %1$s (build %2$s)\nDatum buildu %3$s\n\nFT8, jednoduše.\n\nSamostatná aplikace FT8 transceiveru pro Android. Řízení TRX přes USB, Bluetooth a síť s automatickým sekvencováním a logováním.</string>
     <string name="settings_website">Web</string>
     <string name="settings_community">Komunita</string>
@@ -510,8 +550,6 @@
     <string name="settings_conn_network">Síť</string>
     <string name="settings_no_usb_serial">Nebyla zjištěna žádná sériová zařízení USB. Připojte USB kabel k rádiu a zkuste to znovu.</string>
     <string name="settings_no_bluetooth_devices">Nebyla nalezena žádná spárovaná zařízení Bluetooth. Nejprve spárujte zařízení v nastavení Bluetooth systému Android.</string>
-    <string name="settings_debug_mode_enabled">Režim ladění povolen</string>
-    <string name="settings_debug_mode_disabled">Režim ladění zakázán</string>
     <string name="settings_edit_operator_identity">Upravit identitu operátora</string>
     <string name="settings_callsign">Volací značka</string>
     <string name="settings_callsign_hint">např. W1AW</string>
@@ -534,6 +572,7 @@
     <string name="settings_username_hint">Vaše uživatelské jméno QRZ.com</string>
     <string name="settings_password">Heslo</string>
     <string name="settings_enabled_bands_dialog_desc">Skrytá pásma se neobjeví ve výběru frekvencí.</string>
+    <string name="settings_enabled_bands_keep_one">Alespoň jedno pásmo musí zůstat povolené.</string>
     <string name="settings_select_serial_port">Vyberte sériový port</string>
     <string name="settings_tx_volume_advice">Upravujte naživo — vaše příští TX použije tuto úroveň. Sledujte ALC svého rádia a stahujte, dokud se právě nedotýká čáry.</string>
     <string name="settings_input_volume">Vstupní hlasitost</string>
@@ -560,6 +599,8 @@
     <string name="cq_offset_moved">Offset CQ přesunut na volné místo: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Automaticky volný TX offset</string>
     <string name="settings_auto_clear_tx_desc">Při volání CQ vybere volné místo podle nedávné aktivity v pásmu a uhne, pokud se obsadí</string>
+    <string name="settings_auto_clear_tx_min">Nejnižší automatický offset</string>
+    <string name="settings_auto_clear_tx_min_desc">Automatický výběr nikdy nezvolí offset pod touto hodnotou. Zvyšte ji, aby harmonické zvuku zůstaly mimo propustné pásmo</string>
     <string name="tune_content_description">Tune: spustí tuner rádia nebo vysílá souvislou nosnou pro ladění antény</string>
     <string name="tune_stopped_timeout">Tune zastaven po %1$d s</string>
     <string name="tune_blocked_tx">Před použitím Tune zastavte CQ/QSO</string>
@@ -591,4 +632,15 @@
     <string name="settings_bin_agg_max">Maximum</string>
     <string name="settings_bin_agg_avg">Průměr</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d přijato</string>
+    <string name="settings_wrl_desc">Automaticky nahrávat QSOs do deníku World Radio League (vyžaduje klíč Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Klíč vygenerujete ve World Radio League v části Integrations → Developer API. Jeden klíč platí pro celý účet.</string>
+    <string name="settings_wrl_logbook">Deník</string>
+    <string name="settings_wrl_logbook_default">Výchozí deník</string>
+    <string name="settings_wrl_loading_logbooks">Načítání deníků…</string>
+    <string name="settings_wrl_no_logbooks">Váš účet World Radio League zatím nemá žádný deník.</string>
+    <string name="settings_wrl_create_logbook">Vytvořit deník „%1$s“</string>
+    <string name="settings_wrl_creating_logbook">Vytváření deníku…</string>
 </resources>

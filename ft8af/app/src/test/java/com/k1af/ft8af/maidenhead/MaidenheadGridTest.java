@@ -8,6 +8,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
+import java.util.Locale;
+
 /**
  * Exercise the Maidenhead grid math: grid->LatLng, LatLng->grid, distance,
  * and the format validator. Robolectric is required because the production
@@ -36,13 +38,47 @@ public class MaidenheadGridTest {
 
     @Test
     public void gridToLatLng_sixChar_narrowsToSubsquare() {
-        // FN42aa: south-west corner of FN42.
+        // FN42aa: the south-west subsquare of FN42. Subsquares span 1/24° lat and
+        // 2/24° lng (letters a–x), so the 'aa' centroid sits half a subsquare in.
         LatLng p = MaidenheadGrid.gridToLatLng("FN42aa");
         assertThat(p).isNotNull();
-        // Sub-square centroid lat: 42 + (0.5 * 1/18) ≈ 42.0278
-        assertThat(p.latitude).isWithin(POS_TOL).of(42.028);
-        // Sub-square centroid lng: -72 + (0.5 * 2/18) ≈ -71.944
-        assertThat(p.longitude).isWithin(POS_TOL).of(-71.944);
+        // Sub-square centroid lat: 42 + (0.5 * 1/24) ≈ 42.0208
+        assertThat(p.latitude).isWithin(POS_TOL).of(42.021);
+        // Sub-square centroid lng: -72 + (0.5 * 2/24) ≈ -71.9583
+        assertThat(p.longitude).isWithin(POS_TOL).of(-71.958);
+    }
+
+    @Test
+    public void gridToLatLng_sixChar_highSubsquareMatchesRealLocation() {
+        // Regression for the subsquare divisor: the a–x third pair has 24
+        // divisions per axis, not 18. The +0.5 centre offset masks the error for
+        // the low letters ('aa'), so use a high subsquare — IO91wm is the classic
+        // central-London locator, true centre ≈ (51.52, -0.125). With the old /18
+        // divisor this resolved to (51.69, +0.5): ~45 km east and into the wrong
+        // hemisphere of the prime meridian.
+        LatLng p = MaidenheadGrid.gridToLatLng("IO91wm");
+        assertThat(p).isNotNull();
+        assertThat(p.latitude).isWithin(POS_TOL).of(51.521);
+        assertThat(p.longitude).isWithin(POS_TOL).of(-0.125);
+    }
+
+    @Test
+    public void gridToPolygon_sixChar_cellSpansOneSubsquare() {
+        // A 6-char cell outline must be exactly one subsquare: 1/24° tall and
+        // 2/24° wide. The /18 divisor inflated it to 1/18° × 2/18° (≈33% too big),
+        // drawing overlapping grid squares on the map.
+        LatLng[] poly = MaidenheadGrid.gridToPolygon("IO91wm");
+        assertThat(poly).isNotNull();
+        double minLat = Math.min(Math.min(poly[0].latitude, poly[1].latitude),
+                Math.min(poly[2].latitude, poly[3].latitude));
+        double maxLat = Math.max(Math.max(poly[0].latitude, poly[1].latitude),
+                Math.max(poly[2].latitude, poly[3].latitude));
+        double minLng = Math.min(Math.min(poly[0].longitude, poly[1].longitude),
+                Math.min(poly[2].longitude, poly[3].longitude));
+        double maxLng = Math.max(Math.max(poly[0].longitude, poly[1].longitude),
+                Math.max(poly[2].longitude, poly[3].longitude));
+        assertThat(maxLat - minLat).isWithin(1e-4).of(1.0 / 24.0);
+        assertThat(maxLng - minLng).isWithin(1e-4).of(2.0 / 24.0);
     }
 
     @Test
@@ -76,6 +112,30 @@ public class MaidenheadGridTest {
         assertThat(MaidenheadGrid.gridToLatLng("ABCDEFG")).isNull();
     }
 
+    @Test
+    public void gridToLatLng_rightLengthWrongAlphabet_returnsNull() {
+        // A token of a legal length (2/4/6) but that is not a Maidenhead locator
+        // must be rejected, not coerced into an arbitrary LatLng. Before this
+        // guard an ADIF GRIDSQUARE of "1234" (or any 4-char junk) decoded to a
+        // bogus point that was plotted on the map and fed into distance stats.
+        assertThat(MaidenheadGrid.gridToLatLng("1234")).isNull(); // digits in field slots
+        assertThat(MaidenheadGrid.gridToLatLng("FN4X")).isNull(); // letter in a digit slot
+        assertThat(MaidenheadGrid.gridToLatLng("ZZ99")).isNull(); // field letters past R
+        assertThat(MaidenheadGrid.gridToLatLng("AB1@")).isNull(); // symbol in a digit slot
+        assertThat(MaidenheadGrid.gridToLatLng("FN42zz")).isNull(); // subsquare past x
+        assertThat(MaidenheadGrid.gridToLatLng("1A")).isNull();   // 2-char field with a digit
+    }
+
+    @Test
+    public void gridToLatLng_validGridsStillDecode() {
+        // Regression guard: the alphabet check must be a no-op for real locators
+        // of every supported length and case.
+        assertThat(MaidenheadGrid.gridToLatLng("FN")).isNotNull();
+        assertThat(MaidenheadGrid.gridToLatLng("FN42")).isNotNull();
+        assertThat(MaidenheadGrid.gridToLatLng("IO91wm")).isNotNull();
+        assertThat(MaidenheadGrid.gridToLatLng("io91WM")).isNotNull(); // mixed case
+    }
+
     // ---------- getGridSquare ----------
 
     @Test
@@ -91,6 +151,22 @@ public class MaidenheadGridTest {
         // Boston-ish coordinates.
         String grid = MaidenheadGrid.getGridSquare(new LatLng(42.5, -71.0));
         assertThat(grid).isEqualTo("FN42");
+    }
+
+    @Test
+    public void getGridSquare_northPoleStaysWithinFieldRange() {
+        // A GPS fix at the North Pole (lat == 90) drove the latitude field index
+        // to 18 — one past the legal A-R range — emitting the letter 'S', i.e. an
+        // invalid locator that was then written to config as the operator's grid,
+        // transmitted in FT8 messages, and uploaded to PSKReporter. (Play-Services
+        // LatLng clamps latitude to [-90, 90] so 90 survives; it normalizes
+        // longitude 180 -> -180, so the antimeridian overflow is only reachable in
+        // the raw math — see MaidenheadGridSquareTest.) The field letters must stay
+        // in A-R.
+        String grid = MaidenheadGrid.getGridSquare(new LatLng(90.0, 0.0));
+        assertThat(MaidenheadGrid.checkMaidenhead(grid)).isTrue();
+        assertThat(grid.charAt(0)).isAtMost('R');
+        assertThat(grid.charAt(1)).isAtMost('R');
     }
 
     // ---------- getDist ----------
@@ -118,6 +194,30 @@ public class MaidenheadGridTest {
         double dist = MaidenheadGrid.getDist("FN42", "IO91");
         assertThat(dist).isGreaterThan(5000.0);
         assertThat(dist).isLessThan(5800.0);
+    }
+
+    @Test
+    public void getDist_samePointNeverProducesNaN() {
+        // Regression: for two stations in the SAME Maidenhead grid, gridToLatLng
+        // resolves both to the identical grid centre. The great-circle dot
+        // product then rounds to fractionally above 1.0 for ~2% of grids, and an
+        // unclamped Math.acos(>1) returns NaN — surfacing as "NaN km" in the log
+        // and calling-list distance column and silently dropping the contact from
+        // the distance statistics. AI04's centre (-5.5, -179.0) is one such point.
+        LatLng ai04 = new LatLng(-5.5, -179.0);
+        double d = MaidenheadGrid.getDist(ai04, ai04);
+        assertThat(Double.isNaN(d)).isFalse();
+        assertThat(d).isWithin(DIST_TOL).of(0.0);
+    }
+
+    @Test
+    public void getDistStr_sameNaNProneGridIsBlankOrZero() {
+        // The same fault seen through the display formatter: getDistStr checks
+        // dist == 0 (false for NaN) then formats, so before the acos clamp this
+        // rendered the literal "NaN km"/"NaN mi". It must be "" or "0 <unit>".
+        String label = MaidenheadGrid.getDistUnitLabel();
+        assertThat(MaidenheadGrid.getDistStr("AI04", "AI04")).isAnyOf("", "0 " + label);
+        assertThat(MaidenheadGrid.getDistStrEN("AI04", "AI04")).isAnyOf("", "0 " + label);
     }
 
     @Test
@@ -259,6 +359,23 @@ public class MaidenheadGridTest {
     }
 
     @Test
+    public void gridToPolygon_nullReturnsNullNotNPE() {
+        // Unlike its sibling gridToLatLng, gridToPolygon had no null guard and
+        // NPE'd on grid.length(). A null gridsquare reaching the GridPolygon
+        // overlay must yield null, not throw.
+        assertThat(MaidenheadGrid.gridToPolygon(null)).isNull();
+    }
+
+    @Test
+    public void gridToPolygon_rightLengthWrongAlphabet_returnsNull() {
+        // Same alphabet contract as gridToLatLng: a legal-length non-locator
+        // token must be rejected rather than drawn as a bogus cell outline.
+        assertThat(MaidenheadGrid.gridToPolygon("1234")).isNull();
+        assertThat(MaidenheadGrid.gridToPolygon("FN4X")).isNull();
+        assertThat(MaidenheadGrid.gridToPolygon("ZZ99")).isNull();
+    }
+
+    @Test
     public void gridToPolygon_cornersFormARectangle() {
         // latLngs[0]/[1] share lat1; [2]/[3] share lat2; [0]/[3] share lng1;
         // [1]/[2] share lng2 — i.e. an axis-aligned box.
@@ -343,5 +460,29 @@ public class MaidenheadGridTest {
     public void checkMaidenhead_rejectsTwoCharField() {
         // Unlike gridToLatLng, the validator does not accept 2-char fields.
         assertThat(MaidenheadGrid.checkMaidenhead("FN")).isFalse();
+    }
+
+    // ---------- locale safety ----------
+
+    @Test
+    public void gridToLatLng_lowerCase_turkishDefaultLocale_decodesCorrectly() {
+        // Default-locale toUpperCase() maps 'i' to dotted-capital 'İ' (U+0130) under
+        // Turkish locales — a multi-byte UTF-8 char that shifts every getBytes()
+        // index and breaks the byte arithmetic. The decoders must normalize with a
+        // fixed locale so "io91wm" decodes identically everywhere.
+        Locale saved = Locale.getDefault();
+        Locale.setDefault(new Locale("tr", "TR"));
+        try {
+            LatLng p = MaidenheadGrid.gridToLatLng("io91wm");
+            assertThat(p).isNotNull();
+            assertThat(p.latitude).isWithin(POS_TOL).of(51.521);
+            assertThat(p.longitude).isWithin(POS_TOL).of(-0.125);
+
+            LatLng[] poly = MaidenheadGrid.gridToPolygon("io91wm");
+            assertThat(poly).isNotNull();
+            assertThat(poly[0].latitude).isWithin(POS_TOL).of(51.5);
+        } finally {
+            Locale.setDefault(saved);
+        }
     }
 }

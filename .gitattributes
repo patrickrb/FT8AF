@@ -1,0 +1,13 @@
+# Force LF checkout for the app's data/text assets, regardless of a
+# contributor's global core.autocrlf setting. Several of these files are
+# split into fields by OperationBand/RigNameList parsers that only split
+# lines on "\n" -- a CRLF checkout (the default on Windows with
+# core.autocrlf=true and no override) leaves a trailing "\r" on each line's
+# last field. For bands.txt specifically, that silently broke every
+# waveLength comparison (isBandExcluded, mostUsedBands, getModeBandFreq, ...)
+# on every Windows-built APK, with no error anywhere -- the Band & Mode sheet
+# just came up empty. Scoped to the whole assets directory's .txt files
+# rather than just the ones confirmed affected: the failure mode is silent,
+# so there's little reason to assume only the known files are exposed, and
+# forcing LF costs nothing for the ones that are just display-only help text.
+ft8af/app/src/main/assets/*.txt text eol=lf

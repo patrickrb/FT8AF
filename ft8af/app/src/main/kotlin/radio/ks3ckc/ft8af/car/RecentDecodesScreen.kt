@@ -34,7 +34,7 @@ class RecentDecodesScreen(carContext: CarContext) : Screen(carContext) {
     }
 
     override fun onGetTemplate(): Template {
-        val vm = MainViewModel.peekInstance() ?: return openPhoneTemplate(carContext)
+        val vm = MainViewModel.peekInstance() ?: return engineIdleTemplate(carContext)
         maybeAttach(vm)
         // publishFt8MessageList() posts a defensive copy that is never mutated
         // after posting, so the value is safe to iterate directly.

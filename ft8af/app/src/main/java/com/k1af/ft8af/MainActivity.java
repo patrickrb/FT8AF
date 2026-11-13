@@ -68,6 +68,7 @@ import com.k1af.ft8af.ui.ToastMessage;
 import com.google.android.material.bottomnavigation.BottomNavigationView;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -337,8 +338,16 @@ public class MainActivity extends AppCompatActivity {
                 importSharedLogs = new ImportSharedLogs(mainViewModel);
                 Log.e(TAG,"Starting import...");
                 mainViewModel.mutableImportShareRunning.setValue(true);
-                importSharedLogs.doImport(getBaseContext().getContentResolver().openInputStream(uri)
-                        ,new OnShareLogEvents() {
+                // Re-opened once per pass (doImport streams the source twice: once to
+                // count records, once to parse+insert) rather than passed as a single
+                // already-open stream, so neither pass needs to buffer the whole file.
+                importSharedLogs.doImport(() -> {
+                    InputStream in = getBaseContext().getContentResolver().openInputStream(uri);
+                    if (in == null) {
+                        throw new IOException("Failed to open input stream for URI: " + uri);
+                    }
+                    return in;
+                }, new OnShareLogEvents() {
                     @Override
                     public void onPreparing(String info) {
                         mainViewModel.mutableShareInfo.postValue(info);

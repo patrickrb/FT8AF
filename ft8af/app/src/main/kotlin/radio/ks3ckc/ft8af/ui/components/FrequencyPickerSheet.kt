@@ -6,12 +6,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -24,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.k1af.ft8af.GeneralVariables
@@ -46,6 +49,10 @@ fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) 
     val oldWaveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band)
     GeneralVariables.bandListIndex = index
     GeneralVariables.band = OperationBand.getBandFreq(index)
+    // An explicit operator choice: this is the dial the app asserts from now on, and the
+    // one the reassert heartbeat re-sends — protected from being overwritten by rig
+    // echoes until the rig confirms it. See RigDialTarget.
+    GeneralVariables.operatorChoseDial(GeneralVariables.band)
     val newWaveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band)
     mainViewModel.databaseOpr.writeConfig(
         "bandFreq", GeneralVariables.band.toString(), null,
@@ -83,6 +90,18 @@ fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) 
             android.widget.Toast.LENGTH_SHORT,
         ).show()
     }
+    // Per-band RX input volume (issue #927): same restore rule for the
+    // receive gain. Live on the next audio buffer, like the settings slider.
+    val restoredInput = radio.ks3ckc.ft8af.applyRestoredInputLevelForBand(newWaveLength) { level ->
+        mainViewModel.databaseOpr.writeConfig("inputVolume", level.toString(), null)
+    }
+    if (restoredInput != null) {
+        android.widget.Toast.makeText(
+            context,
+            context.getString(R.string.per_band_input_volume_restored, restoredInput, newWaveLength),
+            android.widget.Toast.LENGTH_SHORT,
+        ).show()
+    }
 
     val cm = GeneralVariables.controlMode
     val connected = mainViewModel.isRigConnected()
@@ -109,7 +128,7 @@ fun selectBandIndex(mainViewModel: MainViewModel, context: Context, index: Int) 
     }
 }
 
-private data class BandGroup(
+internal data class BandGroup(
     val waveLength: String,
     val primaryIndex: Int,
     val primaryFreqHz: Long,
@@ -121,11 +140,16 @@ private data class BandGroup(
  *   - Group entries by waveLength (file order preserved).
  *   - Primary = first entry with marked == true; fall back to first entry in group.
  *   - Alternates = every other entry in the group, in file order.
+ *   - The ad-hoc slot for an off-plan rig frequency is skipped: the picker lists
+ *     configured dials, and the TxStrip pill already shows where the rig is.
+ *     Before #978 that slot was one entry per Hz tuned, so a minute of SSB
+ *     tuning filled the 20m row with hundreds of 14.xxx chips.
  */
-private fun buildBandGroups(): List<BandGroup> {
+internal fun buildBandGroups(): List<BandGroup> {
     val order = LinkedHashMap<String, MutableList<Pair<Int, OperationBand.Band>>>()
     for (i in 0 until OperationBand.bandList.size) {
         val b = OperationBand.bandList[i]
+        if (b.adHoc) continue
         // Only the current operating mode's dials (FT8 vs FT4 use different frequencies).
         if (b.mode != GeneralVariables.operatingMode) continue
         if (GeneralVariables.isBandExcluded(b.waveLength)) continue
@@ -158,65 +182,86 @@ fun FrequencyPickerSheet(
 ) {
     FT8AFBottomSheet(visible = visible, onDismiss = onDismiss) {
         val groups = remember(GeneralVariables.excludedBands.toSet(), GeneralVariables.operatingMode) { buildBandGroups() }
-        var showAlternates by remember { mutableStateOf(false) }
+        FrequencyPickerContent(
+            groups = groups,
+            currentBandIndex = currentBandIndex,
+            onSelect = onSelect,
+        )
+    }
+}
 
-        Column(
+/**
+ * The picker's body: band tiles, the show/hide-alternates toggle, and the
+ * alternates list. With alternates shown (and wrapping onto extra lines on
+ * narrow screens, #930) it can be taller than a short or landscape screen;
+ * [FT8AFBottomSheet] already wraps its content in a vertical scroll, so this
+ * body must not add its own. A second verticalScroll nested inside the sheet's
+ * is measured with an infinite max height and crashes on open (#972).
+ */
+@Composable
+internal fun FrequencyPickerContent(
+    groups: List<BandGroup>,
+    currentBandIndex: Int,
+    onSelect: (Int) -> Unit,
+) {
+    var showAlternates by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp, bottom = 24.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.freq_select_title),
+            color = TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = GeistMonoFamily,
+            letterSpacing = 0.06.sp,
+            modifier = Modifier.padding(bottom = 12.dp),
+        )
+
+        BandTileGrid(
+            groups = groups,
+            currentBandIndex = currentBandIndex,
+            onTileClick = onSelect,
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Show / hide alternates toggle
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(top = 8.dp, bottom = 24.dp),
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { showAlternates = !showAlternates }
+                .padding(vertical = 10.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = stringResource(R.string.freq_select_title),
-                color = TextPrimary,
-                fontSize = 13.sp,
+                text = if (showAlternates) stringResource(R.string.freq_hide_alternates) else stringResource(R.string.freq_show_alternates),
+                color = TextMuted,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = GeistMonoFamily,
-                letterSpacing = 0.06.sp,
-                modifier = Modifier.padding(bottom = 12.dp),
+                letterSpacing = 0.08.sp,
             )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = if (showAlternates) "△" else "▽",
+                color = TextFaint,
+                fontSize = 11.sp,
+            )
+        }
 
-            BandTileGrid(
+        if (showAlternates) {
+            Spacer(modifier = Modifier.height(4.dp))
+            AlternatesList(
                 groups = groups,
                 currentBandIndex = currentBandIndex,
-                onTileClick = onSelect,
+                onChipClick = onSelect,
             )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Show / hide alternates toggle
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { showAlternates = !showAlternates }
-                    .padding(vertical = 10.dp, horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = if (showAlternates) stringResource(R.string.freq_hide_alternates) else stringResource(R.string.freq_show_alternates),
-                    color = TextMuted,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = GeistMonoFamily,
-                    letterSpacing = 0.08.sp,
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = if (showAlternates) "△" else "▽",
-                    color = TextFaint,
-                    fontSize = 11.sp,
-                )
-            }
-
-            if (showAlternates) {
-                Spacer(modifier = Modifier.height(4.dp))
-                AlternatesList(
-                    groups = groups,
-                    currentBandIndex = currentBandIndex,
-                    onChipClick = onSelect,
-                )
-            }
         }
     }
 }
@@ -311,8 +356,9 @@ private fun BandTile(
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun AlternatesList(
+internal fun AlternatesList(
     groups: List<BandGroup>,
     currentBandIndex: Int,
     onChipClick: (Int) -> Unit,
@@ -320,16 +366,30 @@ private fun AlternatesList(
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         for (g in groups) {
             if (g.alternates.isEmpty()) continue
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Top-aligned so the band label sits beside its first chip line when
+            // the chips wrap, rather than centred on a tall row (#978).
+            Row(verticalAlignment = Alignment.Top) {
                 Text(
                     text = g.waveLength,
                     color = TextMuted,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = GeistMonoFamily,
-                    modifier = Modifier.width(44.dp),
+                    maxLines = 1,
+                    // Grow past 44.dp rather than wrap "160m" per character at
+                    // large font scales (same defect as the chips, #930). The top
+                    // padding matches the chip's, so the label lines up with the
+                    // first line of chip text.
+                    modifier = Modifier.widthIn(min = 44.dp).padding(top = 6.dp),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // FlowRow so a band with more alternates than fit on a narrow
+                // screen wraps whole chips onto the next line instead of
+                // squeezing the last chip until its label wraps per character (#930).
+                FlowRow(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     for (alt in g.alternates) {
                         AlternateChip(
                             label = formatMhz(alt.second),
@@ -364,6 +424,8 @@ private fun AlternateChip(
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             fontFamily = GeistMonoFamily,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

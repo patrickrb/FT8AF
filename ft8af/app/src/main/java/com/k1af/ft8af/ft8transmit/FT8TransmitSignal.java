@@ -12,18 +12,25 @@ import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
 import android.media.AudioAttributes;
 import android.media.AudioDeviceInfo;
+import android.os.Build;
+import android.os.SystemClock;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
 import android.util.Log;
 
+import com.k1af.ft8af.wave.AudioChannelCapability;
 import com.k1af.ft8af.wave.UsbAudioDevice;
 import com.k1af.ft8af.wave.UsbAudioNative;
 
 import androidx.lifecycle.MutableLiveData;
 
 import com.k1af.ft8af.FT8Common;
+import com.k1af.ft8af.MainViewModel;
 import com.k1af.ft8af.ModeProfile;
+import com.k1af.ft8af.bluetooth.AudioOutputRoutingPolicy;
+import com.k1af.ft8af.bluetooth.DefaultOutputRouting;
+import com.k1af.ft8af.ft8listener.FastDecodeGate;
 import com.k1af.ft8af.Ft8Message;
 import com.k1af.ft8af.ft8signal.FT8Package;
 import com.k1af.ft8af.GeneralVariables;
@@ -38,6 +45,7 @@ import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.ui.ToastMessage;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -101,6 +109,13 @@ public class FT8TransmitSignal {
     private AudioFormat myFormat = null;
     private AudioTrack audioTrack = null;
 
+    // Held for the duration of each AudioTrack TX so other apps' sounds
+    // (touch clicks, notifications) aren't mixed into the audio feeding the
+    // rig. Acquired in playFT8Signal's sound-card branch, released in
+    // afterPlayAudio (a no-op for the CAT/USB-direct paths, which never
+    // acquire it). The tune worker uses its own instance.
+    private final TxAudioFocus txAudioFocus = new TxAudioFocus();
+
     // Milliseconds we are late into the current cycle; leading audio is clipped
     // so the TX still finishes on the cycle boundary. Set just before playback.
     private volatile int lateStartSkipMs = 0;
@@ -112,6 +127,19 @@ public class FT8TransmitSignal {
     // against the worker blocked in write(). Reset at the start of each cycle's
     // sound-card playback.
     private volatile boolean txAudioCancelled = false;
+
+    // Mid-cycle message swap (the late-decode TX race). Set by requestTxRestart()
+    // when the late full-slot pass advances the QSO after we have already keyed up
+    // with the previous over's message. The playback loops break on txAudioCancelled
+    // exactly as they do for a STOP, but afterPlayAudio() sees this flag and tears
+    // down ONLY the audio — PTT stays keyed — and DoTransmitRunnable then replays
+    // the newly chosen message inside the same over. Consumed by consumeTxRestart().
+    private volatile boolean txRestartPending = false;
+
+    // functionOrder captured at key-up, so an evidence-only (deep/late) pass can tell
+    // whether it actually changed what we should be sending. Read/written from the
+    // decode thread and the TX worker.
+    private volatile int orderAtKeyUp = -1;
 
     public UtcTimer utcTimer;
 
@@ -125,6 +153,25 @@ public class FT8TransmitSignal {
     // QSO is already logged, so only repeat RR73 a few times for the partner's
     // benefit, then return to CQ / next caller.
     private static final int RR73_GIVEUP_CYCLES = 3;
+
+    // Actual RR73/73 (order 4/5) transmissions for the current target, counted
+    // at doTransmit() time. The no-reply caps above can't bound the loops where
+    // the partner keeps transmitting (re-sent R+report at our RR73, repeated
+    // RR73 at our 73) because every decode from them resets noReplyCount; when
+    // the user sets GeneralVariables.max73Sends (> 0), this counter caps those
+    // too. Reset wherever the target changes (generateFun) and on TX stop.
+    // Package-visible for testing.
+    volatile int finalAckSends = 0;
+
+    // Callsign whose QSO the Max 73 Sends cap just ended. Their leftover (and
+    // subsequent) R+report/RR73 continuation messages to me must not re-answer
+    // the very loop the cap ended — without this the same-cycle continuation
+    // scan (checkCQMeOrFollowCQMessage / enqueueCaller) restarts the QSO
+    // immediately, because those messages are addressed to me and are not an
+    // exact "73" (checkFun5). A fresh CQ/grid/report from them still gets
+    // answered, which also clears the gate (see setTransmit). Cleared on TX
+    // stop as well. Package-visible for testing.
+    volatile String cappedCallsign = "";
 
     // Caller queue: stations that called us while we're in an active QSO
     private static final int MAX_QUEUE_SIZE = 10;
@@ -145,12 +192,22 @@ public class FT8TransmitSignal {
     // Tune carrier (issue #408): lifecycle/safety state machine + UI state.
     // The controller enforces the hard max-on timeout and single-flight; the
     // worker thread owns keying + AudioTrack teardown in a finally.
-    private final TuneController tuneController = new TuneController(System::currentTimeMillis);
+    // Monotonic: the max-on timeout and the SWR settle window are intervals, and a
+    // wall-clock step (NTP, self-sync) must not stretch or shrink them (#943).
+    private final TuneController tuneController = new TuneController(SystemClock::elapsedRealtime);
+    // Posted only through tuneController.publishTuningState, scoped to the session.
     public final MutableLiveData<Boolean> mutableIsTuning = new MutableLiveData<>();
     public final MutableLiveData<Integer> mutableTuneRemainingSec = new MutableLiveData<>();
 
     private final OnDoTransmitted onDoTransmitted;// typically used for opening/closing PTT
     private final ExecutorService doTransmitThreadPool = Executors.newCachedThreadPool();
+    // Serialises every QSO log-completion. The QSO is now logged from the TX worker
+    // (DoTransmitRunnable, when our RR73/73 actually goes out) as well as the decode
+    // thread (parseMessageToFunctionInner, when the partner's RR73/73 is parsed) and
+    // the force-log UI path, so the lookup-create-complete sequence in
+    // updateQSlRecordList must run under one lock or the same partner can be saved
+    // to the database twice.
+    private final Object qslUpdateLock = new Object();
     private final DoTransmitRunnable doTransmitRunnable = new DoTransmitRunnable(this);
 
     static {
@@ -241,6 +298,13 @@ public class FT8TransmitSignal {
                         ToastMessage.show(GeneralVariables.getStringFromResource(R.string.callsign_error));
                         return;
                     }
+                    // Wait for this slot's fast decode if it is still running. Costs
+                    // nothing when it has already finished (the quiet-band case, which is
+                    // most cycles); on a busy band it spends part of the otherwise-idle
+                    // audio slack so the sequencer keys up with the reply it is about to
+                    // learn about, rather than answering that caller a cycle late. Bounded
+                    // so a held start still clips no leading audio. See FastDecodeGate.
+                    holdForFastDecode(utc);
                     doTransmit();// transmit action follows precise timing; delay is the audio signal delay
                 }
             }
@@ -253,9 +317,264 @@ public class FT8TransmitSignal {
      * timer is always restarted; callers should ensure we are not mid-transmit first.
      */
     public void rebuildTimer(ModeProfile mode) {
-        utcTimer.delete();
-        utcTimer = new UtcTimer(mode.slotMillis, false, makeTimerCallback());
+        utcTimer = rebuildTimerPreservingOffset(utcTimer, mode, makeTimerCallback());
         utcTimer.start();
+    }
+
+    /** Upper clamp for {@link GeneralVariables#lateStartTolerance} (matches the settings UI range). */
+    static final int MAX_LATE_START_TOLERANCE_MS = 4000;
+
+    /**
+     * The pure decision for a manual {@link #transmitNow()}: given how far into the
+     * current slot the operator tapped, decide whether we still key up <em>this</em>
+     * cycle and, if so, how much leading audio must be clipped so the waveform still
+     * ends on the slot boundary.
+     *
+     * <p>Extracted from {@code transmitNow()} so the tolerance-boundary logic is
+     * unit-testable without JNI or a running timer.
+     */
+    static final class ManualTxGate {
+        /** Whether to key up this cycle (false == defer to the next matching slot). */
+        final boolean transmit;
+        /** Leading audio to clip, in ms, so TX still ends on the boundary (0 within slack). */
+        final int clipMs;
+
+        ManualTxGate(boolean transmit, int clipMs) {
+            this.transmit = transmit;
+            this.clipMs = clipMs;
+        }
+    }
+
+    /**
+     * Decide whether a manual TX tapped {@code msInCycle} into the slot goes out now.
+     *
+     * <p>The waveform occupies {@code slotMillis - audioSlackMillis} of the slot, so any
+     * start within the slack ({@code msInCycle <= audioSlackMillis}) fits with zero
+     * clipping. Past the slack we clip the excess leading audio — the identical
+     * {@code msLate} math the transmit runnable applies before playback. The tolerance
+     * bounds how much of that leading audio we are willing to clip: TX goes out iff the
+     * clip we would take is within tolerance.
+     *
+     * <p>This mirrors the clip path exactly, so the gate is never more restrictive than
+     * the transmit it guards. The old raw {@code msInCycle < tolerance} check rejected
+     * even before the free slack was used up (default tolerance 2000 ms &lt; FT8's 2360 ms
+     * slack), which is why the setting appeared to do nothing — see issue #467.
+     *
+     * @param msInCycle       ms elapsed since the current slot boundary (>= 0)
+     * @param audioSlackMillis {@link ModeProfile#audioSlackMillis} — free slack before clipping
+     * @param slotMillis       {@link ModeProfile#slotMillis} — cycle length
+     * @param lateStartTolerance configured tolerance (clamped to 0..{@link #MAX_LATE_START_TOLERANCE_MS})
+     */
+    static ManualTxGate decideManualTx(long msInCycle, int audioSlackMillis,
+                                       int slotMillis, int lateStartTolerance) {
+        int tolerance = lateStartTolerance;
+        if (tolerance < 0) tolerance = 0;
+        if (tolerance > MAX_LATE_START_TOLERANCE_MS) tolerance = MAX_LATE_START_TOLERANCE_MS;
+
+        // How much leading audio we'd have to clip to still end on the boundary.
+        long clip = msInCycle - audioSlackMillis;
+        if (clip < 0) clip = 0;
+
+        boolean transmit = clip <= tolerance;
+        if (clip > slotMillis - 1) clip = slotMillis - 1;
+        return new ManualTxGate(transmit, (int) clip);
+    }
+
+    /**
+     * Time reserved for the swap itself: regenerating the waveform for the new message
+     * and getting the first samples to the sound card. The restart decision is made on
+     * the decode thread but playback restarts on the TX worker, so the guard must leave
+     * room for that hop — otherwise a swap approved at the very edge of the slack would
+     * begin playing past it and clip its own leading Costas array, reintroducing the
+     * exact defect this feature exists to avoid.
+     */
+    static final int RESTART_HEADROOM_MS = 250;
+
+    /**
+     * Work that still has to happen after key-up is released and before audio starts:
+     * the PTT round trip, waveform generation, and opening the output path. Reserved out
+     * of the audio slack so a hold can never eat the margin that keeps the leading Costas
+     * sync array intact — the one failure this codebase must never reintroduce.
+     *
+     * <p>{@code pttDelay} is subtracted separately because it is user-configurable; this
+     * covers the rest.
+     */
+    static final int KEYUP_HOLD_RESERVE_MS = 500;
+
+    /**
+     * Latest point in the slot, in ms from the boundary, that key-up may be held to while
+     * waiting for the fast decode of the slot that just ended.
+     *
+     * <p>The waveform occupies {@code slotMillis - audioSlackMillis}, so any start within
+     * the slack fits with zero clipping. This spends part of that otherwise-idle headroom —
+     * but only the part left after reserving what key-up itself costs, so a held
+     * transmission still starts within the slack and clips nothing.
+     *
+     * <p>Returns 0 (no hold at all) if the reserves already consume the slack, which keeps
+     * a mode with little or no slack, or an extreme {@code pttDelay}, strictly at today's
+     * behaviour rather than borrowing margin it does not have.
+     *
+     * @param audioSlackMillis {@link ModeProfile#audioSlackMillis} — free slack before clipping
+     * @param pttDelayMs       {@code GeneralVariables.pttDelay}, the configured PTT settle time
+     */
+    static long keyUpHoldLimitMs(int audioSlackMillis, int pttDelayMs) {
+        long limit = (long) audioSlackMillis - Math.max(0, pttDelayMs) - KEYUP_HOLD_RESERVE_MS;
+        return Math.max(0, limit);
+    }
+
+    /**
+     * Absolute instant to stop waiting for the fast decode, or {@code boundaryMs} (i.e. no
+     * wait) when there is no headroom to spend.
+     *
+     * @param boundaryMs       wall-clock instant of the slot boundary this TX belongs to
+     * @param audioSlackMillis see {@link #keyUpHoldLimitMs}
+     * @param pttDelayMs       see {@link #keyUpHoldLimitMs}
+     */
+    static long keyUpHoldDeadline(long boundaryMs, int audioSlackMillis, int pttDelayMs) {
+        return boundaryMs + keyUpHoldLimitMs(audioSlackMillis, pttDelayMs);
+    }
+
+    /** Set by MainViewModel once the listener exists; null until then (and in tests). */
+    private volatile FastDecodeGate fastDecodeGate;
+
+    public void setFastDecodeGate(FastDecodeGate gate) {
+        this.fastDecodeGate = gate;
+    }
+
+    /**
+     * Block briefly, if needed, so this transmission carries the result of the fast decode
+     * of the slot that just ended. No-op when nothing is decoding.
+     *
+     * <p>Runs on the cycle-timer's pooled callback thread. Blocking there is safe — the
+     * pool creates threads on demand and this timer fires once per slot — and the wait is
+     * hard-bounded by {@link #keyUpHoldDeadline}, so a decode that never finishes delays
+     * key-up by at most the spare slack rather than stalling the cycle.
+     */
+    private void holdForFastDecode(long utc) {
+        FastDecodeGate gate = fastDecodeGate;
+        if (gate == null || !gate.inFlight()) return;
+        ModeProfile mode = GeneralVariables.currentMode();
+        long nowMs = System.currentTimeMillis();
+        // Anchor the deadline to THIS slot's boundary, derived from the same corrected
+        // clock the cycle timer fires on, so a clock correction cannot make the hold
+        // measure from the wrong place.
+        long boundaryMs = nowMs - (UtcTimer.getSystemTime() % mode.slotMillis);
+        long deadline = keyUpHoldDeadline(boundaryMs, mode.audioSlackMillis,
+                GeneralVariables.pttDelay);
+        if (deadline <= nowMs) return;
+        boolean landed = gate.awaitIdle(deadline, nowMs);
+        long heldMs = System.currentTimeMillis() - nowMs;
+        if (heldMs > 0) {
+            GeneralVariables.fileLog("QSO: held key-up " + heldMs + "ms for fast decode ("
+                    + (landed ? "landed" : "timed out") + ")");
+        }
+    }
+
+    /**
+     * Whether the playback path these modes select can actually be interrupted mid-buffer.
+     *
+     * <p>Only the sound-card paths can. {@code playViaUsbAudio} and {@code
+     * playViaAudioTrack} both poll the cancel flags {@link #requestTxRestart} sets and
+     * unwind within a chunk. The other two branches of {@code playFT8Signal} do not:
+     *
+     * <ul>
+     *   <li>NETWORK hands the message to the ICOM network transmit callback and then
+     *       spins {@code while (isTransmitting)} for up to 13.1 s;
+     *   <li>CAT audio (controlMode CAT on a rig whose connector reports
+     *       {@code supportTransmitOverCAT()}) does the same for up to 13.0 s.
+     * </ul>
+     *
+     * <p>Neither observes {@code txAudioCancelled}, and {@link #requestTxRestart}
+     * deliberately leaves {@code isTransmitting} set, so a swap requested on those paths
+     * would not interrupt anything — it would sit queued until the wait expired and then
+     * replay ~13 s into the slot, where the clip math strips almost the whole message.
+     * That is worse than not swapping at all, so refuse up front and let the sequencer
+     * pick the change up next cycle as it did before.
+     *
+     * @param connectMode    {@code GeneralVariables.connectMode} (see {@link ConnectMode})
+     * @param controlMode    {@code GeneralVariables.controlMode} (see {@link ControlMode})
+     * @param catAudioInUse  whether the connector actually transmits audio over CAT
+     */
+    static boolean playbackSupportsMidCycleRestart(int connectMode, int controlMode,
+                                                   boolean catAudioInUse) {
+        if (connectMode == ConnectMode.NETWORK) return false;
+        return !(controlMode == ControlMode.CAT && catAudioInUse);
+    }
+
+    /**
+     * Whether an in-flight transmission should be aborted and restarted with a different
+     * message (the late-decode TX race).
+     *
+     * <p>With early decode on, the fast pass delivers ~13.5&nbsp;s into the slot and the
+     * auto-sequencer keys up ~0.45&nbsp;s into the next one. The late full-slot pass
+     * (issue #363) routinely delivers its recovered decodes 0&ndash;3.5&nbsp;s into that
+     * next slot — i.e. AFTER key-up. When one of those recovered decodes is the partner's
+     * reply, the sequencer advances the over a few hundred milliseconds too late and we
+     * spend the whole cycle re-sending the message we had already sent, instead of the
+     * RR73 that would have finished the QSO.
+     *
+     * <p>The swap is free inside the audio slack. The waveform occupies
+     * {@code slotMillis - audioSlackMillis}, so a restart at any {@code msInCycle} within
+     * the slack still plays the new message COMPLETE and ends on the boundary — the
+     * receiver simply sees it at a slightly larger DT, which every FT8 decoder searches
+     * anyway. Past the slack the new message could not fit without clipping its leading
+     * sync array, so we let the original over finish rather than put a mutilated signal
+     * on the air; the sequencer picks the change up on the next cycle as it does today.
+     *
+     * <p>PTT is deliberately NOT dropped for the swap — see {@link #requestTxRestart}.
+     *
+     * @param transmitting      whether an over is currently on the air
+     * @param playbackRestartable whether this playback path can be interrupted at all —
+     *                          see {@link #playbackSupportsMidCycleRestart}
+     * @param transmitFreeText  whether free text is armed — its content does not depend on
+     *                          {@code functionOrder}, so a swap would replay the identical
+     *                          message and put a discontinuity on the air for nothing
+     * @param orderAtKeyUp      {@code functionOrder} captured when we keyed up
+     * @param orderNow          {@code functionOrder} after this decode pass
+     * @param msInCycle         ms elapsed since the current slot boundary (&gt;= 0)
+     * @param audioSlackMillis  {@link ModeProfile#audioSlackMillis} — free slack before clipping
+     */
+    static boolean shouldRestartForNewOrder(boolean transmitting, boolean playbackRestartable,
+                                            boolean transmitFreeText,
+                                            int orderAtKeyUp, int orderNow, long msInCycle,
+                                            int audioSlackMillis) {
+        if (!transmitting) return false;
+        if (!playbackRestartable) return false;
+        if (transmitFreeText) return false;
+        // Nothing new to say: same over we already keyed up with. Also covers the
+        // "no reply decoded" case, where the sequencer leaves functionOrder alone.
+        if (orderNow == orderAtKeyUp) return false;
+        // orderAtKeyUp is only -1 before the first key-up of a run; without a known
+        // starting point we cannot tell a real change from initialization.
+        if (orderAtKeyUp == -1) return false;
+        if (msInCycle < 0) return false;
+        return msInCycle + RESTART_HEADROOM_MS <= audioSlackMillis;
+    }
+
+    /**
+     * Build the replacement cycle timer for a new operating mode, carrying the manual
+     * TX-delay offset ({@link UtcTimer#getTime_sec()}) from the outgoing timer onto the
+     * fresh one. A new {@link UtcTimer} starts with {@code time_sec = 0}, so without this
+     * carry-over the saved TX Delay loaded at startup (or set before a mode switch) is
+     * silently discarded — the running signal falls back to a 0 ms offset until the value
+     * is edited again. Preserving it here fixes both the startup case and FT8/FT4/FT2
+     * runtime mode switches.
+     *
+     * <p>Package-visible and static so the offset carry-over is unit-testable via
+     * {@code getTime_sec()} without constructing a full {@link FT8TransmitSignal}.
+     *
+     * @param oldTimer the timer being retired (its offset is read, then it is deleted)
+     * @param mode     the mode whose {@link ModeProfile#slotMillis} sets the new period
+     * @param callback the cycle-trigger callback for the new timer
+     * @return the new, not-yet-started timer with the carried-over offset applied
+     */
+    static UtcTimer rebuildTimerPreservingOffset(UtcTimer oldTimer, ModeProfile mode,
+            OnUtcTimer callback) {
+        int prevDelay = oldTimer.getTime_sec();
+        oldTimer.delete();
+        UtcTimer next = new UtcTimer(mode.slotMillis, false, callback);
+        next.setTime_sec(prevDelay);
+        return next;
     }
 
     /**
@@ -274,13 +593,19 @@ public class FT8TransmitSignal {
         resetTargetReport();
 
         if (UtcTimer.getNowSequential() == sequential) {
-            long msInCycle = UtcTimer.getSystemTime() % GeneralVariables.currentMode().slotMillis;
-            int tolerance = GeneralVariables.lateStartTolerance;
-            if (tolerance < 0) tolerance = 0;
-            if (tolerance > 4000) tolerance = 4000;
-            if (msInCycle < tolerance) {
+            ModeProfile mode = GeneralVariables.currentMode();
+            long msInCycle = UtcTimer.getSystemTime() % mode.slotMillis;
+            ManualTxGate gate = decideManualTx(msInCycle, mode.audioSlackMillis,
+                    mode.slotMillis, GeneralVariables.lateStartTolerance);
+            if (gate.transmit) {
                 setTransmitting(false);
                 doTransmit();
+            } else {
+                // Too late for this cycle even with the configured tolerance. Give explicit
+                // feedback instead of silently falling through to wait for the next slot.
+                ToastMessage.show(String.format(
+                        GeneralVariables.getStringFromResource(R.string.late_start_deferred),
+                        gate.clipMs));
             }
         }
     }
@@ -300,10 +625,17 @@ public class FT8TransmitSignal {
             return;
         }
         Log.d(TAG, "doTransmit: Starting transmit...");
+        if (functionOrder == 4 || functionOrder == 5) {
+            finalAckSends++;
+        }
         // Record exactly what goes on the air this cycle, alongside the existing
         // serial.send TX1/TX0 keying lines, so the QSO trace shows the message text.
         GeneralVariables.fileLog("QSO: TX slot=" + sequential + " order=" + functionOrder
                 + " msg=[" + getFunctionCommand(functionOrder).getMessageText() + "]");
+        // Baseline for the mid-cycle swap: anything that moves functionOrder off this
+        // value while we are on the air is a late decode we keyed up too early for.
+        orderAtKeyUp = functionOrder;
+        txRestartPending = false;
         doTransmitThreadPool.execute(doTransmitRunnable);
 
         mutableFunctions.postValue(snapshotForUi(functionList));
@@ -332,6 +664,12 @@ public class FT8TransmitSignal {
         mutableToCallsign.postValue(transmitCallsign);// set the call target (includes report, sequence, frequency, callsign)
         toCallsign = transmitCallsign;// set the call target
         //mutableToCallsign.postValue(toCallsign);// set the call target
+
+        // Starting a fresh QSO with the station the Max 73 Sends cap gated
+        // (their new CQ/grid, or the user tapping their decode) lifts the gate.
+        if (!cappedCallsign.isEmpty() && cappedCallsign.equals(transmitCallsign.callsign)) {
+            cappedCallsign = "";
+        }
 
         if (functionOrder == -1) {// this is a reply message
             // at this point toMaidenheadGrid is extraInfo
@@ -468,6 +806,7 @@ public class FT8TransmitSignal {
         String currentTarget = (toCallsign != null && toCallsign.callsign != null) ? toCallsign.callsign : "";
         if (shouldResetNoReplyCount(currentTarget, lastNoReplyTarget)) {
             GeneralVariables.noReplyCount = 0;
+            finalAckSends = 0;
             lastNoReplyTarget = currentTarget;
         }
         synchronized (functionList) {
@@ -536,6 +875,32 @@ public class FT8TransmitSignal {
      * @param volume     gain 0.0-1.0; 0 yields digital silence
      * @return new float[playLength] of scaled samples
      */
+    /**
+     * Highest channel count the chosen output device reports, or
+     * {@link AudioChannelCapability#UNKNOWN} when it reports nothing usable (or
+     * there is no explicit device).
+     */
+    static int outputMaxChannels(AudioDeviceInfo device) {
+        if (device == null) return AudioChannelCapability.UNKNOWN;
+        return AudioChannelCapability.maxChannelCount(device.getChannelCounts());
+    }
+
+    /**
+     * The channel layout this transmission's {@code AudioTrack} opens with, for
+     * the operator's current TX selection and the sink they picked. Shared by
+     * the FT8 over and the tune carrier. See {@link TxChannelLayout#resolve} for
+     * why the Default sink always gets the mono layout.
+     *
+     * @param preferredOutputDevice the explicitly chosen sink, or null for
+     *                              Android's Default
+     */
+    static TxChannelLayout resolveTxLayout(AudioDeviceInfo preferredOutputDevice) {
+        return TxChannelLayout.resolve(
+                GeneralVariables.txAudioChannel,
+                GeneralVariables.audioOutputDeviceId > 0,
+                outputMaxChannels(preferredOutputDevice));
+    }
+
     static float[] applyVolume(float[] source, int skipSamples, int playLength, float volume) {
         if (skipSamples < 0) skipSamples = 0;
         float[] out = new float[playLength];
@@ -587,7 +952,14 @@ public class FT8TransmitSignal {
         return out;
     }
 
-    private void playFT8Signal(Ft8Message msg) {
+    /**
+     * Play (or hand off) one over's waveform. Returns {@code true} when the over was
+     * actually transmitted (network/CAT/QMX/sound-card paths), {@code false} when it
+     * bailed without putting anything on the air — currently the failed-generation
+     * ({@code buffer == null}) path. The TX worker uses this to avoid logging a QSO
+     * whose RR73/73 was never sent.
+     */
+    private boolean playFT8Signal(Ft8Message msg) {
 
         if (GeneralVariables.connectMode == ConnectMode.NETWORK) {// network mode does not play audio locally
             Log.d(TAG, "playFT8Signal: Entering network transmit mode, waiting for audio to send.");
@@ -613,7 +985,7 @@ public class FT8TransmitSignal {
             }
             Log.d(TAG, "playFT8Signal: Exiting network audio transmission.");
             afterPlayAudio();
-            return;
+            return true;
         }
 
         // enter CAT serial port audio transmission mode
@@ -640,19 +1012,30 @@ public class FT8TransmitSignal {
                     }
                     Log.d(TAG, "playFT8Signal: transmitting over CAT is finished.");
                     afterPlayAudio();
-                    return;
+                    return true;
                 }
             }
         }
 
+
+        // QMX CAT tones: the radio makes the FSK itself from TA commands, no audio.
+        if (onDoTransmitted != null && onDoTransmitted.supportQmxCatTones()) {
+            // Fresh cancel state for this cycle, as the sound-card path below does;
+            // a stale flag from the previous over would skip every symbol.
+            txAudioCancelled = false;
+            runPlaybackWithTeardown(() -> playViaQmxCatTones(msg), this::afterPlayAudio);
+            return true;
+        }
 
         // enter sound card mode
         float[] buffer;
         buffer = GenerateFT8.generateFt8(msg, GeneralVariables.getBaseFrequency()
                 , GeneralVariables.audioSampleRate);
         if (buffer == null) {
+            // Waveform generation failed: nothing goes on the air, so the caller must
+            // not log this as a completed QSO.
             afterPlayAudio();
-            return;
+            return false;
         }
 
         // Fresh cancel state for this cycle's playback (consumed by the chunked
@@ -677,24 +1060,66 @@ public class FT8TransmitSignal {
                 && GeneralVariables.usbAudioOutputVendorId != 0) {
             GeneralVariables.fileLog("playFT8Signal: using USB audio (direct) output");
             playViaUsbAudio(buffer);
-            return;
+            return true;
         }
         GeneralVariables.fileLog(
                 "playFT8Signal: using AudioTrack output (Android default sink)");
 
-        Log.d(TAG, String.format("playFT8Signal: Preparing sound card playback... bit depth: %s, sample rate: %d"
+        // Own the whole sound-card branch under a guaranteed single teardown.
+        // Everything below claims audio focus and keeps PTT keyed, then builds
+        // and drives an AudioTrack — any of which can throw on a bad route/rate,
+        // a DEAD_OBJECT, or an uninitialized track. DoTransmitRunnable (the TX
+        // worker) has no top-level try/catch, so an escaping exception would
+        // crash the app AND strand PTT keyed + audio focus held. Mirrors
+        // playTuneTone's try/catch/finally.
+        runPlaybackWithTeardown(() -> playViaAudioTrack(buffer), this::afterPlayAudio);
+        return true;
+    }
+
+    /**
+     * Sound-card (Android default sink) FT8 TX playback: claim exclusive audio
+     * focus, build and drive the streaming AudioTrack, and drain the tail. Must
+     * run under {@link #runPlaybackWithTeardown} so PTT/focus/track teardown
+     * ({@link #afterPlayAudio}) always happens, even if an AudioTrack call
+     * throws. Sibling of {@link #playViaUsbAudio}.
+     */
+    private void playViaAudioTrack(float[] buffer) {
+        // This branch shares Android's mixer with every other app, so claim
+        // exclusive focus for the transmission. Denial is log-only: TX must
+        // still go out.
+        boolean focusGranted = txAudioFocus.acquire(GeneralVariables.getMainContext());
+        GeneralVariables.fileLog("playFT8Signal: audio focus "
+                + (focusGranted ? "granted (exclusive)" : "NOT granted — other-app audio may mix into TX"));
+
+        // Resolve the preferred sink up front: the TX channel selection needs its
+        // channel count before the track is built, and the same AudioDeviceInfo is
+        // handed to setPreferredDevice below.
+        final AudioDeviceInfo preferredOutputDevice = GeneralVariables.audioOutputDeviceId > 0
+                ? findAudioDeviceById(GeneralVariables.audioOutputDeviceId,
+                        AudioManager.GET_DEVICES_OUTPUTS)
+                : null;
+        // Which side of a stereo sink carries the waveform. "Both" — the default
+        // and, on a mono or unknown device, the only possibility — keeps the
+        // historical MONO open: the framework duplicates it to every channel, so
+        // that path is byte-for-byte what it always was. This matters more than
+        // it looks; see the FT8 TX audio pipeline notes in AGENTS.md for how
+        // little it takes to turn an audible transmission into an undecodable one.
+        final TxChannelLayout layout = resolveTxLayout(preferredOutputDevice);
+
+        Log.d(TAG, String.format("playFT8Signal: Preparing sound card playback... bit depth: %s, sample rate: %d, channels: %d"
                 , GeneralVariables.audioOutput32Bit ? "Float32" : "Int16"
-                , GeneralVariables.audioSampleRate));
-        attributes = new AudioAttributes.Builder()
-                .setUsage(AudioAttributes.USAGE_MEDIA)
-                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                .build();
+                , GeneralVariables.audioSampleRate, layout.channels));
+        if (layout.isStereo()) {
+            GeneralVariables.fileLog(
+                    "playFT8Signal: stereo TX open, channel select=" + layout.selection);
+        }
+        attributes = buildTxAudioAttributes();
 
         int encoding = GeneralVariables.audioOutput32Bit
                 ? AudioFormat.ENCODING_PCM_FLOAT : AudioFormat.ENCODING_PCM_16BIT;
         myFormat = new AudioFormat.Builder().setSampleRate(GeneralVariables.audioSampleRate)
                 .setEncoding(encoding)
-                .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build();
+                .setChannelMask(layout.channelMask).build();
 
         // MODE_STREAM (was MODE_STATIC) with a deliberately SMALL buffer so we can
         // apply TX volume live: we feed the generated waveform out in ~50ms chunks,
@@ -705,19 +1130,25 @@ public class FT8TransmitSignal {
         // down and protect the rig mid-over, which baking volume into a one-shot
         // MODE_STATIC write could not do (the slider only took effect next cycle).
         int bytesPerSample = GeneralVariables.audioOutput32Bit ? 4 : 2;
-        int targetBufBytes = (GeneralVariables.audioSampleRate / 5) * bytesPerSample; // ~200ms mono
+        // ~200ms at whatever channel count the layout opened with.
+        int targetBufBytes = layout.bufferBytes(GeneralVariables.audioSampleRate, bytesPerSample);
         int minBuf = AudioTrack.getMinBufferSize(GeneralVariables.audioSampleRate,
-                AudioFormat.CHANNEL_OUT_MONO, encoding);
+                layout.channelMask, encoding);
         int bufBytes = Math.max(targetBufBytes, minBuf > 0 ? minBuf : targetBufBytes);
-        int mySession = 0;
-        audioTrack = new AudioTrack(attributes, myFormat, bufBytes,
-                AudioTrack.MODE_STREAM, mySession);
+        audioTrack = buildTxAudioTrack(attributes, myFormat, bufBytes, "playFT8Signal");
 
         // set preferred output device
         if (GeneralVariables.audioOutputDeviceId > 0) {
-            AudioDeviceInfo deviceInfo = findAudioDeviceById(
-                    GeneralVariables.audioOutputDeviceId, AudioManager.GET_DEVICES_OUTPUTS);
-            audioTrack.setPreferredDevice(deviceInfo); // null resets to default
+            boolean ok = audioTrack.setPreferredDevice(preferredOutputDevice); // null resets to default
+            // Logs the REQUESTED id (what was persisted) and the RESOLVED one separately --
+            // see MicRecorder's matching reinit log for why these can legitimately differ.
+            GeneralVariables.fileLog(String.format(
+                    "playFT8Signal: AudioTrack preferredDevice requestedId=%d resolvedId=%d ok=%b deviceFound=%b",
+                    GeneralVariables.audioOutputDeviceId,
+                    preferredOutputDevice == null ? -1 : preferredOutputDevice.getId(),
+                    ok, preferredOutputDevice != null));
+        } else {
+            applyDefaultOutputRoutingOverride(audioTrack);
         }
 
         // Skip leading samples if we started transmitting late, so audio still ends on the cycle boundary.
@@ -733,10 +1164,19 @@ public class FT8TransmitSignal {
         // gain is what actually controls the rig's drive.
         audioTrack.play();
         audioTrack.setVolume(1.0f);
+        // Put back media volume the phone lowered (issue #985). Media volume is
+        // per output device, so this waits until the track is playing on its TX
+        // route (SCO dropped, A2DP/preferred device applied) and runs before the
+        // first sample is written (Copilot review on #986).
+        radio.ks3ckc.ft8af.MediaVolumeRestore.restore(GeneralVariables.getMainContext(), "tx");
 
         // Stream the waveform in chunks, re-reading volumePercent each chunk so a
         // slider move ramps the on-air level within ~1 chunk + buffer depth.
         final int chunkSamples = Math.max(1, GeneralVariables.audioSampleRate / 20); // ~50ms
+        // Stereo scratch, allocated once: the interleave runs every ~50ms and a
+        // fresh array per chunk is churn for nothing. Unused (null) on mono.
+        final float[] stereoScratch =
+                layout.isStereo() ? new float[layout.samplesForFrames(chunkSamples)] : null;
         int framesWritten = 0;
         boolean writeError = false;
         int offset = 0;
@@ -748,12 +1188,18 @@ public class FT8TransmitSignal {
             float[] chunk = applyVolume(buffer, skipSamples + offset, chunkLen,
                     GeneralVariables.volumePercent);
 
+            // On a stereo open the framework wants interleaved frames, with the
+            // channel the operator excluded silenced. Mono hands the chunk
+            // straight through — the original single-buffer write.
+            float[] toWrite = layout.layOut(chunk, chunkLen, stereoScratch);
+            int writeSamples = layout.samplesForFrames(chunkLen);
+
             int writeResult;
             if (GeneralVariables.audioOutput32Bit) {
-                writeResult = audioTrack.write(chunk, 0, chunkLen, AudioTrack.WRITE_BLOCKING);
+                writeResult = audioTrack.write(toWrite, 0, writeSamples, AudioTrack.WRITE_BLOCKING);
             } else {
-                short[] audio_data = floatToInt16NoPad(chunk, chunkLen);
-                writeResult = audioTrack.write(audio_data, 0, chunkLen, AudioTrack.WRITE_BLOCKING);
+                short[] audio_data = floatToInt16NoPad(toWrite, writeSamples);
+                writeResult = audioTrack.write(audio_data, 0, writeSamples, AudioTrack.WRITE_BLOCKING);
             }
 
             if (writeResult < 0) {
@@ -761,7 +1207,9 @@ public class FT8TransmitSignal {
                 writeError = true;
                 break;
             }
-            framesWritten += writeResult;
+            // write() counts samples, getPlaybackHeadPosition() counts frames — the
+            // drain wait below compares the two, so convert here.
+            framesWritten += layout.framesFromSamples(writeResult);
             offset += chunkLen;
         }
 
@@ -770,9 +1218,9 @@ public class FT8TransmitSignal {
         // float2Short() behavior. Skipped if we errored or were cancelled.
         if (!writeError && !txAudioCancelled && isTransmitting
                 && !GeneralVariables.audioOutput32Bit) {
-            short[] pad = new short[8];
+            short[] pad = layout.zeroPad();// 8 frames, whatever the channel count
             int padResult = audioTrack.write(pad, 0, pad.length, AudioTrack.WRITE_BLOCKING);
-            if (padResult > 0) framesWritten += padResult;
+            if (padResult > 0) framesWritten += layout.framesFromSamples(padResult);
         }
 
         // Blocking writes return once data is *buffered*, not played. Wait for the
@@ -791,10 +1239,107 @@ public class FT8TransmitSignal {
             }
         }
 
-        // Worker-thread-owned teardown (drops PTT + releases the track). The UI
-        // thread never releases the streaming track — it only flips txAudioCancelled
-        // and pauses/flushes — so there's no release race against this write loop.
-        afterPlayAudio();
+        // Teardown (drops PTT + releases the track + audio focus) is run by
+        // runPlaybackWithTeardown's finally, so it happens on both the normal
+        // exit here and any thrown AudioTrack failure above. The UI thread never
+        // releases the streaming track — it only flips txAudioCancelled and
+        // pauses/flushes — so there's no release race against this write loop.
+    }
+
+    /**
+     * Runs a sound-card playback {@code body}, then {@code teardown} exactly
+     * once — whether the body returns normally or throws. The AudioTrack
+     * setup/play/write in the body can throw (device route change, DEAD_OBJECT,
+     * an uninitialized track) and the TX worker ({@link DoTransmitRunnable}) has
+     * no top-level try/catch, so an escaping exception would crash the app and
+     * leave PTT keyed + audio focus held + the track leaked — a stuck carrier is
+     * never acceptable. Swallow-and-log the failure and always tear down,
+     * mirroring {@link #playTuneTone}.
+     *
+     * <p>Package-visible for testing. Its parameters are plain {@link Runnable}s,
+     * so a test can drive it with no Android dependency beyond the
+     * {@link Log} call below — which is a no-op stub under the module's
+     * {@code unitTests.returnDefaultValues} setting.
+     */
+    /**
+     * Send this over as QMX TA commands, one per symbol on the symbol clock,
+     * then key up with {@code TA0;}. PTT ({@code TX;}/{@code RX;}) stays with
+     * the normal keying path. Must run under {@link #runPlaybackWithTeardown}.
+     */
+    private void playViaQmxCatTones(Ft8Message msg) {
+        ModeProfile mode = GeneralVariables.currentMode();
+        byte[] a91 = GenerateFT8.generateA91(msg, true);
+        if (a91 == null) return;
+        byte[] tones = new byte[mode.numTones];
+        mode.encode(a91, tones);
+        double baseHz = GeneralVariables.getBaseFrequency();
+        int skip = QmxCatTones.symbolsToSkip(lateStartSkipMs, mode.symbolPeriod, tones.length);
+        long periodNs = (long) (mode.symbolPeriod * 1e9);
+        GeneralVariables.fileLog(String.format(java.util.Locale.ROOT,
+                "playFT8Signal: QMX CAT tones, %d symbols from %d, base %.1f Hz",
+                tones.length, skip, baseHz));
+
+        long startNs = SystemClock.elapsedRealtimeNanos();
+        String last = null;
+        int sent = 0;
+        long worstLateUs = 0;
+        boolean stopped = false;
+        try {
+            for (int i = skip; i < tones.length; i++) {
+                if (!isTransmitting || txAudioCancelled) {
+                    stopped = true;
+                    break;
+                }
+                long dueNs = startNs + (i - skip) * periodNs;
+                sleepUntil(dueNs);
+                long lateUs = (SystemClock.elapsedRealtimeNanos() - dueNs) / 1000;
+                if (lateUs > worstLateUs) worstLateUs = lateUs;
+                String cmd = QmxCatTones.taCommand(
+                        QmxCatTones.toneHz(baseHz, tones[i] & 0xFF, mode.symbolPeriod));
+                if (!cmd.equals(last)) {
+                    onDoTransmitted.sendQmxCatCommand(cmd);
+                    last = cmd;
+                    sent++;
+                }
+            }
+            // Hold the last symbol for its full period before keying up.
+            if (!stopped) sleepUntil(startNs + (tones.length - skip) * periodNs);
+        } finally {
+            boolean keyUp = QmxCatTones.keyUpAfterTones(txRestartPending, isTransmitting);
+            if (keyUp) onDoTransmitted.sendQmxCatCommand(QmxCatTones.KEY_UP);
+            GeneralVariables.fileLog(String.format(java.util.Locale.ROOT,
+                    "playFT8Signal: QMX CAT tones done, %d TA commands, worst symbol lateness %.1f ms%s",
+                    sent, worstLateUs / 1000.0,
+                    stopped ? (keyUp ? " (stopped)" : " (swapping message, still keyed)") : ""));
+        }
+    }
+
+    /** Sleep until {@code elapsedRealtimeNanos} reaches {@code dueNs}; spins the last ms. */
+    private static void sleepUntil(long dueNs) {
+        while (true) {
+            long remainingNs = dueNs - SystemClock.elapsedRealtimeNanos();
+            if (remainingNs <= 0) return;
+            if (remainingNs > 2_000_000L) {
+                try {
+                    Thread.sleep((remainingNs - 1_000_000L) / 1_000_000L);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            } else {
+                Thread.yield();
+            }
+        }
+    }
+
+    static void runPlaybackWithTeardown(Runnable body, Runnable teardown) {
+        try {
+            body.run();
+        } catch (Exception e) {
+            Log.e(TAG, "FT8 AudioTrack playback failed", e);
+        } finally {
+            teardown.run();
+        }
     }
 
     /**
@@ -928,9 +1473,96 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Abort the audio currently on the air and replay this same over with the message the
+     * sequencer has just chosen. Called from the decode thread when the late full-slot
+     * pass advances the QSO after key-up; see {@link #shouldRestartForNewOrder} for when
+     * that is safe.
+     *
+     * <p>Uses the same cancel machinery as a STOP ({@code setTransmitting(false)}) to stop
+     * the writers mid-buffer, but deliberately leaves {@code isTransmitting} set and never
+     * calls {@code onAfterTransmit}: <strong>PTT stays keyed across the swap</strong>.
+     * Dropping and re-raising PTT would add the rig's full key-up delay (plus, on many
+     * rigs, a relay cycle) in the middle of a transmission — far more disruptive than the
+     * message change itself, and on some rigs enough to miss the slack window entirely.
+     * The TX worker's replay loop in {@link DoTransmitRunnable} picks it up from here.
+     */
+    private void requestTxRestart() {
+        txRestartPending = true;
+        // Same two writers setTransmitting(false) stops: the native/fallback USB write
+        // and the chunked MODE_STREAM AudioTrack loop.
+        UsbAudioNative.cancelWrite();
+        txAudioCancelled = true;
+        AudioTrack t = audioTrack;
+        if (t != null) {
+            try {
+                if (t.getState() != AudioTrack.STATE_UNINITIALIZED
+                        && t.getPlayState() != AudioTrack.PLAYSTATE_STOPPED) {
+                    t.pause();
+                    t.flush();
+                }
+            } catch (IllegalStateException ignored) {
+                // Worker already released the track between our read and here.
+            }
+        }
+    }
+
+    /** One-shot read of the restart request; clears it so each swap replays exactly once. */
+    private boolean consumeTxRestart() {
+        if (!txRestartPending) return false;
+        txRestartPending = false;
+        return true;
+    }
+
+    /**
+     * The message to put on the air right now: the armed free text if one is set,
+     * otherwise the standard message for the current {@code functionOrder}. Shared by the
+     * initial key-up and the mid-cycle swap replay so both resolve the over identically.
+     */
+    private Ft8Message currentTransmitMessage() {
+        Ft8Message msg;
+        if (transmitFreeText) {
+            msg = new Ft8Message("CQ", GeneralVariables.myCallsign, freeText);
+            msg.i3 = 0;
+            msg.n3 = 0;
+        } else {
+            msg = getFunctionCommand(functionOrder);
+        }
+        msg.modifier = GeneralVariables.toModifier;
+        return msg;
+    }
+
+    /** Push the on-air message text to the TX banner / mini-log. */
+    @SuppressLint("DefaultLocale")
+    private void postTransmittingMessage(Ft8Message msg) {
+        mutableTransmittingMessage.postValue(String.format(" (%.0fHz) %s",
+                GeneralVariables.getBaseFrequency(), msg.getMessageText()));
+    }
+
+    /**
      * Actions after audio playback completes, including the onAfterTransmit callback for closing PTT.
+     *
+     * <p>A pending mid-cycle message swap takes an early exit that releases only the audio
+     * resources: PTT stays keyed, {@code isTransmitting} stays true, and no
+     * {@code onAfterTransmit} fires, so the over continues seamlessly with the new message
+     * (see {@link #requestTxRestart}). Everything below the exit is genuine end-of-over
+     * teardown and must not run mid-swap.
      */
     private void afterPlayAudio() {
+        // The swap exit is conditional on STILL TRANSMITTING. A STOP or deactivation
+        // (setTransmitting(false) / setActivated(false)) can land between the swap being
+        // queued and the writers unwinding; taking the early exit then would skip
+        // onAfterTransmit and leave the rig KEYED, and would leave txRestartPending set
+        // for a replay the operator just cancelled. Falling through instead drops the
+        // swap and runs the real end-of-over teardown, which is what a stop means.
+        if (txRestartPending && isTransmitting) {
+            if (audioTrack != null) {
+                audioTrack.release();
+                audioTrack = null;
+            }
+            txAudioFocus.release();
+            return;
+        }
+        txRestartPending = false;
         if (onDoTransmitted != null) {
             onDoTransmitted.onAfterTransmit(getFunctionCommand(functionOrder), functionOrder);
         }
@@ -944,6 +1576,7 @@ public class FT8TransmitSignal {
             audioTrack.release();
             audioTrack = null;
         }
+        txAudioFocus.release();
         // One-shot free text (WSJT-X Tx5 style) just finished sending: stop here
         // instead of repeating it every cycle, and revert to standard messages so
         // the next CQ is a normal CQ. Safe to deactivate now — the audio has already
@@ -970,9 +1603,15 @@ public class FT8TransmitSignal {
 
         // look up signal report from history
         // processing signal reports here because saved reports often differ from actual QSO reports
+        // Snapshot the shared transmitMessages list once: it is mutated concurrently
+        // by the decode thread (add / trimToMessageCount remove(0) / clear), so a live
+        // size()-then-get(i) scan can throw IndexOutOfBounds when the list shrinks
+        // mid-scan. Iterating a private copy is race-free and preserves the
+        // most-recent-first (reverse index) semantics.
+        List<Ft8Message> transmitMessagesSnapshot = new ArrayList<>(GeneralVariables.transmitMessages);
         // iterate through received signal reports from the other party
-        for (int i = GeneralVariables.transmitMessages.size() - 1; i >= 0; i--) {
-            Ft8Message message = GeneralVariables.transmitMessages.get(i);
+        for (int i = transmitMessagesSnapshot.size() - 1; i >= 0; i--) {
+            Ft8Message message = transmitMessagesSnapshot.get(i);
             if ((GeneralVariables.checkFun3(message.extraInfo)
                     || GeneralVariables.checkFun2(message.extraInfo))
                     && (message.callsignFrom.equals(toCallsign.callsign)
@@ -983,8 +1622,8 @@ public class FT8TransmitSignal {
             }
         }
         // iterate through signal reports I sent to the other party
-        for (int i = GeneralVariables.transmitMessages.size() - 1; i >= 0; i--) {
-            Ft8Message message = GeneralVariables.transmitMessages.get(i);
+        for (int i = transmitMessagesSnapshot.size() - 1; i >= 0; i--) {
+            Ft8Message message = transmitMessagesSnapshot.get(i);
             if ((GeneralVariables.checkFun3(message.extraInfo)
                     || GeneralVariables.checkFun2(message.extraInfo))
                     && (message.callsignTo.equals(toCallsign.callsign)
@@ -1031,9 +1670,8 @@ public class FT8TransmitSignal {
         if (order == 1) {
             resetTargetReport();// reset signal reports
         }
-        if (order == 4 || order == 5) {
-            updateQSlRecordList(order, toCallsign);
-        }
+        // Moving to RR73/73 no longer logs the QSO here: it's logged when that message is
+        // actually transmitted (DoTransmitRunnable), or when the partner sends RR73/73.
         mutableFunctions.postValue(snapshotForUi(functionList));
     }
 
@@ -1226,6 +1864,8 @@ public class FT8TransmitSignal {
         for (int i = messages.size() - 1; i >= 0; i--) {// check if anyone is CQing me (TO:ME, not 73)
             Ft8Message msg = messages.get(i);
             if (isExcludeMessage(msg)) continue;// check if this is an excluded message
+            if (isCappedContinuation(cappedCallsign, msg.getCallsignFrom(),
+                    GeneralVariables.checkFunOrder(msg))) continue;// Max 73 Sends: don't restart the capped loop
             if (toCallsign == null) break;
 
             //if (msg.getCallsignTo().equals(GeneralVariables.myCallsign)
@@ -1245,6 +1885,8 @@ public class FT8TransmitSignal {
         for (int i = messages.size() - 1; i >= 0; i--) {// check if anyone is CQing me (TO:ME, not 73)
             Ft8Message msg = messages.get(i);
             if (isExcludeMessage(msg)) continue;// check if this is an excluded message
+            if (isCappedContinuation(cappedCallsign, msg.getCallsignFrom(),
+                    GeneralVariables.checkFunOrder(msg))) continue;// Max 73 Sends: don't restart the capped loop
             //if ((msg.getCallsignTo().equals(GeneralVariables.myCallsign)
             if ((GeneralVariables.checkIsMyCallsign(msg.getCallsignTo())
                     && !GeneralVariables.checkFun5(msg.extraInfo))) {// CQ me, not 73
@@ -1291,6 +1933,12 @@ public class FT8TransmitSignal {
         // just abandoned by pressing CQ), which made auto-answer "randomly" lock
         // onto an inactive station and call it forever. Live decodes only, matching
         // the "calling me" loops.
+        //
+        // All qualifying CQs are collected (most-recent-first) and the Hunt options
+        // (priority, pileup avoidance, min-SNR floor) decide which one to answer via
+        // HuntTargetSelector — LATEST with no filters reproduces the historical
+        // first-qualifying-match behavior.
+        ArrayList<Ft8Message> eligible = new ArrayList<>();
         for (int i = messages.size() - 1; i >= 0; i--) {
             Ft8Message msg = messages.get(i);
             if (isExcludeMessage(msg)) continue;// check if this is an excluded message
@@ -1311,9 +1959,17 @@ public class FT8TransmitSignal {
                     || GeneralVariables.directionalCQIsForMe(msg.callsignTo))
                     && !GeneralVariables.checkQSLCallsign(msg.getCallsignFrom())// not previously contacted successfully
                     && !GeneralVariables.checkIsMyCallsign(msg.callsignFrom)) {// not myself
+                eligible.add(msg);
+            }
+        }
 
+        if (!eligible.isEmpty()) {
+            Ft8Message msg = radio.ks3ckc.ft8af.hunt.HuntTargetSelector.pick(eligible, messages);
+            if (msg != null) {
                 GeneralVariables.fileLog("QSO: auto-follow CQ from " + msg.getCallsignFrom()
-                        + " (Hunt=" + GeneralVariables.autoFollowCQ + ")");
+                        + " (Hunt=" + GeneralVariables.autoFollowCQ
+                        + ", priority=" + GeneralVariables.huntPriority
+                        + ", candidates=" + eligible.size() + ")");
                 resetTargetReport();
                 setTransmit(new TransmitCallsign(msg.i3, msg.n3, msg.getCallsignFrom(), msg.freq_hz
                         , msg.getSequence(), msg.hasSnr() ? msg.snr : 0), 1, msg.extraInfo);
@@ -1331,6 +1987,12 @@ public class FT8TransmitSignal {
         if (toCall == null) return;
         if (toCall.callsign.equals("CQ")) return;
 
+        // Lock the whole lookup-create-complete sequence: with the order-4/5 log now
+        // firing from the TX worker thread as well as the decode thread, two threads
+        // could otherwise both find record==null (double addQSLRecord) or both pass
+        // the !record.saved gate (double doComplete) for the same partner — saving
+        // the QSO to the database twice. See qslUpdateLock.
+        synchronized (qslUpdateLock) {
         QSLRecord record = GeneralVariables.qslRecordList.getRecordByCallsign(toCall.callsign);
         if (record == null) {
             toMaidenheadGrid = GeneralVariables.getGridByCallsign(toCallsign.callsign, databaseOpr);
@@ -1372,6 +2034,7 @@ public class FT8TransmitSignal {
                 }
 
                 break;
+        }
         }
 
     }
@@ -1435,6 +2098,30 @@ public class FT8TransmitSignal {
      * @param evidenceOnly true for deep/late-pass decodes
      */
     public void parseMessageToFunction(ArrayList<Ft8Message> msgList, boolean evidenceOnly) {
+        parseMessageToFunctionInner(msgList, evidenceOnly);
+
+        // Mid-cycle message swap. Only the evidence-only (deep/late) pass can land after
+        // key-up — the fast pass delivers before the slot boundary, in time for the normal
+        // TX decision — so only it can leave us transmitting last over's message. Checked
+        // here, outside the body, so EVERY path that moves functionOrder above is covered
+        // (RR73 reply, completion, give-up) rather than just the ones we remembered to
+        // instrument. See shouldRestartForNewOrder for the safety window.
+        if (!evidenceOnly) return;
+        ModeProfile mode = GeneralVariables.currentMode();
+        long msInCycle = UtcTimer.getSystemTime() % mode.slotMillis;
+        boolean playbackRestartable = playbackSupportsMidCycleRestart(
+                GeneralVariables.connectMode, GeneralVariables.controlMode,
+                onDoTransmitted != null && onDoTransmitted.supportTransmitOverCAT());
+        if (shouldRestartForNewOrder(isTransmitting, playbackRestartable, transmitFreeText,
+                orderAtKeyUp, functionOrder, msInCycle, mode.audioSlackMillis)) {
+            GeneralVariables.fileLog("QSO: late decode advanced order " + orderAtKeyUp
+                    + " -> " + functionOrder + " at " + msInCycle
+                    + "ms into slot; restarting TX with the new message");
+            requestTxRestart();
+        }
+    }
+
+    private void parseMessageToFunctionInner(ArrayList<Ft8Message> msgList, boolean evidenceOnly) {
         if (GeneralVariables.myCallsign.length() < 3) {
             return;
         }
@@ -1458,22 +2145,38 @@ public class FT8TransmitSignal {
         int newOrder = checkFunctionOrdFromMessages(messages);// check reply message sequence from the other party; -1 means not received
         // Per-cycle spine of the QSO trace: current state, what (if anything) the
         // other party sent us this cycle, who we're working, and the no-reply count.
-        GeneralVariables.fileLog(String.format("QSO: cycle%s slot=%d order=%d newOrder=%d to=%s noReply=%d/%d",
+        GeneralVariables.fileLog(String.format("QSO: cycle%s slot=%d order=%d newOrder=%d to=%s noReply=%d/%d 73tx=%d/%d",
                 evidenceOnly ? "(deep)" : "",
                 sequential, functionOrder, newOrder,
                 toCallsign != null ? toCallsign.callsign : "null",
-                GeneralVariables.noReplyCount, GeneralVariables.noReplyLimit));
+                GeneralVariables.noReplyCount, GeneralVariables.noReplyLimit,
+                finalAckSends, GeneralVariables.max73Sends));
         if (newOrder != -1) {// if there is a message sequence, reply received; reset error counter
             GeneralVariables.noReplyCount = 0;
         }
 
+        // Who else is calling me this pass, and who has stopped. Done before any
+        // branch below returns, so the queue reflects live callers on every cycle
+        // of a QSO — not just the ones where the partner went quiet.
+        refreshCallerQueue(messages);
+
         // update the QSO list; if not already recorded, save it
         updateQSlRecordList(newOrder, toCallsign);
 
+        // User cap on RR73/73 transmissions (Max 73 Sends setting). Based on our
+        // own send count — deterministic, not partner silence — so it applies on
+        // every pass and also bounds the loops the no-reply caps can't reach:
+        // the partner re-sending R+report at our RR73, or repeating RR73 at our
+        // 73 (each received RR73 would otherwise re-trigger a 73 reply forever).
+        boolean ackCapReached = hasReachedMax73Sends(
+                GeneralVariables.max73Sends, finalAckSends, functionOrder);
+
         // FT8 protocol: when we receive RR73/RRR (order 4), always reply with
         // 73 (order 5) before completing the QSO. This handler fires before
-        // the completion check so that we never skip the 73 reply.
-        if (newOrder == 4) {
+        // the completion check so that we never skip the 73 reply — unless the
+        // Max 73 Sends cap is reached, in which case we fall through and
+        // complete instead of re-sending yet another 73.
+        if (newOrder == 4 && !ackCapReached) {
             GeneralVariables.fileLog("QSO: rx RR73 from "
                     + (toCallsign != null ? toCallsign.callsign : "?") + " -> reply 73");
             functionOrder = 5;
@@ -1486,9 +2189,18 @@ public class FT8TransmitSignal {
         // determine QSO success: other party replied 73 (5) || I am at 73 (5) and other party did not reply (-1)
         // or I am at RR73 (4) and no-reply threshold reached with no-reply limit enabled
         // or I am at RR73 (4) and the other party started calling someone else, to prevent RR73 deadlock
-        if (shouldCompleteQso(evidenceOnly, functionOrder, newOrder,
+        if (ackCapReached || shouldCompleteQso(evidenceOnly, functionOrder, newOrder,
                 GeneralVariables.noReplyCount, GeneralVariables.noReplyLimit,
                 functionOrder == 4 && checkTargetCallMe(messages) > 1)) {
+            if (ackCapReached) {
+                GeneralVariables.fileLog("QSO: max 73 sends reached ("
+                        + finalAckSends + "/" + GeneralVariables.max73Sends + ")");
+                // Gate this station's continuation messages out of the
+                // caller-pickup scans below, or their leftover RR73/R+report
+                // would restart the QSO in this very cycle.
+                cappedCallsign = toCallsign != null && toCallsign.callsign != null
+                        ? toCallsign.callsign : "";
+            }
             GeneralVariables.fileLog("QSO: complete with "
                     + (toCallsign != null ? toCallsign.callsign : "?")
                     + " (order=" + functionOrder + " newOrder=" + newOrder + ") -> reset to CQ");
@@ -1523,6 +2235,17 @@ public class FT8TransmitSignal {
 
 
         if (newOrder != -1) {//message received but QSO not yet complete
+            // A deep/late/stashed pass may re-deliver a decode we already acted on
+            // (e.g. the partner's opening grid replayed a cycle after we advanced to
+            // RR73). Applying it would walk the QSO backwards and re-send a message
+            // the partner has already answered. Evidence-only passes advance, never rewind.
+            if (isStaleEvidence(evidenceOnly, functionOrder, newOrder)) {
+                GeneralVariables.fileLog("QSO: ignore stale evidence order " + functionOrder
+                        + " newOrder=" + newOrder
+                        + " with " + (toCallsign != null ? toCallsign.callsign : "?"));
+                return;
+            }
+
             // originally newOrder == 1, but sometimes the other party sends a signal report directly, i.e. message 2
             if (newOrder == 1 || newOrder == 2) {// this is the first reply from the other party
                 resetTargetReport();// reset the signal reports
@@ -1811,6 +2534,15 @@ public class FT8TransmitSignal {
         return toCallsign != null ? toCallsign.callsign : null;
     }
 
+    /**
+     * The signal report recorded as sent to the current target (set when a
+     * "-NN" / "R-NN" message is built), or -100 when none has gone out yet.
+     * Raw value: SNR_UNKNOWN is left as-is. For UI display see sentReportOrNull.
+     */
+    public int getSentTargetReport() {
+        return sentTargetReport;
+    }
+
     public boolean isSynFrequency() {
         return GeneralVariables.synFrequency;
     }
@@ -1840,6 +2572,8 @@ public class FT8TransmitSignal {
             // Reset retry counters so a fresh run to the same callsign
             // doesn't inherit a stale noReplyCount from the previous session.
             GeneralVariables.noReplyCount = 0;
+            finalAckSends = 0;
+            cappedCallsign = "";
             lastNoReplyTarget = "";
         }
         mutableIsActivated.postValue(activated);
@@ -2013,8 +2747,7 @@ public class FT8TransmitSignal {
                 isTransmitting, functionOrder, toCallsign)
                 && clearFrequencyFinder.shouldRelocate(
                         GeneralVariables.getBaseFrequency(), newestUtc)) {
-            Float pick = clearFrequencyFinder.selectClearOffset(
-                    GeneralVariables.getBaseFrequency());
+            Float pick = pickClearCqOffset();
             if (pick != null) {
                 applyClearCqOffset(pick, newestUtc, "occupied");
             }
@@ -2051,11 +2784,16 @@ public class FT8TransmitSignal {
         if (!GeneralVariables.autoClearTxFreq) {
             return;
         }
-        Float pick = clearFrequencyFinder.selectClearOffset(
-                GeneralVariables.getBaseFrequency());
+        Float pick = pickClearCqOffset();
         if (pick != null) {
             applyClearCqOffset(pick, UtcTimer.getSystemTime(), "cq-start");
         }
+    }
+
+    /** Ask the finder for a clear offset at or above the operator's floor (#938). */
+    private Float pickClearCqOffset() {
+        clearFrequencyFinder.setMinOffsetHz(GeneralVariables.autoClearTxMinFreq);
+        return clearFrequencyFinder.selectClearOffset(GeneralVariables.getBaseFrequency());
     }
 
     private void applyClearCqOffset(float offsetHz, long utcMs, String reason) {
@@ -2184,6 +2922,77 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Whether the user's "Max 73 Sends" cap ends the QSO this cycle. The cap
+     * counts actual RR73/73 (order 4/5) transmissions — unlike the no-reply
+     * caps in {@link #shouldCompleteQso}, it therefore also bounds the loops
+     * where the partner keeps transmitting (re-sent R+report, repeated RR73)
+     * and {@code noReplyCount} keeps getting reset. 0 == Auto: cap disabled,
+     * classic no-reply-based behavior only. Deterministic own-send evidence,
+     * so it applies to fast and deep passes alike.
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param max73Sends    user cap on RR73/73 transmissions (0 = Auto/off)
+     * @param finalAckSends RR73/73 transmissions so far for the current target
+     * @param functionOrder my current message order (1-6)
+     */
+    static boolean hasReachedMax73Sends(int max73Sends, int finalAckSends, int functionOrder) {
+        return max73Sends > 0
+                && (functionOrder == 4 || functionOrder == 5)
+                && finalAckSends >= max73Sends;
+    }
+
+    /**
+     * Whether a message is a continuation (R+report / RR73, order 3-4) of the
+     * QSO the Max 73 Sends cap just ended, and must therefore be ignored by the
+     * caller-pickup scans instead of restarting the capped loop. Only orders 3
+     * and 4 are gated: a fresh CQ from the capped station (order 6) is a new QSO
+     * attempt and must still be answered, and an exact "73" (order 5) is a QSO
+     * end already filtered by the scans — so neither is treated as a
+     * continuation here.
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param cappedCallsign station the cap ended a QSO with ("" = none)
+     * @param fromCallsign   sender of the candidate message
+     * @param msgOrder       the message's sequence order (GeneralVariables.checkFunOrder)
+     */
+    static boolean isCappedContinuation(String cappedCallsign, String fromCallsign, int msgOrder) {
+        return cappedCallsign != null && !cappedCallsign.isEmpty()
+                && cappedCallsign.equals(fromCallsign)
+                && (msgOrder == 3 || msgOrder == 4);
+    }
+
+    /**
+     * Whether a deep/late-pass decode describes a QSO state we have already moved
+     * past, and must therefore be ignored.
+     *
+     * <p>Deep, subtraction and stashed passes re-deliver decodes out of order: a
+     * pass finishing during our transmission is replayed after key-up, by which
+     * time the fast pass may already have advanced the QSO on newer evidence. The
+     * partner's opening grid (order 1) replayed after we reached RR73 (order 4)
+     * would otherwise set us back to order 2 and re-send a signal report the
+     * partner already answered — the sequencer walking backwards mid-QSO.
+     *
+     * <p>Only evidence-only passes are gated. The fast pass observes the current
+     * cycle and its verdict is authoritative even when it lowers the order (the
+     * partner really did fall back a step). Order 6 is the CQ baseline rather
+     * than the top of the ladder, so a QSO starting from CQ is never "stale".
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param evidenceOnly  this is a deep/late/stashed parse (positive evidence only)
+     * @param functionOrder my current message order (1-6)
+     * @param newOrder      order of the partner's message this pass (never -1 here)
+     * @return true when the pass would move the QSO backwards and should be dropped
+     */
+    static boolean isStaleEvidence(boolean evidenceOnly, int functionOrder, int newOrder) {
+        if (!evidenceOnly) return false;// fast pass is authoritative for its own cycle
+        if (functionOrder == 6) return false;// CQ baseline: any reply legitimately starts a QSO
+        return newOrder + 1 < functionOrder;// would rewind the sequence
+    }
+
+    /**
      * Whether a force-log should actually save the QSO record and trigger the
      * celebration. A QSO that never progressed past order 2 (no report
      * exchanged) is not a real contact.
@@ -2194,6 +3003,19 @@ public class FT8TransmitSignal {
         // Orders 3-5 indicate a real QSO in progress (report exchanged).
         // Order 6 is the CQ baseline (idle) — not a real contact.
         return functionOrder >= 3 && functionOrder != 6;
+    }
+
+    /**
+     * Whether a just-finished over should be logged as a completed QSO from the TX
+     * worker. True only when the over was actually transmitted (not a failed
+     * waveform generation or a skipped send), was not a free-text macro (free text
+     * never completes a QSO even if the sequencer is parked at order 4/5), and the
+     * sequencer is at our RR73/RRR (order 4) or 73 (order 5) step.
+     *
+     * <p>Package-visible for testing.
+     */
+    static boolean shouldLogCompletedQso(boolean transmitted, boolean freeText, int functionOrder) {
+        return transmitted && !freeText && (functionOrder == 4 || functionOrder == 5);
     }
 
     // ==================== Caller Queue Methods ====================
@@ -2208,15 +3030,22 @@ public class FT8TransmitSignal {
         if (GeneralVariables.checkIsMyCallsign(callsign)) return;
         if (GeneralVariables.checkIsExcludeCallsign(callsign)) return;
         if (GeneralVariables.checkQSLCallsign(callsign)) return;
+        if (isCappedContinuation(cappedCallsign, callsign,
+                GeneralVariables.checkFunOrder(msg))) return;// Max 73 Sends: don't queue the capped loop
 
         synchronized (callerQueue) {
             // Update existing entry if callsign already queued
             for (int i = 0; i < callerQueue.size(); i++) {
                 if (callerQueue.get(i).callsign.equals(callsign)) {
                     QueuedCaller existing = callerQueue.get(i);
-                    existing.snr = msg.hasSnr() ? msg.snr : 0;
-                    existing.queuedTimeMs = System.currentTimeMillis();
-                    mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
+                    // They called again: refresh SNR and the given-up clock. Only
+                    // publish a snapshot when something the UI or the pick policy
+                    // can see actually changed — refreshCallerQueue() runs this for
+                    // every pass, and a deep pass re-delivering the same decode
+                    // would otherwise post an identical list each time.
+                    if (existing.refresh(msg.hasSnr() ? msg.snr : 0, msg.utcTime)) {
+                        mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
+                    }
                     return;
                 }
             }
@@ -2224,7 +3053,7 @@ public class FT8TransmitSignal {
             if (callerQueue.size() < MAX_QUEUE_SIZE) {
                 callerQueue.add(new QueuedCaller(
                         callsign, msg.freq_hz, msg.getSequence(), msg.hasSnr() ? msg.snr : 0,
-                        msg.i3, msg.n3, msg.extraInfo));
+                        msg.i3, msg.n3, msg.extraInfo, msg.utcTime));
                 mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
                 GeneralVariables.fileLog("QSO: enqueue caller " + callsign
                         + " (queue size " + callerQueue.size() + ")");
@@ -2233,13 +3062,83 @@ public class FT8TransmitSignal {
     }
 
     /**
+     * Keep the caller queue in step with the stations actually calling us this
+     * pass: every decode addressed to me from someone other than the current
+     * partner is enqueued (or, if already queued, has its last-heard slot
+     * refreshed), and anyone who has stopped calling is pruned.
+     *
+     * <p>Before this, callers were only enqueued on cycles where the partner went
+     * silent (the scan lived behind the "no reply" branch), so a smooth QSO never
+     * recorded who was waiting, and nothing ever removed a caller who had given
+     * up. Runs on every pass — fast and evidence-only alike, since deep passes
+     * find callers the fast pass missed — while a QSO is in progress. In the CQ
+     * baseline direct callers are answered on the spot instead.
+     *
+     * @param messages this pass's decodes
+     */
+    private void refreshCallerQueue(ArrayList<Ft8Message> messages) {
+        if (functionOrder == 6 || toCallsign == null || !toCallsign.haveTargetCallsign()) {
+            pruneGivenUpCallers();
+            return;
+        }
+        for (Ft8Message msg : messages) {
+            if (isExcludeMessage(msg)) continue;// own slot / other band / excluded prefix
+            if (!GeneralVariables.checkIsMyCallsign(msg.getCallsignTo())) continue;
+            if (GeneralVariables.checkFun5(msg.extraInfo)) continue;// a 73 is not a call
+            if (checkCallsignIsCallTo(msg.getCallsignFrom(), toCallsign.callsign)) continue;// the partner
+            enqueueCaller(msg);
+        }
+        pruneGivenUpCallers();
+    }
+
+    /**
+     * Drop queued callers that have not called us within the last full cycle —
+     * they have given up, and calling them wastes overs while a live caller waits
+     * (see {@link CallerQueueOrdering#hasGivenUp}). Publishes the queue when it
+     * changes so the QSO panel's chips track who is actually still calling.
+     */
+    private void pruneGivenUpCallers() {
+        synchronized (callerQueue) {
+            List<QueuedCaller> gone = CallerQueueOrdering.pruneGivenUp(callerQueue,
+                    UtcTimer.getSystemTime(), GeneralVariables.currentMode().slotMillis);
+            if (!gone.isEmpty()) {
+                StringBuilder names = new StringBuilder();
+                for (QueuedCaller c : gone) {
+                    if (names.length() > 0) names.append(", ");
+                    names.append(c.callsign);
+                }
+                GeneralVariables.fileLog("QSO: dropped queued caller(s) no longer calling: "
+                        + names + " (" + callerQueue.size() + " left in queue)");
+                mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
+            }
+        }
+    }
+
+    /** Package-visible for tests: a snapshot of the callsigns currently queued. */
+    ArrayList<String> queuedCallsigns() {
+        ArrayList<String> out = new ArrayList<>();
+        synchronized (callerQueue) {
+            for (QueuedCaller c : callerQueue) out.add(c.callsign);
+        }
+        return out;
+    }
+
+    /**
      * Dequeue the next caller and start a QSO with them via setTransmit().
-     * Skips stale or excluded callers. Returns true if a caller was started.
+     * Callers who have stopped calling are pruned first, then stale/excluded ones
+     * skipped. Returns true if a caller was started; false when nobody fresh is
+     * waiting — the caller falls back to CQ (or a direct caller this cycle).
      */
     public boolean dequeueNextCaller() {
+        pruneGivenUpCallers();
         synchronized (callerQueue) {
             while (!callerQueue.isEmpty()) {
-                QueuedCaller caller = callerQueue.remove(0);
+                // Pileup pick order: FIFO by default, or the strongest waiting
+                // caller when the operator has turned that on (issue #333 sibling).
+                int idx = CallerQueueOrdering.pickNextIndex(
+                        callerQueue, GeneralVariables.pileupStrongestFirst);
+                if (idx < 0) break;
+                QueuedCaller caller = callerQueue.remove(idx);
                 mutableCallerQueue.postValue(new ArrayList<>(callerQueue));
 
                 // Skip if caller is now excluded or already worked
@@ -2416,6 +3315,16 @@ public class FT8TransmitSignal {
         return tuneController.isActive();
     }
 
+    /**
+     * Whether SWR readings should be attributed to the tune carrier. Wider than
+     * {@link #isTuning()}: also covers the ramp-out/key-up tail and a short settle
+     * window after PTT drops (issue #943). Never true during an FT8 over. See
+     * {@link TuneController#suppressesSwrHalt(boolean)}.
+     */
+    public boolean isTuneSwrExempt() {
+        return tuneController.suppressesSwrHalt(isTransmitting);
+    }
+
     /** Milliseconds until the tune safety timeout fires; 0 when not tuning. */
     public long tuneRemainingMs() {
         return tuneController.remainingMs();
@@ -2456,10 +3365,16 @@ public class FT8TransmitSignal {
             default:
                 break;
         }
-        if (!tuneController.tryStart(GeneralVariables.tuneMaxOnSeconds)) {
+        long session = tuneController.tryStartSession(GeneralVariables.tuneMaxOnSeconds);
+        if (session == TuneController.NO_SESSION) {
             return false; // already tuning
         }
-        Thread worker = new Thread(this::playTuneTone, "TuneTone");
+        // A quick stop-then-tune lands while the last worker is still ramping
+        // out; the new one waits for every unfinished worker to unkey (issue #982).
+        // Filled before start(), which publishes it to the worker.
+        final List<Thread> previous = new ArrayList<>();
+        Thread worker = new Thread(() -> playTuneTone(session, previous), "TuneTone");
+        previous.addAll(tuneController.registerWorker(worker));
         worker.start();
         return true;
     }
@@ -2467,6 +3382,61 @@ public class FT8TransmitSignal {
     /** Operator stop: the worker ramps the tone down and unkeys. */
     public void stopTune() {
         tuneController.requestStop(TuneController.STOP_USER);
+    }
+
+    /**
+     * TUNE on a QMX with CAT tones: one steady TA at the TX offset until the
+     * tune controller says stop, then {@code TA0;}. No audio, so the tune
+     * level setting does not apply.
+     */
+    private void runQmxCatTune(long session, float offsetHz) {
+        GeneralVariables.fileLog(String.format(java.util.Locale.ROOT,
+                "TUNE: QMX CAT tone %.1f Hz", offsetHz));
+        onDoTransmitted.sendQmxCatCommand(QmxCatTones.taCommand(offsetHz));
+        markTuneCarrierOn(session);
+        int lastPostedSec = -1;
+        try {
+            while (tuneController.shouldContinue(session)) {
+                int remainingSec = (int) Math.ceil(tuneController.remainingMs() / 1000.0);
+                if (remainingSec != lastPostedSec) {
+                    lastPostedSec = remainingSec;
+                    mutableTuneRemainingSec.postValue(remainingSec);
+                }
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        } finally {
+            onDoTransmitted.sendQmxCatCommand(QmxCatTones.KEY_UP);
+        }
+    }
+
+    /**
+     * Whether the tune tone has started playing out, from the track's playback
+     * head (frames rendered since {@code play()}). Buffered samples don't count:
+     * until the head moves, no tone has reached the rig.
+     */
+    static boolean tuneToneReachedOutput(int playbackHeadFrames) {
+        return playbackHeadFrames > 0;
+    }
+
+    /**
+     * The tune carrier is up: start the max-on clock now, so PTT/audio setup
+     * doesn't eat into the operator's tune time (issue #982). Logs the setup
+     * latency and shows the full timeout on the chip straight away.
+     */
+    private void markTuneCarrierOn(long session) {
+        long setupMs = tuneController.markCarrierOn(session);
+        if (setupMs < 0) {
+            return; // already on, or setup outran its grace and the session timed out
+        }
+        GeneralVariables.fileLog(String.format(java.util.Locale.ROOT,
+                "TUNE: carrier on after %d ms", setupMs));
+        mutableTuneRemainingSec.postValue(
+                (int) Math.ceil(tuneController.remainingMs() / 1000.0));
     }
 
     /** The tune level (0..100) resolved from settings, as an amplitude 0..1. */
@@ -2478,56 +3448,113 @@ public class FT8TransmitSignal {
      * Tune audio worker. Owns keying and the AudioTrack for its whole life;
      * every exit path (stop, timeout, write error, exception) releases PTT and
      * the track via the finally block — a stuck carrier is never acceptable.
+     *
+     * <p>{@code session} scopes every controller call, so this worker's
+     * teardown can't end a session started after it was stopped. It keys only
+     * once every worker in {@code previous} has unkeyed.
      */
-    private void playTuneTone() {
+    private void playTuneTone(long session, List<Thread> previous) {
         long startedAt = System.currentTimeMillis();
         float offsetHz = GeneralVariables.getBaseFrequency();
         AudioTrack track = null;
+        boolean countedKeyed = false;
         boolean keyed = false;
+        // Own instance (not the TX field): tune and FT8 playback teardowns
+        // must not release each other's focus.
+        TxAudioFocus tuneFocus = new TxAudioFocus();
         try {
             GeneralVariables.fileLog(String.format(
                     "TUNE: start offset=%.0fHz level=%d%% maxOn=%ds rate=%d",
                     offsetHz, radio.ks3ckc.ft8af.TuneLevelKt.currentTuneLevel(),
                     TuneController.clampMaxOnSeconds(GeneralVariables.tuneMaxOnSeconds),
                     GeneralVariables.audioSampleRate));
+            if (!TuneController.awaitPreviousWorkers(previous, TuneController.KEYUP_TAIL_MAX_MS)) {
+                // The old worker never unkeyed; keying on top of it is worse
+                // than refusing this tune.
+                Log.e(TAG, "Tune: previous worker still keyed, not starting");
+                tuneController.requestStop(session, TuneController.STOP_ERROR);
+                return; // finally below cleans up
+            }
+            if (!tuneController.shouldContinue(session)) {
+                return; // stopped while waiting; never keyed
+            }
+            tuneController.markKeyed();
+            countedKeyed = true;
             onDoTransmitted.onTuneKeyDown();
             keyed = true;
-            mutableIsTuning.postValue(true);
+            // Full max-on (the clock hasn't started), not the last tune's value.
+            // Skipped if this session was stopped (and maybe replaced) while
+            // key-down blocked: the button must not flip back to Stop.
+            tuneController.publishTuningState(session, true, () -> {
+                mutableTuneRemainingSec.postValue(
+                        (int) Math.ceil(tuneController.remainingMs() / 1000.0));
+                mutableIsTuning.postValue(true);
+            });
+
+            if (onDoTransmitted.supportQmxCatTones()) {
+                runQmxCatTune(session, offsetHz);
+                return; // finally below unkeys
+            }
+
+            // Same mixer-sharing exposure as the FT8 AudioTrack branch; keep
+            // other apps' audio out of the carrier. Denial is log-only.
+            boolean tuneFocusGranted = tuneFocus.acquire(GeneralVariables.getMainContext());
+            GeneralVariables.fileLog("TUNE: audio focus "
+                    + (tuneFocusGranted ? "granted (exclusive)" : "NOT granted"));
 
             int sampleRate = GeneralVariables.audioSampleRate;
-            AudioAttributes tuneAttributes = new AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .build();
+            AudioAttributes tuneAttributes = buildTxAudioAttributes();
             int encoding = GeneralVariables.audioOutput32Bit
                     ? AudioFormat.ENCODING_PCM_FLOAT : AudioFormat.ENCODING_PCM_16BIT;
+            // Same TX channel layout as the FT8 over: on a splitter cable the
+            // tune carrier must key only the rig the operator picked, exactly as
+            // the over does — a mono open here would have the framework
+            // duplicate the carrier onto the other rig's mic input.
+            final AudioDeviceInfo tuneOutputDevice = GeneralVariables.audioOutputDeviceId > 0
+                    ? findAudioDeviceById(GeneralVariables.audioOutputDeviceId,
+                            AudioManager.GET_DEVICES_OUTPUTS)
+                    : null;
+            final TxChannelLayout layout = resolveTxLayout(tuneOutputDevice);
+            if (layout.isStereo()) {
+                GeneralVariables.fileLog("TUNE: stereo open, channel select=" + layout.selection);
+            }
             AudioFormat tuneFormat = new AudioFormat.Builder().setSampleRate(sampleRate)
                     .setEncoding(encoding)
-                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build();
+                    .setChannelMask(layout.channelMask).build();
             // Same small-buffer MODE_STREAM sizing as playFT8Signal: the buffer
             // depth bounds the latency from a level change (or stop) to the air.
             int bytesPerSample = GeneralVariables.audioOutput32Bit ? 4 : 2;
-            int targetBufBytes = (sampleRate / 5) * bytesPerSample;
+            int targetBufBytes = layout.bufferBytes(sampleRate, bytesPerSample);
             int minBuf = AudioTrack.getMinBufferSize(sampleRate,
-                    AudioFormat.CHANNEL_OUT_MONO, encoding);
+                    layout.channelMask, encoding);
             int bufBytes = Math.max(targetBufBytes, minBuf > 0 ? minBuf : targetBufBytes);
-            track = new AudioTrack(tuneAttributes, tuneFormat, bufBytes,
-                    AudioTrack.MODE_STREAM, 0);
+            track = buildTxAudioTrack(tuneAttributes, tuneFormat, bufBytes, "TUNE");
             if (GeneralVariables.audioOutputDeviceId > 0) {
-                AudioDeviceInfo deviceInfo = findAudioDeviceById(
-                        GeneralVariables.audioOutputDeviceId, AudioManager.GET_DEVICES_OUTPUTS);
-                track.setPreferredDevice(deviceInfo);
+                boolean ok = track.setPreferredDevice(tuneOutputDevice);
+                GeneralVariables.fileLog(String.format(
+                        "TUNE: AudioTrack preferredDevice requestedId=%d resolvedId=%d ok=%b deviceFound=%b",
+                        GeneralVariables.audioOutputDeviceId,
+                        tuneOutputDevice == null ? -1 : tuneOutputDevice.getId(),
+                        ok, tuneOutputDevice != null));
+            } else {
+                applyDefaultOutputRoutingOverride(track);
             }
             track.play();
             track.setVolume(1.0f);
+            // Same as the FT8 over: restore media volume on the routed track,
+            // before the carrier starts (issue #985).
+            radio.ks3ckc.ft8af.MediaVolumeRestore.restore(GeneralVariables.getMainContext(), "tune");
 
             TuneToneGenerator generator = new TuneToneGenerator(offsetHz, sampleRate,
                     Math.max(1, sampleRate / 200)); // ~5ms ramp
             final int chunkSamples = Math.max(1, sampleRate / 20); // ~50ms
             float[] chunk = new float[chunkSamples];
+            final float[] stereoScratch =
+                    layout.isStereo() ? new float[layout.samplesForFrames(chunkSamples)] : null;
             int lastPostedSec = -1;
+            boolean carrierOn = false;
             while (true) {
-                if (!tuneController.shouldContinue()) {
+                if (!tuneController.shouldContinue(session)) {
                     generator.requestStop(); // final chunk(s) ramp to zero
                 }
                 // Level read fresh per chunk so a settings change lands mid-tune,
@@ -2536,17 +3563,28 @@ public class FT8TransmitSignal {
                 if (written <= 0) {
                     break;
                 }
+                float[] toWrite = layout.layOut(chunk, written, stereoScratch);
+                int writeSamples = layout.samplesForFrames(written);
                 int writeResult;
                 if (GeneralVariables.audioOutput32Bit) {
-                    writeResult = track.write(chunk, 0, written, AudioTrack.WRITE_BLOCKING);
+                    writeResult = track.write(toWrite, 0, writeSamples, AudioTrack.WRITE_BLOCKING);
                 } else {
-                    short[] pcm = floatToInt16NoPad(chunk, written);
-                    writeResult = track.write(pcm, 0, written, AudioTrack.WRITE_BLOCKING);
+                    short[] pcm = floatToInt16NoPad(toWrite, writeSamples);
+                    writeResult = track.write(pcm, 0, writeSamples, AudioTrack.WRITE_BLOCKING);
                 }
                 if (writeResult < 0) {
                     Log.e(TAG, "Tune playback error: " + writeResult);
-                    tuneController.requestStop(TuneController.STOP_ERROR);
+                    tuneController.requestStop(session, TuneController.STOP_ERROR);
                     break;
+                }
+                // play() on an empty stream track renders nothing, and a write
+                // only buffers; the carrier is on once the head starts moving.
+                if (!carrierOn && tuneToneReachedOutput(track.getPlaybackHeadPosition())) {
+                    carrierOn = true;
+                    markTuneCarrierOn(session);
+                }
+                if (!tuneController.ownsSession(session)) {
+                    continue; // ramping out; the chip belongs to the new session
                 }
                 int remainingSec = (int) Math.ceil(tuneController.remainingMs() / 1000.0);
                 if (remainingSec != lastPostedSec) {
@@ -2556,11 +3594,12 @@ public class FT8TransmitSignal {
             }
         } catch (Exception e) {
             Log.e(TAG, "Tune worker failed: " + e);
-            tuneController.requestStop(TuneController.STOP_ERROR);
+            tuneController.requestStop(session, TuneController.STOP_ERROR);
         } finally {
             // Single point of teardown: whatever happened above, the carrier
-            // stops and PTT drops here.
-            tuneController.requestStop(TuneController.STOP_ERROR);
+            // stops and PTT drops here. Scoped: a no-op if the operator has
+            // already started the next tune.
+            tuneController.requestStop(session, TuneController.STOP_ERROR);
             if (track != null) {
                 try {
                     track.stop();
@@ -2568,6 +3607,7 @@ public class FT8TransmitSignal {
                 }
                 track.release();
             }
+            tuneFocus.release();
             if (keyed) {
                 try {
                     onDoTransmitted.onTuneKeyUp();
@@ -2575,8 +3615,15 @@ public class FT8TransmitSignal {
                     Log.e(TAG, "Tune key-up failed: " + e);
                 }
             }
-            mutableIsTuning.postValue(false);
-            String reason = tuneController.lastStopReason();
+            // Starts the SWR settle window; keyed on countedKeyed, not keyed,
+            // because markKeyed() runs before onTuneKeyDown(), which may throw.
+            if (countedKeyed) {
+                tuneController.markUnkeyed();
+            }
+            // A newer session owns the UI state once it's been started.
+            tuneController.publishTuningState(session, false,
+                    () -> mutableIsTuning.postValue(false));
+            String reason = tuneController.stopReason(session);
             GeneralVariables.fileLog(String.format(
                     "TUNE: stop reason=%s durationMs=%d offset=%.0fHz",
                     reason, System.currentTimeMillis() - startedAt, offsetHz));
@@ -2590,6 +3637,103 @@ public class FT8TransmitSignal {
 
 
     /**
+     * TX audio attributes. Still {@code USAGE_MEDIA}/{@code
+     * CONTENT_TYPE_MUSIC} -- real hardware (a QRP Labs QMX) showed this
+     * resolving to {@code AUDIO_STREAM_MUSIC}, which on that device got a
+     * fixed -6 dB cut from the platform's own volume-curve policy (applied
+     * per volume-source, independent of the app's own volume index --
+     * confirmed happening at max index, 15/15), plus an OEM "Dolby Listener"
+     * enhancement effect inserted into the output's mix chain -- but {@code
+     * USAGE_VOICE_COMMUNICATION} was tried and reverted: it resolves to
+     * {@code AUDIO_STREAM_VOICE_CALL}, which on real hardware was confirmed
+     * sitting at its MINIMUM index (1 of 8) for this USB output, with no
+     * ordinary way for the operator to raise it outside an active call --
+     * tens of dB worse than the music curve's -6 dB, not better. Caught via
+     * {@code dumpsys audio} before an on-air test, not by actually
+     * transmitting at the lower level.
+     *
+     * <p>{@code FLAG_LOW_LATENCY} is still requested, as an attempt at the
+     * Dolby chain specifically -- see {@link #buildTxAudioTrack} -- though
+     * it is not expected to touch the -6 dB curve itself, which applies
+     * regardless of mixer path, and effects already attached to an output's
+     * session-0 (global mix) chain commonly make AudioFlinger deny the FAST
+     * path outright for that output, silently, with no error surfaced to
+     * the app.
+     *
+     * <p>Finding a usage/content-type that both avoids the music volume
+     * curve AND doesn't land on a stream the operator can't easily turn up
+     * (or that gets silenced by ring/notification volume or Do Not Disturb,
+     * which TX audio must never be) needs real per-device volume-curve data
+     * before trying another candidate -- not left as a TODO lightly, just
+     * not safe to guess a third time without it.
+     */
+    private static AudioAttributes buildTxAudioAttributes() {
+        return new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .setFlags(AudioAttributes.FLAG_LOW_LATENCY)
+                .build();
+    }
+
+    /**
+     * Builds the TX {@code AudioTrack} via {@link AudioTrack.Builder} (the
+     * legacy constructor has no equivalent) so {@link
+     * AudioTrack#PERFORMANCE_MODE_LOW_LATENCY} can be requested, and with a
+     * dedicated generated session id rather than the literal {@code 0} the
+     * legacy constructor used -- {@code 0} implicitly joins the output's
+     * global/master session, which is exactly the session (session-0) real
+     * hardware showed carrying the OEM Dolby effect; a dedicated session is
+     * less likely to inherit an effect chain already attached there.
+     *
+     * <p>Logs the ACTUAL granted performance mode: a denied low-latency
+     * request fails silently otherwise (no exception, no log visible to the
+     * app -- confirmed on real hardware that AudioFlinger can deny the FAST
+     * path per-output with zero signal to the caller either way).
+     *
+     * <p>Performance modes only exist from Android 8.0 (API 26); minSdk is 23.
+     * Below 26 the track is built without one: calling
+     * {@code setPerformanceMode}/{@code getPerformanceMode} there throws
+     * {@code NoSuchMethodError}, an Error the TX paths' {@code catch (Exception)}
+     * doesn't catch, so every sound-card over and TUNE crashed the app.
+     *
+     * <p>Package-visible for testing.
+     */
+    static AudioTrack buildTxAudioTrack(AudioAttributes attributes, AudioFormat format,
+                                        int bufBytes, String logTag) {
+        AudioTrack.Builder builder = new AudioTrack.Builder()
+                .setAudioAttributes(attributes)
+                .setAudioFormat(format)
+                .setBufferSizeInBytes(bufBytes)
+                .setTransferMode(AudioTrack.MODE_STREAM)
+                .setSessionId(AudioManager.AUDIO_SESSION_ID_GENERATE);
+        // The SDK_INT check is inline on purpose so Android lint (NewApi) sees it.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            builder.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY);
+            AudioTrack track = builder.build();
+            GeneralVariables.fileLog(logTag + ": AudioTrack performanceMode="
+                    + performanceModeName(track.getPerformanceMode()));
+            return track;
+        }
+        GeneralVariables.fileLog(logTag + ": AudioTrack performanceMode=n/a (API "
+                + Build.VERSION.SDK_INT + ", needs 26)");
+        return builder.build();
+    }
+
+    /**
+     * Human-readable form of an {@code AudioTrack#getPerformanceMode()}
+     * result, for logs. Package-private: visible for {@code
+     * performanceModeNameTest}-style direct tests.
+     */
+    static String performanceModeName(int mode) {
+        switch (mode) {
+            case AudioTrack.PERFORMANCE_MODE_LOW_LATENCY: return "LOW_LATENCY (granted)";
+            case AudioTrack.PERFORMANCE_MODE_POWER_SAVING: return "POWER_SAVING";
+            case AudioTrack.PERFORMANCE_MODE_NONE: return "NONE (low-latency NOT granted)";
+            default: return "UNKNOWN(" + mode + ")";
+        }
+    }
+
+    /**
      * Find AudioDeviceInfo by device ID.
      */
     private static AudioDeviceInfo findAudioDeviceById(int deviceId, int deviceType) {
@@ -2598,12 +3742,90 @@ public class FT8TransmitSignal {
         AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         if (audioManager == null) return null;
         AudioDeviceInfo[] devices = audioManager.getDevices(deviceType);
-        for (AudioDeviceInfo device : devices) {
-            if (device.getId() == deviceId) {
-                return device;
-            }
+        int[] ids = new int[devices.length];
+        String[] names = new String[devices.length];
+        for (int i = 0; i < devices.length; i++) {
+            ids[i] = devices[i].getId();
+            CharSequence name = devices[i].getProductName();
+            names[i] = name == null ? null : name.toString();
         }
-        return null;
+        // Falls back to matching by the persisted output VID:PID (via its
+        // current product name) when the exact id isn't found -- a USB
+        // device's numeric AudioDeviceInfo id is not stable across a
+        // replug/power-cycle re-enumeration. See
+        // UsbAudioDevice.resolveDeviceIndex.
+        UsbDevice fallback = GeneralVariables.usbAudioOutputVendorId == 0 ? null
+                : UsbAudioDevice.findDeviceByVidPid(context,
+                        GeneralVariables.usbAudioOutputVendorId,
+                        GeneralVariables.usbAudioOutputProductId);
+        int idx = UsbAudioDevice.resolveDeviceIndex(ids, names, deviceId,
+                fallback == null ? null : fallback.getProductName());
+        return idx < 0 ? null : devices[idx];
+    }
+
+    /**
+     * When the user picked "Default" output and <em>this app</em> is holding a
+     * Bluetooth SCO link, pin the AudioTrack to the A2DP endpoint of the same
+     * Bluetooth device. On Android 8.1 (issue #759 follow-up) the OS routes the
+     * USAGE_MEDIA stream through SCO while the hands-free link is active,
+     * leaving TX inaudible on a rig that only listens for the A2DP music
+     * channel — the tester's exact "audio received, not transmitted" report,
+     * cured by manually picking A2DP. Leaves routing to the OS whenever the
+     * conditions aren't met; see {@link AudioOutputRoutingPolicy} for why the
+     * enumerated device types alone are not enough to decide.
+     */
+    private static void applyDefaultOutputRoutingOverride(final AudioTrack track) {
+        Context context = GeneralVariables.getMainContext();
+        if (context == null) return;
+        AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager == null) return;
+        AudioDeviceInfo[] outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+        // The enumeration-to-policy-to-track wiring (and the address gating for
+        // API < 28 / a denied BLUETOOTH_CONNECT) lives in DefaultOutputRouting so
+        // it is covered by DefaultOutputRoutingTest; only the real track and the
+        // debug log are supplied from here.
+        DefaultOutputRouting.apply(outputs, scoHeldForThisTx(), scoAddressForThisTx(),
+                new DefaultOutputRouting.Sink() {
+                    @Override
+                    public boolean setPreferredDevice(AudioDeviceInfo device) {
+                        return track.setPreferredDevice(device);
+                    }
+
+                    @Override
+                    public void log(String line) {
+                        GeneralVariables.fileLog(line);
+                    }
+                });
+    }
+
+    /**
+     * Whether the app's own SCO link was up when this over was keyed, per the
+     * snapshot {@code MainViewModel.beginKeying()} takes before it calls
+     * {@code stopSco()} ({@code TxScoLatch}). Not the tracker's live answer:
+     * by the time this runs — after {@code onBeforeTransmit()} /
+     * {@code onTuneKeyDown()} and the PTT settle sleep — the posted
+     * {@code requestOff()} has normally already flipped the tracker to
+     * DISCONNECTED, so a live query said "no" in exactly the case the steering
+     * exists for, and became a race against the main looper otherwise (Copilot
+     * review on #790). Deliberately not {@code AudioManager.isBluetoothScoOn()}
+     * either, which only mirrors the legacy force-use flag and is not trusted
+     * anywhere else in this codebase — see {@code ScoPolicy} /
+     * {@code ScoLinkCoordinator}. Returns false when the view model isn't up
+     * yet, which correctly means "no SCO session of ours".
+     */
+    private static boolean scoHeldForThisTx() {
+        MainViewModel viewModel = MainViewModel.peekInstance();
+        return viewModel != null && viewModel.isScoHeldForTx();
+    }
+
+    /**
+     * Address of the device that SCO link was on at keying time, or null when
+     * the platform withheld it; lets the policy pick <em>that</em> device's A2DP
+     * endpoint when more than one hands-free device is connected.
+     */
+    private static String scoAddressForThisTx() {
+        MainViewModel viewModel = MainViewModel.peekInstance();
+        return viewModel == null ? null : viewModel.scoAddressForTx();
     }
 
     private static class DoTransmitRunnable implements Runnable {
@@ -2624,17 +3846,20 @@ public class FT8TransmitSignal {
                 transmitSignal.messageStartTime = UtcTimer.getSystemTime();
             }
 
-            // for displaying the message content to be transmitted
-            Ft8Message msg;
-            if (transmitSignal.transmitFreeText) {
-                msg = new Ft8Message("CQ", GeneralVariables.myCallsign, transmitSignal.freeText);
-                msg.i3 = 0;
-                msg.n3 = 0;
-            } else {
-                msg = transmitSignal.getFunctionCommand(transmitSignal.functionOrder);
-            }
-            msg.modifier = GeneralVariables.toModifier;
+            // for displaying the message content to be transmitted.
+            // Capture the order and free-text state of THIS over at message-selection
+            // time, not after the ~12.6 s transmit: a late decode can advance
+            // functionOrder mid-over (e.g. 3 -> 4 on a non-restartable path that doesn't
+            // replay), and reading it afterwards would log a completed QSO for an over
+            // that only sent the report. A one-shot free-text send also clears
+            // transmitFreeText inside currentTransmitMessage(), so capture it first too.
+            boolean freeTextThisOver = transmitSignal.transmitFreeText;
+            int orderThisOver = transmitSignal.functionOrder;
+            Ft8Message msg = transmitSignal.currentTransmitMessage();
 
+            // A real over is about to key: any SWR reading from here on is its own,
+            // so a just-ended tune's tail/settle window must not exempt it (#943).
+            transmitSignal.tuneController.revokeSwrExemption();
             if (transmitSignal.onDoTransmitted != null) {
                 // handle PTT and other events here
                 transmitSignal.onDoTransmitted.onBeforeTransmit(msg, transmitSignal.functionOrder);
@@ -2644,9 +3869,7 @@ public class FT8TransmitSignal {
             transmitSignal.mutableIsTransmitting.postValue(true);
 
 
-            transmitSignal.mutableTransmittingMessage.postValue(String.format(" (%.0fHz) %s"
-                    , GeneralVariables.getBaseFrequency()
-                    , msg.getMessageText()));
+            transmitSignal.postTransmittingMessage(msg);
             // generate signal
 //            float[] buffer=GenerateFT8.generateFt8(msg, GeneralVariables.getBaseFrequency());
 //            if (buffer==null) {
@@ -2679,24 +3902,78 @@ public class FT8TransmitSignal {
             // New behavior: skip only the excess past the slack. On-time and
             // mildly-late TXs send the full waveform; only genuinely late starts
             // begin clipping leading audio.
-            ModeProfile mode = GeneralVariables.currentMode();
-            int msIntoCycle = (int) (UtcTimer.getSystemTime() % mode.slotMillis);
-            int msMaxStart = mode.audioSlackMillis; // last moment we can start without overrunning
-            int msLate = msIntoCycle - msMaxStart;
-            if (msLate < 0) msLate = 0;
-            if (msLate >= mode.slotMillis) msLate = mode.slotMillis - 1;
-            transmitSignal.lateStartSkipMs = msLate;
-            if (msLate > 100) {
-                Log.d(TAG, String.format("Late start: skipping %d ms of leading audio", msLate));
-                ToastMessage.show(String.format("Late start: −%d ms", msLate));
-            }
+            // Replay loop for the mid-cycle message swap (the late-decode TX race). The
+            // common case runs the body exactly once. When the late full-slot pass
+            // advances the QSO while this over is on the air, requestTxRestart() stops
+            // the audio and afterPlayAudio() skips its end-of-over teardown, so we come
+            // back here with PTT still keyed and send the newly chosen message instead.
+            // The clip math below is recomputed each pass, so the replay is timed against
+            // when IT starts, not when the original over did.
+            do {
+                // A decode that advanced the QSO during the PTT settle above — after
+                // isTransmitting was raised but before any audio started — has already
+                // asked for a swap. Honour it here by picking up the new message before
+                // the first sample plays. Otherwise playFT8Signal() resets the cancel
+                // flags, plays the OLD over in full, and only then replays the new one
+                // ~13 s into the slot, where the clip math strips nearly all of it.
+                if (transmitSignal.consumeTxRestart()) {
+                    freeTextThisOver = transmitSignal.transmitFreeText;
+                    orderThisOver = transmitSignal.functionOrder;
+                    msg = transmitSignal.currentTransmitMessage();
+                    transmitSignal.orderAtKeyUp = transmitSignal.functionOrder;
+                    transmitSignal.postTransmittingMessage(msg);
+                    GeneralVariables.fileLog("QSO: TX message updated before audio start, slot="
+                            + transmitSignal.sequential + " order=" + transmitSignal.functionOrder
+                            + " msg=[" + msg.getMessageText() + "]");
+                }
+                ModeProfile mode = GeneralVariables.currentMode();
+                int msIntoCycle = (int) (UtcTimer.getSystemTime() % mode.slotMillis);
+                int msMaxStart = mode.audioSlackMillis; // last moment we can start without overrunning
+                int msLate = msIntoCycle - msMaxStart;
+                if (msLate < 0) msLate = 0;
+                if (msLate >= mode.slotMillis) msLate = mode.slotMillis - 1;
+                transmitSignal.lateStartSkipMs = msLate;
+                if (msLate > 100) {
+                    Log.d(TAG, String.format("Late start: skipping %d ms of leading audio", msLate));
+                    ToastMessage.show(String.format("Late start: −%d ms", msLate));
+                }
 
 //            if (transmitSignal.onDoTransmitted != null) {//process audio data for ICOM network mode transmission
 //                transmitSignal.onDoTransmitted.onAfterGenerate(buffer);
 //            }
-            // play audio
-            //transmitSignal.playFT8Signal(buffer);
-            transmitSignal.playFT8Signal(msg);
+
+                // play audio
+                //transmitSignal.playFT8Signal(buffer);
+                boolean transmitted = transmitSignal.playFT8Signal(msg);
+
+                // Our side of the QSO completes when our RR73/RRR (order 4) or 73 (order 5)
+                // actually goes out, so log it here — AFTER the over was transmitted — not
+                // when the sequencer merely advances to that step and not merely when TX was
+                // attempted. A late R+report arriving after TX had stopped (no-reply limit,
+                // or the operator stopped it) used to log a QSO whose RR73 was never sent; a
+                // failed generation (buffer==null -> transmitted==false) must not log either;
+                // and a free-text over never completes a QSO even if the sequencer sits at
+                // order 4/5. A replayed over can't log twice (QSLRecord.saved), and the save
+                // is serialised against the decode thread's completion path (qslUpdateLock).
+                if (shouldLogCompletedQso(transmitted, freeTextThisOver, orderThisOver)) {
+                    transmitSignal.updateQSlRecordList(orderThisOver,
+                            transmitSignal.toCallsign);
+                }
+
+                // isTransmitting re-checked alongside the flag: a STOP racing the swap
+                // request could otherwise replay an over the operator just cancelled.
+                if (!transmitSignal.consumeTxRestart() || !transmitSignal.isTransmitting) break;
+                // Swap: pick up whatever the sequencer settled on and replay this over.
+                freeTextThisOver = transmitSignal.transmitFreeText;
+                orderThisOver = transmitSignal.functionOrder;
+                msg = transmitSignal.currentTransmitMessage();
+                transmitSignal.orderAtKeyUp = transmitSignal.functionOrder;
+                transmitSignal.postTransmittingMessage(msg);
+                GeneralVariables.fileLog("QSO: TX restart slot=" + transmitSignal.sequential
+                        + " order=" + transmitSignal.functionOrder
+                        + " at=" + (UtcTimer.getSystemTime() % GeneralVariables.currentMode().slotMillis)
+                        + "ms msg=[" + msg.getMessageText() + "]");
+            } while (true);
         }
     }
 }

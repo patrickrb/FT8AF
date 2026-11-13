@@ -19,7 +19,9 @@ public interface OnFt8Listen {
     /**
      * Event triggered after decoding completes.
      * @param utc UTC time of the current cycle
-     * @param time_sec average time offset for this cycle (seconds)
+     * @param time_sec mean time offset (DT, seconds) of the slot's decodes so far,
+     *                 own-TX echoes and junk excluded ({@code OwnTxEchoFilter.meanTimeOffsetSec});
+     *                 NaN when nothing survived the filter
      * @param sequential current sequence number
      * @param messages message list
      */

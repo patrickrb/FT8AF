@@ -32,7 +32,7 @@
 //
 // The Costas arrays at symbols 0-6 / 36-42 / 72-78 are also asserted directly —
 // those are what a receiver syncs on; corrupting them yields audible-but-
-// undecodable TX (see CLAUDE.md "FT8 TX audio pipeline").
+// undecodable TX (see AGENTS.md "FT8 TX audio pipeline").
 //
 // HOW TO RUN  (host build, no device/emulator needed):
 //   ft8af/app/src/main/cpp/ft8af_glue/run_host_tests.ps1

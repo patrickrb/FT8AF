@@ -63,8 +63,14 @@ import radio.ks3ckc.ft8af.ui.components.FT8AFIcons
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.QsoStatus
 import radio.ks3ckc.ft8af.ui.components.StatusPill
+import radio.ks3ckc.ft8af.ui.map.GrayLineDetail
+import radio.ks3ckc.ft8af.ui.map.GrayLineDisplay
+import radio.ks3ckc.ft8af.ui.map.GrayLinePhase
 import radio.ks3ckc.ft8af.ui.map.UsStateOutlines
 import radio.ks3ckc.ft8af.ui.map.WorldOutlines
+import radio.ks3ckc.ft8af.ui.map.forEachRingVertex
+import radio.ks3ckc.ft8af.ui.map.grayLineDisplay
+import radio.ks3ckc.ft8af.ui.map.solarSnapshot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -145,6 +151,19 @@ private fun QsoSheetContent(
         StatCardsRow(message = message)
 
         Spacer(modifier = Modifier.height(20.dp))
+
+        // -- Last heard: relative recency of this decode, above the map --
+        LastHeardRow(utcTimeMillis = message.utcTime, mainViewModel = mainViewModel)
+
+        // -- Gray line: is the DX at their sunrise/sunset right now, and how long
+        // until they are? A propagation timing aid; renders nothing without a grid.
+        GrayLineRow(grid = message.maidenGrid)
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // -- Worked before: prior-QSO history with this station (renders nothing
+        // for a never-worked station, so first contacts stay uncluttered) --
+        WorkedBeforeCard(callsign = callsign)
 
         // -- Path map: operator grid -> remote grid, with a connecting line.
         // Renders nothing (and no trailing spacer) when either grid is unknown.
@@ -363,8 +382,15 @@ private fun StatCardsRow(message: Ft8Message) {
     val myGrid = GeneralVariables.getMyMaidenheadGrid()
     val theirGrid = message.maidenGrid ?: ""
 
-    // Compute azimuth + distance from the operator's grid to the remote station.
-    val azimuthText = computeAzimuthText(myGrid, theirGrid)
+    // Compute beam heading + distance from the operator's grid to the remote
+    // station. The azimuth card leads with the short-path heading and carries the
+    // long-path (reciprocal) heading as a subtitle, so DXers with a beam can see
+    // both ways to point the antenna.
+    val headings = computeBeamHeadings(myGrid, theirGrid)
+    val azimuthText = headings?.let { formatHeading(it.shortPathDeg) } ?: "--"
+    val longPathText = headings?.let {
+        stringResource(R.string.qso_stat_azimuth_long_path, formatHeading(it.longPathDeg))
+    }
     val distanceText = computeDistanceText(myGrid, theirGrid)
 
     // Derive band label from message carrier frequency
@@ -391,6 +417,7 @@ private fun StatCardsRow(message: Ft8Message) {
         StatCard(
             label = stringResource(R.string.qso_stat_azimuth),
             value = azimuthText,
+            subtitle = longPathText,
             modifier = Modifier.weight(1f),
         )
         StatCard(
@@ -406,6 +433,7 @@ private fun StatCard(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
 ) {
     GlassCard(
         modifier = modifier,
@@ -435,6 +463,18 @@ private fun StatCard(
                 maxLines = 1,
                 softWrap = false,
             )
+            if (subtitle != null) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    color = TextFaint,
+                    fontFamily = GeistMonoFamily,
+                    fontSize = 10.sp,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
         }
     }
 }
@@ -814,31 +854,164 @@ private fun CurrentTxBanner(
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// "Last heard" relative time
 // ---------------------------------------------------------------------------
 
 /**
- * Compute the bearing/azimuth (in degrees) from the operator's grid to the
- * remote station's grid. Returns "--" if either grid is unavailable.
+ * Bucketed relative age of a decode, used for the "Last heard" line above the
+ * map. Keeping the bucketing as a pure sealed result (rather than a formatted
+ * string) lets [computeLastHeard] be unit-tested without Compose/resources and
+ * keeps the "ago" wording localizable in [lastHeardText].
  */
-private fun computeAzimuthText(myGrid: String?, theirGrid: String?): String {
-    if (myGrid.isNullOrEmpty() || theirGrid.isNullOrEmpty()) return "--"
-    return try {
-        val myLatLng = MaidenheadGrid.gridToLatLng(myGrid) ?: return "--"
-        val theirLatLng = MaidenheadGrid.gridToLatLng(theirGrid) ?: return "--"
+internal sealed interface LastHeard {
+    /** No usable timestamp (missing / non-positive). */
+    object Unknown : LastHeard
 
-        val lat1 = Math.toRadians(myLatLng.latitude)
-        val lat2 = Math.toRadians(theirLatLng.latitude)
-        val dLon = Math.toRadians(theirLatLng.longitude - myLatLng.longitude)
+    /** Under 5 s old, or a future timestamp clamped forward. */
+    object JustNow : LastHeard
 
-        val y = Math.sin(dLon) * Math.cos(lat2)
-        val x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon)
-        val bearing = (Math.toDegrees(Math.atan2(y, x)) + 360) % 360
-        "${String.format("%.0f", bearing)}\u00B0"
-    } catch (_: Exception) {
-        "--"
+    data class Seconds(val value: Long) : LastHeard
+    data class Minutes(val value: Long) : LastHeard
+    data class Hours(val value: Long) : LastHeard
+    data class Days(val value: Long) : LastHeard
+}
+
+/**
+ * Bucket the elapsed time between [utcTimeMillis] (when the station was heard)
+ * and [nowMillis] into a [LastHeard] value. Edge cases handled cleanly:
+ *  - a missing/non-positive timestamp -> [LastHeard.Unknown]
+ *  - a future timestamp (clock skew) -> [LastHeard.JustNow] (never negative)
+ *  - a very old timestamp -> a plain [LastHeard.Days] count
+ *
+ * The bucket *thresholds* (5 s / 60 s / 60 m / 24 h) mirror the existing
+ * decode-row "ago" formatter so recency reads consistently across the app; the
+ * displayed wording is independent (e.g. this bucket says "just now" where the
+ * decode row says "now") and lives in [lastHeardText].
+ */
+internal fun computeLastHeard(utcTimeMillis: Long, nowMillis: Long): LastHeard {
+    if (utcTimeMillis <= 0L) return LastHeard.Unknown
+    val elapsedMs = nowMillis - utcTimeMillis
+    val seconds = (elapsedMs / 1000L).coerceAtLeast(0L)
+    return when {
+        seconds < 5L -> LastHeard.JustNow
+        seconds < 60L -> LastHeard.Seconds(seconds)
+        seconds < 3600L -> LastHeard.Minutes(seconds / 60L)
+        seconds < 86_400L -> LastHeard.Hours(seconds / 3600L)
+        else -> LastHeard.Days(seconds / 86_400L)
     }
 }
+
+/** Map a [LastHeard] bucket to its localized display string. */
+@Composable
+private fun lastHeardText(lastHeard: LastHeard): String = when (lastHeard) {
+    LastHeard.Unknown -> stringResource(R.string.qso_last_heard_unknown)
+    LastHeard.JustNow -> stringResource(R.string.qso_last_heard_just_now)
+    is LastHeard.Seconds -> stringResource(R.string.qso_last_heard_seconds, lastHeard.value)
+    is LastHeard.Minutes -> stringResource(R.string.qso_last_heard_minutes, lastHeard.value)
+    is LastHeard.Hours -> stringResource(R.string.qso_last_heard_hours, lastHeard.value)
+    is LastHeard.Days -> stringResource(R.string.qso_last_heard_days, lastHeard.value)
+}
+
+/**
+ * "Last heard" row shown above the path map. The app's ticking UTC clock
+ * (`MainViewModel.timerSec`) is observed *here* rather than in the parent sheet:
+ * it changes ~1×/s, and the sheet also hosts `QsoPathMap`, which redraws on every
+ * recompose — observing the tick at the sheet level would repaint the whole map
+ * each second, so the observation is scoped to just this row.
+ */
+@Composable
+private fun LastHeardRow(utcTimeMillis: Long, mainViewModel: MainViewModel) {
+    val nowMillis by mainViewModel.timerSec.observeAsState(UtcTimer.getSystemTime())
+    val valueText = lastHeardText(computeLastHeard(utcTimeMillis, nowMillis))
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.qso_last_heard),
+            color = TextFaint,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.06.sp,
+        )
+        Text(
+            text = valueText,
+            color = TextPrimary,
+            fontFamily = GeistMonoFamily,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 13.sp,
+        )
+    }
+}
+
+/**
+ * Gray-line / sun status for the tapped station. Shows whether the DX is in
+ * daylight, night, or on the gray line right now, plus a countdown to their next
+ * sunrise/sunset — the moments HF propagation to them is briefly enhanced.
+ *
+ * Renders nothing when the station's grid is unknown (nothing to place on the
+ * globe). The snapshot is computed once when the sheet opens: the state changes
+ * over minutes, and rescanning a 26-hour window every second would be wasteful,
+ * so we deliberately do not observe the ticking clock here.
+ */
+@Composable
+private fun GrayLineRow(grid: String?) {
+    val latLon = remember(grid) { gridToLatLon(grid) } ?: return
+    val display = remember(grid) {
+        grayLineDisplay(solarSnapshot(latLon.first, latLon.second, UtcTimer.getSystemTime()))
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.qso_grayline_label),
+            color = TextFaint,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Medium,
+            letterSpacing = 0.06.sp,
+        )
+        val onGrayLine = display.phase == GrayLinePhase.GRAY_LINE
+        Text(
+            text = grayLineStatusText(display),
+            color = if (onGrayLine) Accent else TextPrimary,
+            fontFamily = GeistMonoFamily,
+            fontWeight = if (onGrayLine) FontWeight.Bold else FontWeight.SemiBold,
+            fontSize = 13.sp,
+        )
+    }
+}
+
+/** Map [GrayLineDisplay] tokens to a localized "Daylight · sunset in 1h 20m" line. */
+@Composable
+private fun grayLineStatusText(display: GrayLineDisplay): String {
+    val phaseText = when (display.phase) {
+        GrayLinePhase.GRAY_LINE -> stringResource(R.string.qso_grayline_now)
+        GrayLinePhase.DAYLIGHT -> stringResource(R.string.qso_grayline_daylight)
+        GrayLinePhase.NIGHT -> stringResource(R.string.qso_grayline_night)
+    }
+    val detailText = when (display.detail) {
+        // An empty countdown flags the "happening now" case: use a grammatical,
+        // localized "at sunrise/sunset" string instead of "sunrise in now".
+        GrayLineDetail.SUNRISE ->
+            if (display.countdown.isEmpty()) stringResource(R.string.qso_grayline_sunrise_now)
+            else stringResource(R.string.qso_grayline_sunrise_in, display.countdown)
+        GrayLineDetail.SUNSET ->
+            if (display.countdown.isEmpty()) stringResource(R.string.qso_grayline_sunset_now)
+            else stringResource(R.string.qso_grayline_sunset_in, display.countdown)
+        GrayLineDetail.MIDNIGHT_SUN -> stringResource(R.string.qso_grayline_midnight_sun)
+        GrayLineDetail.POLAR_NIGHT -> stringResource(R.string.qso_grayline_polar_night)
+    }
+    return "$phaseText · $detailText"
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 /**
  * Distance from the operator's grid to the remote station's grid, formatted in
@@ -1015,14 +1188,12 @@ private fun buildRingPath(rings: List<FloatArray>, proj: QsoPathProjection): Pat
     val path = Path()
     for (off in doubleArrayOf(-360.0, 0.0, 360.0)) {
         for (ring in rings) {
-            if (ring.size < 6) continue
-            path.moveTo(proj.projectX(ring[0].toDouble() + off), proj.projectY(ring[1].toDouble()))
-            var i = 2
-            while (i < ring.size) {
-                path.lineTo(proj.projectX(ring[i].toDouble() + off), proj.projectY(ring[i + 1].toDouble()))
-                i += 2
+            val plotted = forEachRingVertex(ring) { lon, lat, first ->
+                val x = proj.projectX(lon.toDouble() + off)
+                val y = proj.projectY(lat.toDouble())
+                if (first) path.moveTo(x, y) else path.lineTo(x, y)
             }
-            path.close()
+            if (plotted) path.close()
         }
     }
     return path

@@ -57,6 +57,67 @@ internal class QsoSyncGate(private val minIntervalMs: Long = 15_000L) {
 }
 
 /**
+ * Keeps the background sync from toasting the same Cloudlog rejection on every run. A
+ * rejection is shown when its server reason differs from the last one shown; a run with no
+ * server rejection re-arms it, so a problem that comes back after being fixed is reported
+ * again. Transport failures (no signal) never toast and don't change the state. Pure, so it
+ * is unit-testable; synchronized because runs start from several threads.
+ */
+internal class CloudlogRejectionDedupe {
+    private var lastShown: String? = null
+
+    @Synchronized
+    fun shouldShow(failure: String?): Boolean {
+        if (failure.isNullOrBlank()) {
+            lastShown = null
+            return false
+        }
+        if (!isCloudlogServerRejection(failure)) return false
+        val key = cloudlogServerReason(failure)
+        if (key == lastShown) return false
+        lastShown = key
+        return true
+    }
+}
+
+/**
+ * Whether an auto-sync pass has anything to do: rows waiting for upload, or the two-way
+ * Wavelog sync (issue #965), which can find QSOs to download with nothing pending here.
+ * Pure so it is unit-testable.
+ */
+internal fun autoSyncHasWork(pending: Int, cloudlogEnabled: Boolean, downloadQsos: Boolean): Boolean =
+    pending > 0 || (cloudlogEnabled && downloadQsos)
+
+/**
+ * Render a finished sync run as the one line that goes into `debug.log`.
+ *
+ * Always reports the counts; appends each service's failure reason when it had one. The
+ * counts alone are ambiguous in the worst case — `cloudlog=0 of 113` reads the same
+ * whether the network was down, the API key expired, or the server was rejecting every
+ * record — and that ambiguity once hid a broken logbook server for three days. Pure
+ * (no Android types) so it is unit-testable.
+ */
+internal fun summarize(result: ThirdPartyService.SyncResult): String {
+    val sb = StringBuilder("cloudlog=${result.cloudlogOk}")
+    // Rows Wavelog already had (issue #936): skipped, not uploaded.
+    if (result.cloudlogAlreadyPresent > 0) {
+        sb.append(" cloudlogExisting=").append(result.cloudlogAlreadyPresent)
+    }
+    // QSOs imported from Wavelog by the two-way sync (issue #965).
+    if (result.cloudlogDownloaded > 0) {
+        sb.append(" cloudlogDownloaded=").append(result.cloudlogDownloaded)
+    }
+    sb.append(" qrz=").append(result.qrzOk)
+    // Only when WRL took part, so the line is unchanged for Cloudlog/QRZ-only users.
+    if (result.wrlAttempted) sb.append(" wrl=").append(result.wrlOk)
+    sb.append(" of ").append(result.total)
+    result.cloudlogError?.takeIf { it.isNotEmpty() }?.let { sb.append(" cloudlogError=").append(it) }
+    result.qrzError?.takeIf { it.isNotEmpty() }?.let { sb.append(" qrzError=").append(it) }
+    result.wrlError?.takeIf { it.isNotEmpty() }?.let { sb.append(" wrlError=").append(it) }
+    return sb.toString()
+}
+
+/**
  * Auto-uploads QSOs that failed to upload while offline. When a QSO is logged with no
  * internet, the immediate post-QSO upload fails and the row's `synced_*` flags stay 0;
  * this re-runs the existing catch-up uploader ([ThirdPartyService.syncAllQSOs]) the
@@ -64,11 +125,13 @@ internal class QsoSyncGate(private val minIntervalMs: Long = 15_000L) {
  * the manual Sync button.
  *
  * Thin Android wrapper: all the start/skip decisions live in the testable [QsoSyncGate].
- * Scoped to QRZ + Cloudlog (the services with per-QSO sync flags). POTA is excluded.
+ * Scoped to Cloudlog, QRZ and World Radio League (the services with per-QSO sync flags).
+ * POTA is excluded.
  */
 class QsoAutoSync(private val appContext: Context) {
 
     private val gate = QsoSyncGate()
+    private val rejectionDedupe = CloudlogRejectionDedupe()
     private val cm =
         appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
 
@@ -126,7 +189,7 @@ class QsoAutoSync(private val appContext: Context) {
         // which would otherwise wedge the gate open or shut. (Only used for the
         // interval; the gate compares deltas, never wall-clock dates.)
         val now = SystemClock.elapsedRealtime()
-        val anyEnabled = GeneralVariables.enableCloudlog || GeneralVariables.enableQRZ
+        val anyEnabled = ThirdPartyService.anyUploadServiceEnabled()
         if (!gate.tryStart(now, anyEnabled)) {
             log("skip ($reason): enabled=$anyEnabled")
             return
@@ -137,19 +200,32 @@ class QsoAutoSync(private val appContext: Context) {
                 // uses) so a cold-start trigger that beats MainViewModel's init can't
                 // construct the singleton with a null Context — getWritableDatabase()
                 // would NPE, or a null name would open a throwaway in-memory db.
-                val db = DatabaseOpr.getInstance(appContext, "data.db")?.db
+                val opr = DatabaseOpr.getInstance(appContext, "data.db")
+                val db = opr?.db
                 if (db == null) {
                     log("skip ($reason): no db")
                     return@Thread
                 }
                 val pending = ThirdPartyService.countUnsyncedQSOs(db)
-                if (pending <= 0) {
+                if (!autoSyncHasWork(
+                        pending,
+                        GeneralVariables.enableCloudlog,
+                        GeneralVariables.cloudlogDownloadQsos,
+                    )
+                ) {
                     log("nothing pending ($reason)")
                     return@Thread
                 }
                 log("start ($reason): $pending pending")
-                val result = ThirdPartyService.syncAllQSOs(db, null)
-                log("done ($reason): cloudlog=${result.cloudlogOk} qrz=${result.qrzOk} of ${result.total}")
+                val result = ThirdPartyService.syncAllQSOs(opr, null)
+                log("done ($reason): " + summarize(result))
+                // The operator never pressed anything for this run, so the only way they
+                // learn their logbook server is rejecting QSOs is if we say so here. Once
+                // per distinct reason: every app start / reconnect re-runs this sync, and
+                // the same rejection again is just nagging.
+                if (rejectionDedupe.shouldShow(result.cloudlogError)) {
+                    showCloudlogRejectionToast(result.cloudlogError)
+                }
             } catch (e: Exception) {
                 log("error ($reason): ${e.javaClass.simpleName} ${e.message}")
             } finally {

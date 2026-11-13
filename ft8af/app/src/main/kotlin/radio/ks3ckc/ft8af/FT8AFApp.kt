@@ -6,10 +6,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import android.widget.Toast
@@ -19,6 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -43,24 +50,35 @@ import com.k1af.ft8af.rigs.BaseRigOperation
 import radio.ks3ckc.ft8af.theme.BgApp
 import radio.ks3ckc.ft8af.ui.components.ActiveQsoPanel
 import radio.ks3ckc.ft8af.ui.components.shouldShowCatChip
+import radio.ks3ckc.ft8af.ui.components.shouldConfirmCqWithoutRadio
+import radio.ks3ckc.ft8af.ui.components.RadioNotLinkedCqDialog
 import radio.ks3ckc.ft8af.ui.components.CqOptionsSheet
 import radio.ks3ckc.ft8af.ui.components.canEnableFieldDay
 import radio.ks3ckc.ft8af.ui.components.shouldPersistFreeText
 import radio.ks3ckc.ft8af.ui.components.shouldPersistSection
+import radio.ks3ckc.ft8af.hunt.huntPriorityFromConfig
 import radio.ks3ckc.ft8af.ui.components.FT8AFTab
 import radio.ks3ckc.ft8af.ui.components.FrequencyPickerSheet
+import radio.ks3ckc.ft8af.ui.components.BandModeSheet
 import radio.ks3ckc.ft8af.ui.components.HoundSetupSheet
+import radio.ks3ckc.ft8af.ui.components.HuntOptionsSheet
+import radio.ks3ckc.ft8af.hunt.HuntPriority
 import radio.ks3ckc.ft8af.ui.components.formatMhz
 import radio.ks3ckc.ft8af.ui.components.QsoCelebration
 import radio.ks3ckc.ft8af.ui.components.SlotTimerBar
 import radio.ks3ckc.ft8af.ui.components.TabBar
 import radio.ks3ckc.ft8af.ui.components.TransmitGlow
 import radio.ks3ckc.ft8af.ui.components.TxStrip
+import radio.ks3ckc.ft8af.ui.components.OperateControlsDrawer
+import radio.ks3ckc.ft8af.ui.components.OperateStatusRow
+import radio.ks3ckc.ft8af.ui.components.OperateDrawerPeekHeight
+import radio.ks3ckc.ft8af.ui.components.VoiceCommandButton
 import radio.ks3ckc.ft8af.ui.components.selectBandIndex
 import radio.ks3ckc.ft8af.ui.decode.DecodeScreen
 import radio.ks3ckc.ft8af.ui.logbook.LogbookScreen
 import radio.ks3ckc.ft8af.ui.map.MapScreen
 import radio.ks3ckc.ft8af.ui.pota.PotaScreen
+import radio.ks3ckc.ft8af.ui.rateprompt.RatePromptHost
 import radio.ks3ckc.ft8af.ui.settings.SettingsScreen
 import radio.ks3ckc.ft8af.ui.waterfall.WaterfallBottomStripHeight
 import radio.ks3ckc.ft8af.ui.waterfall.WaterfallScreen
@@ -84,6 +102,29 @@ internal fun qsoPanelOverlaysContent(tab: FT8AFTab): Boolean = tab == FT8AFTab.W
  */
 internal fun shouldArmHuntOnStartup(huntEnabled: Boolean, callsign: String?): Boolean =
     huntEnabled && !callsign.isNullOrEmpty()
+
+/**
+ * Band name (wavelength) for the TxStrip pill at the current dial [freq].
+ *
+ * Prefers the band-list entry at [bandIndex], but ONLY when that entry's frequency
+ * still matches [freq]. Editing a custom dial rebuilds the band list
+ * ([OperationBand.getBandsFromFile]), which drops the in-memory ad-hoc slot and can
+ * shift indices; while the rig sits off-plan the cached [bandIndex] can then point at a
+ * now-valid-but-wrong entry, so trusting it blindly would show the correct MHz next to
+ * the wrong band name (#979). When the indexed entry no longer matches, fall back to an
+ * entry that matches the dial, then to the wavelength computed from [freq].
+ *
+ * Pure decision logic, unit-tested without the Compose/Android runtime.
+ */
+internal fun txPillBandName(
+    bandList: List<OperationBand.Band>,
+    bandIndex: Int,
+    freq: Long,
+): String {
+    val byIndex = bandList.getOrNull(bandIndex)?.takeIf { it.band == freq }?.waveLength
+    val byFreq = bandList.firstOrNull { it.band == freq }?.waveLength
+    return byIndex ?: byFreq ?: BaseRigOperation.getMeterFromFreq(freq) ?: ""
+}
 
 @Composable
 fun FT8AFApp(mainViewModel: MainViewModel) {
@@ -126,6 +167,22 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
         showVolumeSlider = showVolumeSliderLive ?: GeneralVariables.showTxVolumeSlider
     }
 
+    // Operate-controls drawer (design 3a/3b) — observed so the Settings toggle takes effect
+    // immediately. When on, the always-open strip becomes a collapsing bottom-sheet drawer;
+    // controlsExpanded drives the open sheet and starts collapsed each session.
+    val controlsDrawerLive by GeneralVariables.mutableControlsDrawerEnabled.observeAsState(
+        GeneralVariables.controlsDrawerEnabled,
+    )
+    var controlsDrawerEnabled by remember { mutableStateOf(GeneralVariables.controlsDrawerEnabled) }
+    LaunchedEffect(controlsDrawerLive) {
+        controlsDrawerEnabled = controlsDrawerLive ?: GeneralVariables.controlsDrawerEnabled
+    }
+    var controlsExpanded by rememberSaveable { mutableStateOf(false) }
+    // Window-space Y of the reserved peek slot's bottom (== tab bar top). The drawer overlay
+    // anchors its bottom edge here so the collapsed sheet lines up exactly with the reserved
+    // inline space and grows upward from there.
+    var drawerAnchorBottomPx by remember { mutableFloatStateOf(0f) }
+
     // Consume the one-shot celebration signal so LiveData doesn't replay it
     // on recomposition / resubscription.
     LaunchedEffect(qsoCompletedAt) {
@@ -144,6 +201,52 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     // editable in Settings, which provides the persisted default at startup).
     var huntEnabled by remember { mutableStateOf(GeneralVariables.autoFollowCQ) }
 
+    // Hunt Options sheet state — the notch on (or a long-press of) the HUNT
+    // button opens it. Mirrors the GeneralVariables.hunt* statics the transmit
+    // engine's HuntTargetSelector reads each decode cycle.
+    var showHuntOptions by remember { mutableStateOf(false) }
+    var huntPriority by remember {
+        mutableStateOf(huntPriorityFromConfig(GeneralVariables.huntPriority))
+    }
+    var huntAvoidPileups by remember { mutableStateOf(GeneralVariables.huntAvoidPileups) }
+    var huntMinSnr by remember {
+        mutableStateOf(
+            GeneralVariables.huntMinSnr.takeIf { it != GeneralVariables.HUNT_MIN_SNR_OFF },
+        )
+    }
+
+    // Turn Hunt on/off — shared by the TX-strip HUNT toggle and the Hunt options
+    // sheet's Start button so both arm the sequencer identically.
+    val setHuntEnabled: (Boolean) -> Unit = setHunt@{ newVal ->
+        if (newVal && GeneralVariables.myCallsign.isNullOrEmpty()) {
+            // Hunt transmits replies, so it needs a callsign just like CQ does.
+            Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
+            return@setHunt
+        }
+        huntEnabled = newVal
+        GeneralVariables.autoFollowCQ = newVal
+        mainViewModel.databaseOpr.writeConfig(
+            "autoFollowCQ", if (newVal) "1" else "0", null,
+        )
+        if (newVal) {
+            // Arm the sequencer so Hunt actually answers CQs. It stays silent
+            // (transmit path suppresses calling CQ) until it hears a CQ to work.
+            // armForHunt (not userResetToCQ) so Hunt can answer on the very next
+            // cycle instead of skipping one via pendingUserCQ.
+            mainViewModel.ft8TransmitSignal.armForHunt()
+            mainViewModel.ft8TransmitSignal.setActivated(true)
+            GeneralVariables.resetLaunchSupervision()
+        } else {
+            mainViewModel.ft8TransmitSignal.setActivated(false)
+        }
+        Toast.makeText(
+            context,
+            if (newVal) context.getString(R.string.app_hunt_on)
+            else context.getString(R.string.app_hunt_off),
+            Toast.LENGTH_SHORT,
+        ).show()
+    }
+
     // DXpedition Hound mode. Mirrors GeneralVariables.houndMode; the setup sheet
     // collects the Fox call + call frequency before starting.
     var dxEnabled by remember { mutableStateOf(GeneralVariables.houndMode) }
@@ -151,6 +254,8 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
 
     // CQ Options sheet state — long-press the CQ button to open.
     var showCqOptions by remember { mutableStateOf(false) }
+    // A Call CQ held back by the "Radio not linked" confirmation; null when none is pending.
+    var pendingCqStart by remember { mutableStateOf<(() -> Unit)?>(null) }
     var cqModifier by remember { mutableStateOf(GeneralVariables.toModifier ?: "") }
     var isFreeTextMode by remember { mutableStateOf(false) }
     // Seed the live free-text field and the saved custom-CQ from persisted config
@@ -164,6 +269,13 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
 
     // Frequency picker sheet state
     var showFrequencyPicker by rememberSaveable { mutableStateOf(false) }
+
+    // Band & Mode sheet (option 3b) — opened from the strip's band/mode row.
+    var showBandModeSheet by rememberSaveable { mutableStateOf(false) }
+    // Daytime hint for the band sheet's "Best now · …" copy (local wall-clock).
+    val isDaytimeHint = remember {
+        java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) in 8..17
+    }
 
     // A tapped Needed-DX notification asks us to jump to the Decode tab (DecodeScreen
     // then scrolls to + highlights the alerted station).
@@ -184,6 +296,11 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             // chip reflects the correct state even when arming is skipped
             // (e.g. callsign not yet configured).
             huntEnabled = GeneralVariables.autoFollowCQ
+            // Hunt options load with the rest of the config, after first composition.
+            huntPriority = huntPriorityFromConfig(GeneralVariables.huntPriority)
+            huntAvoidPileups = GeneralVariables.huntAvoidPileups
+            huntMinSnr = GeneralVariables.huntMinSnr
+                .takeIf { it != GeneralVariables.HUNT_MIN_SNR_OFF }
             // Config (incl. the saved custom CQ) loads after first composition, so
             // pull it in once it's ready and seed the field if untouched.
             savedCqFreeText = GeneralVariables.cqFreeText ?: ""
@@ -211,11 +328,16 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     // Pill label combines MHz frequency and band name, e.g. "14.074 MHz · 20m".
     // bandIndex is observed so the pill recomposes when the user retunes.
     val bandIndex by GeneralVariables.mutableBandChange.observeAsState(GeneralVariables.bandListIndex)
-    val freq = GeneralVariables.band
-    val bandName = OperationBand.bandList.getOrNull(bandIndex)?.waveLength
-        ?: OperationBand.bandList.firstOrNull { it.band == freq }?.waveLength
-        ?: BaseRigOperation.getMeterFromFreq(freq)
-        ?: ""
+    // Off-plan rig reports all reuse one band-list slot (#978), so bandIndex stays put
+    // while the operator tunes off-plan; reading the reported dial keeps the pill
+    // following it. GeneralVariables.band stays the source of truth, because picker
+    // taps and the config load set it without posting a rig report.
+    val reportedFreq by GeneralVariables.mutableBandFreq.observeAsState(GeneralVariables.band)
+    val freq = if (reportedFreq == GeneralVariables.band) reportedFreq else GeneralVariables.band
+    // Resolve via a helper that ignores a stale bandIndex (one that no longer matches the
+    // dial after a band-list rebuild while off-plan, #979) rather than trusting the index
+    // blindly.
+    val bandName = txPillBandName(OperationBand.bandList, bandIndex, freq)
     val frequencyLabel = buildString {
         append(formatMhz(freq))
         append(" MHz")
@@ -228,6 +350,11 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
     // recompose when the mode changes.
     val operatingMode by mainViewModel.mutableOperatingMode.observeAsState(GeneralVariables.operatingMode)
     val modeName = ModeProfile.fromId(operatingMode).displayName
+
+    // Decode DT (seconds) for the slot-timer bar's live clock-sync pill — the smoothed,
+    // outlier-rejected reading from DecodeDtDisplay, not a raw per-slot mean; null until the
+    // first decode cycle reports one, so the bar renders unchanged before then.
+    val avgDtSec by mainViewModel.mutableTimerOffset.observeAsState()
 
     // Observe SWR lockout state
     val swrLocked by mainViewModel.meterProtectionController.swrLockout.observeAsState(false)
@@ -268,9 +395,146 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
         }
     }
 
+    // ---- Operating-controls: derived labels + shared action lambdas ----
+    // Hoisted to function scope so the always-open TxStrip, the collapsing drawer peek (in the
+    // Column), and the expanded controls sheet (a sibling overlay in the outer Box) all drive
+    // identical rig behavior from one set of callbacks.
+    val slotMillis = ModeProfile.fromId(operatingMode).slotMillis.toLong()
+    val bandModeLabel = "$frequencyLabel · $modeName"
+    // Band + mode only, no frequency -- the Decode screen's top-bar title has
+    // far less room than the always-visible TxStrip/drawer row bandModeLabel
+    // was designed for (measured on a real 1080px/432dp phone: ~160dp
+    // available next to the title bar's action icons, versus ~280dp needed
+    // for the full "7.074 MHz · 40m · FT8"). Band and mode are also the two
+    // things tapping the title actually lets the operator change; frequency
+    // stays visible in the drawer/TxStrip row and Settings.
+    val decodeTitleLabel = if (bandName.isNotBlank()) "$bandName · $modeName" else modeName
+    val huntOptionLabel = if (huntEnabled) {
+        stringResource(
+            when (huntPriority) {
+                HuntPriority.LATEST -> R.string.hunt_priority_latest
+                HuntPriority.STRONGEST -> R.string.hunt_priority_strongest
+                HuntPriority.WEAKEST -> R.string.hunt_priority_weakest
+                HuntPriority.FARTHEST -> R.string.hunt_priority_farthest
+                HuntPriority.POTA_FIRST -> R.string.hunt_priority_pota
+                HuntPriority.NEW_DXCC_FIRST -> R.string.hunt_priority_new_dxcc
+                HuntPriority.NEW_GRID_FIRST -> R.string.hunt_priority_new_grid
+            },
+        )
+    } else {
+        stringResource(R.string.tx_hunt_off)
+    }
+
+    val onToggleTuneAction: () -> Unit = {
+        // Toggle (WSJT-X style latching Tune): tap to key the carrier,
+        // tap again to stop. startTune() toasts the reason when blocked.
+        // Per the tune-method setting the tap may instead fire the rig's
+        // internal ATU (issue #425) — a one-shot command, nothing to latch.
+        if (isTuning) {
+            mainViewModel.ft8TransmitSignal.stopTune()
+        } else if (!mainViewModel.tryStartTuneViaAtu()) {
+            mainViewModel.ft8TransmitSignal.startTune()
+        }
+    }
+    val onVolumeChangeAction: (Int) -> Unit = { newVolume ->
+        txVolume = newVolume
+        GeneralVariables.volumePercent = newVolume / 100f
+        GeneralVariables.mutableVolumePercent.postValue(newVolume / 100f)
+    }
+    val onVolumeChangeFinishedAction: () -> Unit = {
+        mainViewModel.databaseOpr.writeConfig("volumeValue", txVolume.toString(), null)
+        mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
+        saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, txVolume)
+    }
+    // Start a CQ, first asking for confirmation if the radio isn't linked (#989).
+    val startCqGuarded: (() -> Unit) -> Unit = { start ->
+        if (shouldConfirmCqWithoutRadio(controlMode, catState)) {
+            pendingCqStart = start
+        } else {
+            start()
+        }
+    }
+    val onCallCQAction: () -> Unit = {
+        if (GeneralVariables.myCallsign.isNullOrEmpty()) {
+            Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
+        } else startCqGuarded {
+            if (isFreeTextMode && freeTextMessage.isNotBlank()) {
+                // Free text is a one-shot (WSJT-X Tx5 style): send it once,
+                // immediately, then the engine auto-stops — it is an alternative
+                // to a 73, not a repeating CQ. Consume the armed free text so the
+                // next tap calls a normal CQ instead of re-sending it.
+                mainViewModel.ft8TransmitSignal.sendFreeTextOnce(freeTextMessage)
+                isFreeTextMode = false
+                freeTextMessage = ""
+            } else {
+                mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
+                mainViewModel.ft8TransmitSignal.userResetToCQ()
+                mainViewModel.ft8TransmitSignal.setActivated(true)
+                GeneralVariables.resetLaunchSupervision()
+            }
+        }
+    }
+    val onStopAction: () -> Unit = {
+        // In Hound mode the STOP button leaves Hound entirely;
+        // otherwise it just deactivates the normal sequencer.
+        if (GeneralVariables.houndMode) {
+            mainViewModel.stopHoundMode()
+            dxEnabled = false
+        } else {
+            mainViewModel.ft8TransmitSignal.setActivated(false)
+            // If Hunt armed this run, STOP ends Hunt too, so the buttons can't be
+            // left showing Hunt "on" while the sequencer is stopped (and idle).
+            if (huntEnabled) {
+                huntEnabled = false
+                GeneralVariables.autoFollowCQ = false
+                mainViewModel.databaseOpr.writeConfig("autoFollowCQ", "0", null)
+            }
+        }
+        // Clear free text and Field Day mode on stop
+        isFreeTextMode = false
+        freeTextMessage = ""
+        mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
+        if (fieldDayEnabled) {
+            fieldDayEnabled = false
+            GeneralVariables.fieldDayMode = false
+            mainViewModel.databaseOpr.writeConfig("fieldDayMode", "0", null)
+            cqModifier = ""
+            GeneralVariables.toModifier = ""
+            mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
+        }
+    }
+    val onOpenCqOptionsAction: () -> Unit = { showCqOptions = true }
+    val onToggleDxAction: () -> Unit = {
+        if (dxEnabled || GeneralVariables.houndMode) {
+            mainViewModel.stopHoundMode()
+            dxEnabled = false
+        } else {
+            showHoundSetup = true
+        }
+    }
+    val onSelectTxPeriodAction: (Int) -> Unit = { newSlot ->
+        mainViewModel.ft8TransmitSignal.sequential = newSlot
+        mainViewModel.ft8TransmitSignal.mutableSequential.postValue(newSlot)
+        // Switching slots mid-QSO abandons the current contact.
+        val target = mainViewModel.ft8TransmitSignal.mutableToCallsign.value
+        if (FT8TransmitSignal.shouldResetTargetOnSlotToggle(target?.callsign)) {
+            mainViewModel.ft8TransmitSignal.userResetToCQ()
+        }
+    }
+    val onToggleHuntAction: () -> Unit = { setHuntEnabled(!huntEnabled) }
+    val onOpenHuntOptionsAction: () -> Unit = { showHuntOptions = true }
+    val onReconnectCatAction: () -> Unit = { mainViewModel.reconnectRig() }
+    val onOpenBandModeAction: () -> Unit = { showBandModeSheet = true }
+
     Box(modifier = Modifier.fillMaxSize().background(BgApp)) {
+        // Keep the content clear of the display cutout (and the status bar, should it
+        // ever be visible) — the Box behind still paints BgApp into the padded band so a
+        // notched phone shows app background beside the camera, not a black strip.
+        // Which sides, and why: see AppInsets.kt.
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(appContentInsets(WindowInsets.safeDrawing)),
         ) {
             // SWR lockout banner — red warning at top when SWR halt triggered
             if (swrLocked) {
@@ -320,7 +584,11 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     .fillMaxWidth(),
             ) {
                 when (activeTab) {
-                    FT8AFTab.DECODE -> DecodeScreen(mainViewModel)
+                    FT8AFTab.DECODE -> DecodeScreen(
+                        mainViewModel,
+                        bandModeLabel = decodeTitleLabel,
+                        onOpenBandMode = onOpenBandModeAction,
+                    )
                     FT8AFTab.MAP -> MapScreen(mainViewModel)
                     FT8AFTab.WATERFALL -> WaterfallScreen(mainViewModel)
                     FT8AFTab.POTA -> PotaScreen(mainViewModel)
@@ -342,6 +610,18 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                             .padding(bottom = WaterfallBottomStripHeight),
                     )
                 }
+
+                // Voice-command push-to-talk mic (v1). Floats over the content
+                // just above the TX strip so it never resizes the waterfall's
+                // AndroidView or shifts list layouts. Renders nothing unless
+                // the voice-commands setting is on; tap is refused (with the
+                // reason) while FT8 RX is capturing through the phone mic.
+                VoiceCommandButton(
+                    mainViewModel = mainViewModel,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 12.dp, bottom = 12.dp),
+                )
             }
 
             // Active QSO panel (docked) — slides up above TxStrip when a QSO is
@@ -352,174 +632,81 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                 qsoPanel(Modifier)
             }
 
-            // Slot timer bar — fills 0→100% across each slot (15s FT8 / 7.5s FT4)
+            // Slot timer bar — fills 0→100% across each slot (15s FT8 / 7.5s FT4).
+            // The mean decode DT rides on the bar as a live clock-sync pill so the
+            // operator can spot a drifting clock without opening Settings → Time Sync.
             SlotTimerBar(
                 slotMillis = ModeProfile.fromId(operatingMode).slotMillis.toLong(),
+                offsetSec = avgDtSec,
             )
 
-            // TX status strip — always visible above tab bar
-            TxStrip(
-                isTransmitting = isTransmitting,
-                isActivated = isActivated,
-                frequencyLabel = frequencyLabel,
-                txSlot = txSlot,
-                huntEnabled = huntEnabled,
-                modeName = modeName,
-                modeSwitchEnabled = !isTransmitting,
-                dxEnabled = dxEnabled,
-                catState = catState,
-                showCatChip = showCatChip,
-                expanded = qsoPanelExpanded,
-                txVolume = txVolume,
-                showVolumeSlider = showVolumeSlider,
-                cqModifier = cqModifier,
-                isFreeTextMode = isFreeTextMode,
-                fieldDayEnabled = fieldDayEnabled,
-                isTuning = isTuning,
-                tuneRemainingSec = tuneRemainingSec,
-                onToggleTune = {
-                    // Toggle (WSJT-X style latching Tune): tap to key the carrier,
-                    // tap again to stop. startTune() toasts the reason when blocked.
-                    // Per the tune-method setting the tap may instead fire the rig's
-                    // internal ATU (issue #425) — a one-shot command, nothing to latch.
-                    if (isTuning) {
-                        mainViewModel.ft8TransmitSignal.stopTune()
-                    } else if (!mainViewModel.tryStartTuneViaAtu()) {
-                        mainViewModel.ft8TransmitSignal.startTune()
-                    }
-                },
-                onVolumeChange = { newVolume ->
-                    txVolume = newVolume
-                    GeneralVariables.volumePercent = newVolume / 100f
-                    GeneralVariables.mutableVolumePercent.postValue(newVolume / 100f)
-                },
-                onVolumeChangeFinished = {
-                    mainViewModel.databaseOpr.writeConfig("volumeValue", txVolume.toString(), null)
-                    mainViewModel.baseRig?.connector?.setRFVolume(txVolume)
-                    saveOutputLevelForCurrentBand(mainViewModel.databaseOpr, txVolume)
-                },
-                onCallCQ = {
-                    if (GeneralVariables.myCallsign.isNullOrEmpty()) {
-                        Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
-                    } else if (isFreeTextMode && freeTextMessage.isNotBlank()) {
-                        // Free text is a one-shot (WSJT-X Tx5 style): send it once,
-                        // immediately, then the engine auto-stops — it is an alternative
-                        // to a 73, not a repeating CQ. Consume the armed free text so the
-                        // next tap calls a normal CQ instead of re-sending it.
-                        mainViewModel.ft8TransmitSignal.sendFreeTextOnce(freeTextMessage)
-                        isFreeTextMode = false
-                        freeTextMessage = ""
-                    } else {
-                        mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
-                        mainViewModel.ft8TransmitSignal.userResetToCQ()
-                        mainViewModel.ft8TransmitSignal.setActivated(true)
-                        GeneralVariables.resetLaunchSupervision()
-                    }
-                },
-                onStop = {
-                    // In Hound mode the STOP button leaves Hound entirely;
-                    // otherwise it just deactivates the normal sequencer.
-                    if (GeneralVariables.houndMode) {
-                        mainViewModel.stopHoundMode()
-                        dxEnabled = false
-                    } else {
-                        mainViewModel.ft8TransmitSignal.setActivated(false)
-                        // If Hunt armed this run, STOP ends Hunt too, so the buttons can't be
-                        // left showing Hunt "on" while the sequencer is stopped (and idle).
-                        if (huntEnabled) {
-                            huntEnabled = false
-                            GeneralVariables.autoFollowCQ = false
-                            mainViewModel.databaseOpr.writeConfig("autoFollowCQ", "0", null)
-                        }
-                    }
-                    // Clear free text and Field Day mode on stop
-                    isFreeTextMode = false
-                    freeTextMessage = ""
-                    mainViewModel.ft8TransmitSignal.setTransmitFreeText(false)
-                    if (fieldDayEnabled) {
-                        fieldDayEnabled = false
-                        GeneralVariables.fieldDayMode = false
-                        mainViewModel.databaseOpr.writeConfig("fieldDayMode", "0", null)
-                        cqModifier = ""
-                        GeneralVariables.toModifier = ""
-                        mainViewModel.databaseOpr.writeConfig("toModifier", "", null)
-                    }
-                },
-                onLongPressCQ = { showCqOptions = true },
-                onToggleDx = {
-                    if (dxEnabled || GeneralVariables.houndMode) {
-                        mainViewModel.stopHoundMode()
-                        dxEnabled = false
-                    } else {
-                        showHoundSetup = true
-                    }
-                },
-                onToggleSlot = {
-                    val current = mainViewModel.ft8TransmitSignal.sequential
-                    val newSlot = if (current == 0) 1 else 0
-                    mainViewModel.ft8TransmitSignal.sequential = newSlot
-                    mainViewModel.ft8TransmitSignal.mutableSequential.postValue(newSlot)
-                    // Switching slots mid-QSO abandons the current contact.
-                    val target = mainViewModel.ft8TransmitSignal.mutableToCallsign.value
-                    if (FT8TransmitSignal.shouldResetTargetOnSlotToggle(target?.callsign)) {
-                        mainViewModel.ft8TransmitSignal.userResetToCQ()
-                    }
-                },
-                onToggleHunt = {
-                    val newVal = !huntEnabled
-                    if (newVal && GeneralVariables.myCallsign.isNullOrEmpty()) {
-                        // Hunt transmits replies, so it needs a callsign just like CQ does.
-                        Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
-                    } else {
-                        huntEnabled = newVal
-                        GeneralVariables.autoFollowCQ = newVal
-                        mainViewModel.databaseOpr.writeConfig(
-                            "autoFollowCQ", if (newVal) "1" else "0", null,
-                        )
-                        if (newVal) {
-                            // Arm the sequencer so Hunt actually answers CQs. It stays silent
-                            // (transmit path suppresses calling CQ) until it hears a CQ to work.
-                            // armForHunt (not userResetToCQ) so Hunt can answer on the very next
-                            // cycle instead of skipping one via pendingUserCQ.
-                            mainViewModel.ft8TransmitSignal.armForHunt()
-                            mainViewModel.ft8TransmitSignal.setActivated(true)
-                            GeneralVariables.resetLaunchSupervision()
-                        } else {
-                            mainViewModel.ft8TransmitSignal.setActivated(false)
-                        }
-                        Toast.makeText(
-                            context,
-                            if (newVal) context.getString(R.string.app_hunt_on)
-                            else context.getString(R.string.app_hunt_off),
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    }
-                },
-                onCycleMode = {
-                    // Cycle through the shipped ModeProfile entries in declaration order
-                    // (FT8 -> FT4 -> FT2 -> ...), wrapping around. An unknown current mode
-                    // (indexOfFirst == -1) falls back to the first entry (FT8).
-                    val modes = ModeProfile.values()
-                    val curIdx = modes.indexOfFirst { it.id == operatingMode }
-                    val next = modes[(curIdx + 1) % modes.size].id
-                    if (mainViewModel.setOperatingMode(next)) {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.app_mode_switched, ModeProfile.fromId(next).displayName),
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    } else {
-                        Toast.makeText(
-                            context,
-                            context.getString(R.string.app_mode_switch_busy),
-                            Toast.LENGTH_SHORT,
-                        ).show()
-                    }
-                },
-                onReconnectCat = { mainViewModel.reconnectRig() },
-                onOpenFrequencyPicker = { showFrequencyPicker = true },
-                onToggleExpand = { qsoPanelExpanded = !qsoPanelExpanded },
-            )
+            // TX operating controls above the tab bar. When the drawer setting is on (default)
+            // they collapse into a bottom-sheet drawer (design 3a/3b): the peek shows status +
+            // the primary action + TX period, and the full control set opens in the
+            // OperateControlsSheet overlay below. When off, the original always-open strip shows.
+            // The slot bar + clock-sync pill remain in the SlotTimerBar above.
+            if (controlsDrawerEnabled) {
+                // Docked status line (design 3a), then a reserved slot the drawer sheet sits in
+                // when collapsed. The actual sheet is the OperateControlsDrawer overlay in the
+                // outer Box; it anchors its bottom to this slot and grows upward on expand.
+                OperateStatusRow(
+                    isTransmitting = isTransmitting,
+                    isTuning = isTuning,
+                    slotMillis = slotMillis,
+                    txSlot = txSlot,
+                    showCatChip = showCatChip,
+                    catState = catState,
+                    onReconnectCat = onReconnectCatAction,
+                    // Bottom padding separates the status line from the sheet's rounded top edge
+                    // below it — butted together, the rounding read as if the line were clipped.
+                    modifier = Modifier.padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 8.dp,
+                        bottom = 10.dp,
+                    ),
+                )
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(OperateDrawerPeekHeight)
+                        .onGloballyPositioned { coords ->
+                            drawerAnchorBottomPx = coords.positionInWindow().y + coords.size.height
+                        },
+                )
+            } else {
+                TxStrip(
+                    isTransmitting = isTransmitting,
+                    isActivated = isActivated,
+                    bandModeLabel = bandModeLabel,
+                    slotMillis = slotMillis,
+                    txSlot = txSlot,
+                    huntEnabled = huntEnabled,
+                    huntOptionLabel = huntOptionLabel,
+                    dxEnabled = dxEnabled,
+                    catState = catState,
+                    showCatChip = showCatChip,
+                    txVolume = txVolume,
+                    showVolumeSlider = showVolumeSlider,
+                    cqModifier = cqModifier,
+                    isFreeTextMode = isFreeTextMode,
+                    fieldDayEnabled = fieldDayEnabled,
+                    isTuning = isTuning,
+                    tuneRemainingSec = tuneRemainingSec,
+                    onToggleTune = onToggleTuneAction,
+                    onVolumeChange = onVolumeChangeAction,
+                    onVolumeChangeFinished = onVolumeChangeFinishedAction,
+                    onCallCQ = onCallCQAction,
+                    onStop = onStopAction,
+                    onOpenCqOptions = onOpenCqOptionsAction,
+                    onToggleDx = onToggleDxAction,
+                    onSelectTxPeriod = onSelectTxPeriodAction,
+                    onToggleHunt = onToggleHuntAction,
+                    onOpenHuntOptions = onOpenHuntOptionsAction,
+                    onReconnectCat = onReconnectCatAction,
+                    onOpenBandMode = onOpenBandModeAction,
+                )
+            }
 
             // Bottom tab bar
             TabBar(
@@ -537,6 +724,42 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
         // One-shot particle burst when a QSO completes.
         QsoCelebration(triggerAt = qsoCompletedAt)
 
+        // Operate-controls drawer (design 3a/3b) — one bottom sheet that grows in place from the
+        // reserved peek slot. Sibling overlay so its scrim + sheet sit above the tab bar and
+        // content. Rendered only when the drawer setting is on.
+        if (controlsDrawerEnabled) {
+            OperateControlsDrawer(
+                expanded = controlsExpanded,
+                onExpandedChange = { controlsExpanded = it },
+                anchorBottomPx = drawerAnchorBottomPx,
+                isTransmitting = isTransmitting,
+                isActivated = isActivated,
+                isTuning = isTuning,
+                bandModeLabel = bandModeLabel,
+                txSlot = txSlot,
+                huntEnabled = huntEnabled,
+                huntOptionLabel = huntOptionLabel,
+                dxEnabled = dxEnabled,
+                txVolume = txVolume,
+                showVolumeSlider = showVolumeSlider,
+                cqModifier = cqModifier,
+                isFreeTextMode = isFreeTextMode,
+                fieldDayEnabled = fieldDayEnabled,
+                tuneRemainingSec = tuneRemainingSec,
+                onCallCQ = onCallCQAction,
+                onStop = onStopAction,
+                onSelectTxPeriod = onSelectTxPeriodAction,
+                onToggleHunt = onToggleHuntAction,
+                onOpenHuntOptions = onOpenHuntOptionsAction,
+                onOpenBandMode = onOpenBandModeAction,
+                onToggleTune = onToggleTuneAction,
+                onToggleDx = onToggleDxAction,
+                onOpenCqOptions = onOpenCqOptionsAction,
+                onVolumeChange = onVolumeChangeAction,
+                onVolumeChangeFinished = onVolumeChangeFinishedAction,
+            )
+        }
+
         // Frequency picker — sibling overlay so the scrim and sheet sit above the
         // tab bar and TxStrip.
         FrequencyPickerSheet(
@@ -546,6 +769,41 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             onSelect = { idx ->
                 selectBandIndex(mainViewModel, context, idx)
                 showFrequencyPicker = false
+            },
+        )
+
+        // Band & Mode sheet (option 3b) — mode toggle + curated band list, opened from the
+        // strip's band/mode row. Picking a band retunes (CAT if connected) and closes.
+        BandModeSheet(
+            visible = showBandModeSheet,
+            selectedModeId = operatingMode,
+            currentBandIndex = bandIndex,
+            catConnected = catState == CatConnectionState.CONNECTED,
+            isDaytime = isDaytimeHint,
+            onDismiss = { showBandModeSheet = false },
+            onSelectMode = { modeId ->
+                // Was the strip's mode-pill cycle; now a direct pick from the sheet.
+                if (mainViewModel.setOperatingMode(modeId)) {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.app_mode_switched, ModeProfile.fromId(modeId).displayName),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.app_mode_switch_busy),
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                }
+            },
+            onSelectBand = { idx ->
+                selectBandIndex(mainViewModel, context, idx)
+                showBandModeSheet = false
+            },
+            onOpenAllBands = {
+                showBandModeSheet = false
+                showFrequencyPicker = true
             },
         )
 
@@ -565,6 +823,17 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     showHoundSetup = false
                 }
             },
+        )
+
+        // Confirm a Call CQ tapped while the radio isn't linked (#989).
+        RadioNotLinkedCqDialog(
+            visible = pendingCqStart != null,
+            onConfirm = {
+                val start = pendingCqStart
+                pendingCqStart = null
+                start?.invoke()
+            },
+            onDismiss = { pendingCqStart = null },
         )
 
         // CQ Options — modifier presets, free text, and Field Day configuration.
@@ -692,7 +961,7 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
             onCallCQ = {
                 if (GeneralVariables.myCallsign.isNullOrEmpty()) {
                     Toast.makeText(context, context.getString(R.string.app_set_callsign_first), Toast.LENGTH_SHORT).show()
-                } else {
+                } else startCqGuarded {
                     if (isFreeTextMode && freeTextMessage.isNotBlank()) {
                         mainViewModel.ft8TransmitSignal.setFreeText(freeTextMessage)
                         mainViewModel.ft8TransmitSignal.setTransmitFreeText(true)
@@ -704,6 +973,45 @@ fun FT8AFApp(mainViewModel: MainViewModel) {
                     GeneralVariables.resetLaunchSupervision()
                 }
             },
+        )
+
+        // Hunt Options — target priority + smart filters. Selections apply
+        // immediately (the engine reads the GeneralVariables.hunt* mirrors every
+        // decode cycle), so mid-hunt changes take effect on the next cycle.
+        HuntOptionsSheet(
+            visible = showHuntOptions,
+            huntEnabled = huntEnabled,
+            priority = huntPriority,
+            avoidPileups = huntAvoidPileups,
+            minSnrDb = huntMinSnr,
+            onDismiss = { showHuntOptions = false },
+            onSelectPriority = { p ->
+                huntPriority = p
+                GeneralVariables.huntPriority = p.name
+                mainViewModel.databaseOpr.writeConfig("huntPriority", p.name, null)
+            },
+            onAvoidPileupsChange = { enabled ->
+                huntAvoidPileups = enabled
+                GeneralVariables.huntAvoidPileups = enabled
+                mainViewModel.databaseOpr.writeConfig(
+                    "huntAvoidPileups", if (enabled) "1" else "0", null,
+                )
+            },
+            onMinSnrChange = { floor ->
+                huntMinSnr = floor
+                val stored = floor ?: GeneralVariables.HUNT_MIN_SNR_OFF
+                GeneralVariables.huntMinSnr = stored
+                mainViewModel.databaseOpr.writeConfig("huntMinSnr", stored.toString(), null)
+            },
+            onStartHunt = { setHuntEnabled(true) },
+        )
+
+        // In-app rating prompt — checked after each logged QSO; last so its sheet
+        // sits above every other overlay.
+        RatePromptHost(
+            qsoCompletedAt = qsoCompletedAt,
+            isTransmitting = isTransmitting,
+            database = { mainViewModel.databaseOpr?.db },
         )
     }
 }

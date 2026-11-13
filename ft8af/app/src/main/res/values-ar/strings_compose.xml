@@ -139,6 +139,7 @@
     <string name="qsopanel_qsoing_with">إجراء QSO مع %1$s</string>
     <string name="qsopanel_waiting_for">في انتظار %1$s</string>
     <string name="qsopanel_tap_to_view">انقر للعرض ↗</string>
+    <string name="qsopanel_sent_report">أُرسل %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">في انتظار الرسائل...</string>
     <string name="qsopanel_log_action">تسجيل</string>
@@ -237,9 +238,11 @@
     <string name="log_sync_title_no_services">لا خدمات مفعَّلة</string>
     <string name="log_sync_title_syncing">جارٍ المزامنة…</string>
     <string name="log_sync_title_complete">اكتملت المزامنة</string>
-    <string name="log_sync_enable_services">فعِّل Cloudlog/Wavelog/Nextlog أو QRZ في الإعدادات، ثم أعد المحاولة.</string>
+    <string name="log_sync_enable_services">فعِّل Cloudlog/Wavelog/Nextlog أو QRZ أو World Radio League في الإعدادات، ثم أعد المحاولة.</string>
     <string name="log_sync_progress_count">%1$d من %2$d QSOs</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d مقبول</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d موجود بالفعل في السجل</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: تم تنزيل %1$d</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d مقبول</string>
     <string name="log_sync_nothing_to_upload">لا QSOs في السجل للرفع بعد.</string>
     <string name="log_sync_working">جارٍ العمل…</string>
@@ -248,6 +251,41 @@
     <string name="pota_tab_activate">تفعيل</string>
     <string name="pota_tab_hunt">صيد</string>
     <string name="pota_tab_history">السجل</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">الآن</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="zero">قبل %d ث</item>
+        <item quantity="one">قبل %d ث</item>
+        <item quantity="two">قبل %d ث</item>
+        <item quantity="few">قبل %d ث</item>
+        <item quantity="many">قبل %d ث</item>
+        <item quantity="other">قبل %d ث</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="zero">قبل %d د</item>
+        <item quantity="one">قبل %d د</item>
+        <item quantity="two">قبل %d د</item>
+        <item quantity="few">قبل %d د</item>
+        <item quantity="many">قبل %d د</item>
+        <item quantity="other">قبل %d د</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="zero">قبل %d س</item>
+        <item quantity="one">قبل %d س</item>
+        <item quantity="two">قبل %d س</item>
+        <item quantity="few">قبل %d س</item>
+        <item quantity="many">قبل %d س</item>
+        <item quantity="other">قبل %d س</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="zero">قبل %d ي</item>
+        <item quantity="one">قبل %d ي</item>
+        <item quantity="two">قبل %d ي</item>
+        <item quantity="few">قبل %d ي</item>
+        <item quantity="many">قبل %d ي</item>
+        <item quantity="other">قبل %d ي</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">عرض التوقيت العالمي (UTC)</string>
     <string name="pota_start_activation">بدء التفعيل</string>
     <string name="pota_park_reference_label">مرجع الحديقة (مثل K-1234)</string>
     <string name="pota_notes_optional_label">ملاحظات (اختياري)</string>
@@ -259,6 +297,7 @@
     <string name="pota_self_spot_failed">فشل الرصد الذاتي — راجع السجل</string>
     <string name="pota_active_park">نشط — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">مكرر</string>
     <string name="pota_contacts_map">خريطة الاتصالات</string>
     <string name="pota_back">رجوع</string>
     <string name="pota_valid_activation">تفعيل صالح</string>
@@ -406,6 +445,9 @@
     <string name="settings_tx_watchdog_desc">إيقاف الإرسال تلقائياً بعد المهلة</string>
     <string name="settings_stop_after">التوقف بعد</string>
     <string name="settings_stop_after_desc">التوقف عن النداء بعد N محاولات بلا رد</string>
+    <string name="settings_max_73">الحد الأقصى لإرسال 73</string>
+    <string name="settings_max_73_desc">أقصى عدد لإرسالات RR73/73 لكل اتصال قبل المتابعة</string>
+    <string name="settings_max_73_auto">تلقائي</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">الصيد (رد تلقائي على CQ)</string>
@@ -473,6 +515,9 @@
     <string name="settings_qrz_profile_lookup_desc">اسم المستخدم + كلمة المرور لواجهة QRZ XML API (الصور الرمزية)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">رفع QSOs تلقائياً إلى نسخة Cloudlog أو Wavelog أو Nextlog</string>
+    <string name="settings_cloudlog_download">تنزيل QSOs من Wavelog عند المزامنة</string>
+    <string name="settings_cloudlog_download_desc">تضيف المزامنة أيضاً QSOs الموجودة في سجل Wavelog وغير الموجودة في هذا السجل. لا تُرسل إلى QRZ أو World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">يتطلب Wavelog: هذا الخادم لا يستطيع سرد QSOs الخاصة به.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">تأخير PTT</string>
@@ -489,8 +534,11 @@
     <string name="bug_report_send_email">إرسال بريد إلكتروني</string>
     <string name="bug_report_no_email_app">لم يُعثر على تطبيق بريد لإرسال التقرير</string>
     <string name="bug_report_open_github">فتح مشكلة GitHub</string>
-    <string name="settings_debug">تصحيح</string>
     <string name="settings_debug_desc">عرض / مشاركة debug.log</string>
+    <string name="settings_share_logs">مشاركة السجلات</string>
+    <string name="settings_share_logs_desc">إرسال debug.log عبر البريد أو Discord أو Drive…</string>
+    <string name="settings_view_logs">عرض السجلات</string>
+    <string name="settings_share_logs_empty">لم يتم تسجيل أي سجل بعد</string>
     <string name="settings_about_body">الإصدار %1$s (بناء %2$s)\nتاريخ البناء %3$s\n\nFT8، بكل سهولة.\n\nتطبيق جهاز إرسال واستقبال FT8 مستقل لنظام Android. تحكم في الجهاز عبر USB وBluetooth والشبكة مع التسلسل والتسجيل التلقائيين.</string>
     <string name="settings_website">الموقع الإلكتروني</string>
     <string name="settings_community">المجتمع</string>
@@ -510,8 +558,6 @@
     <string name="settings_conn_network">الشبكة</string>
     <string name="settings_no_usb_serial">لم تُرصد أجهزة USB تسلسلية. يرجى توصيل كابل USB براديوك وإعادة المحاولة.</string>
     <string name="settings_no_bluetooth_devices">لم يُعثر على أجهزة Bluetooth مقترنة. اقترن بجهاز في إعدادات Bluetooth بنظام Android أولاً.</string>
-    <string name="settings_debug_mode_enabled">وضع التصحيح مفعَّل</string>
-    <string name="settings_debug_mode_disabled">وضع التصحيح متوقف</string>
     <string name="settings_edit_operator_identity">تحرير هوية المشغِّل</string>
     <string name="settings_callsign">النداء</string>
     <string name="settings_callsign_hint">مثل W1AW</string>
@@ -534,6 +580,7 @@
     <string name="settings_username_hint">اسم مستخدم QRZ.com الخاص بك</string>
     <string name="settings_password">كلمة المرور</string>
     <string name="settings_enabled_bands_dialog_desc">لن تظهر النطاقات المخفية في منتقيات التردد.</string>
+    <string name="settings_enabled_bands_keep_one">يجب أن يبقى نطاق واحد على الأقل مفعّلاً.</string>
     <string name="settings_select_serial_port">اختر المنفذ التسلسلي</string>
     <string name="settings_tx_volume_advice">عدِّل مباشرة — يستخدم TX التالي هذا المستوى. راقب ALC في راديوك وخفِّضه حتى يلامس الخط بالكاد.</string>
     <string name="settings_input_volume">مستوى صوت الإدخال</string>
@@ -560,6 +607,8 @@
     <string name="cq_offset_moved">تم نقل إزاحة CQ إلى موضع خالٍ: %1$d هرتز</string>
     <string name="settings_auto_clear_tx">اختيار إزاحة إرسال خالية تلقائيًا</string>
     <string name="settings_auto_clear_tx_desc">عند نداء CQ يختار موضعًا خاليًا وفق نشاط النطاق الأخير وينتقل إذا أصبح مشغولًا</string>
+    <string name="settings_auto_clear_tx_min">أدنى إزاحة تلقائية</string>
+    <string name="settings_auto_clear_tx_min_desc">لا يختار الاختيار التلقائي إزاحة أقل من هذه. ارفعها لإبقاء توافقيات الصوت خارج نطاق التمرير</string>
     <string name="tune_content_description">Tune: يبدأ موالف الجهاز أو يرسل موجة حاملة مستمرة لضبط الهوائي</string>
     <string name="tune_stopped_timeout">توقف Tune بعد %1$d ث</string>
     <string name="tune_blocked_tx">أوقف CQ/QSO قبل استخدام Tune</string>
@@ -591,4 +640,15 @@
     <string name="settings_bin_agg_max">الحد الأقصى</string>
     <string name="settings_bin_agg_avg">المتوسط</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d مقبول</string>
+    <string name="settings_wrl_desc">رفع QSOs تلقائياً إلى سجل World Radio League الخاص بك (يتطلب مفتاح Developer API)</string>
+    <string name="settings_wrl_dialog_desc">أنشئ مفتاحاً في World Radio League من Integrations → Developer API. مفتاح واحد يغطي حسابك بالكامل.</string>
+    <string name="settings_wrl_logbook">السجل</string>
+    <string name="settings_wrl_logbook_default">السجل الافتراضي</string>
+    <string name="settings_wrl_loading_logbooks">جارٍ تحميل السجلات…</string>
+    <string name="settings_wrl_no_logbooks">لا يحتوي حسابك في World Radio League على أي سجلات بعد.</string>
+    <string name="settings_wrl_create_logbook">إنشاء سجل “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">جارٍ إنشاء السجل…</string>
 </resources>

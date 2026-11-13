@@ -22,19 +22,46 @@ import com.k1af.ft8af.GeneralVariables;
 import com.k1af.ft8af.R;
 import com.k1af.ft8af.ui.ToastMessage;
 
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 public class MicRecorder {
     private static final String TAG = "MicRecorder";
     private int bufferSize = 0;//minimum buffer size
     private static final int sampleRateInHz = 12000;//sampling rate
     private static final int channelConfig = AudioFormat.CHANNEL_IN_MONO; //mono
-    //private static final int audioFormat = AudioFormat.ENCODING_PCM_16BIT; //quantization bit depth
-    private static final int audioFormat = AudioFormat.ENCODING_PCM_FLOAT; //quantization bit depth
+    private static final int channelConfigStereo = AudioFormat.CHANNEL_IN_STEREO;
+    // How many channels the live AudioRecord is capturing (1 or 2). Stereo is
+    // only opened when the operator picked a specific RX channel; see
+    // createAudioRecord(). Volatile because reinitialize() writes it from
+    // another thread than the reader loop that snapshots it.
+    private volatile int captureChannelCount = 1;
+    // NOT ENCODING_PCM_FLOAT: on this phone's MediaTek USB audio HAL,
+    // requesting float capture from a USB input silently produces unusable
+    // samples (the HAL's own log shows it falling back to a 16-bit word size
+    // internally while still being asked for 4-byte floats). Capture PCM16
+    // and convert to float in software instead (see startAudioRecordCapture()).
+    private static final int audioFormat = AudioFormat.ENCODING_PCM_16BIT; //quantization bit depth
 
     private AudioRecord audioRecord = null;//AudioRecord object
     private UsbAudioDevice usbAudioDevice = null; // USB audio device
     private boolean useUsbAudio = false;
 
     private volatile boolean isRunning = false;//whether currently in recording state
+    // Whether the OWNER (HamRecorder) wants capture running -- set only by
+    // start()/stopRecord(), the two owner-facing entry points. Deliberately
+    // separate from isRunning, which a failed AudioRecord also flips to false
+    // as a side effect (see startAudioRecordCapture()'s capture thread, and
+    // reinitialize() below): reinitialize() used to key its end-of-method
+    // restart decision off isRunning, so one transient createRecord_l failure
+    // (observed in the field right after a replug, before the audio HAL had
+    // caught up) permanently masked the owner's actual intent -- every later
+    // reinitialize() (e.g. the operator picking a perfectly valid device
+    // afterward) saw isRunning already false and silently skipped start(),
+    // leaving capture stopped for the rest of the session even though
+    // setPreferredDevice() kept reporting ok=true/deviceFound=true.
+    private volatile boolean shouldBeRunning = false;
     private OnDataListener onDataListener;
 
     // AudioRecord capture-thread handoff. reinitialize() can be called from
@@ -68,6 +95,50 @@ public class MicRecorder {
     private long lastReinitMs = 0;
     private int consecutiveUsbFailures = 0;
     private volatile boolean usbAudioSawData = false;
+
+    // Runs the backoff + reinitialize() that follows a USB capture-stopped event.
+    // onCaptureStopped() fires on the native libusb event thread; doing the sleep
+    // + reinit there keeps that thread parked inside the native event loop, so an
+    // in-flight nativeStop()'s join() blocks on it while the reinit drives the
+    // next nativeStart() — the new libusb_init() then overlaps the dying
+    // session's libusb_exit() and the process aborts on a destroyed libusb mutex
+    // ("pthread_mutex_lock called on a destroyed mutex", the USB-attach crash
+    // loop). Handing the work to this single dedicated thread lets the event
+    // thread return so nativeStop() completes first; single-threaded so stacked
+    // stops reinit one-at-a-time; daemon so it never holds up process exit.
+    // Built via newUsbReinitExecutor() so a unit test can exercise the exact
+    // same executor (off-caller-thread + serialized) that guards the crash.
+    private final ExecutorService usbReinitExecutor = newUsbReinitExecutor();
+
+    /**
+     * The executor that must run every post-capture-stop reinit. A single
+     * daemon worker named {@code USB-Audio-Reinit}: single-threaded so stacked
+     * stop events reinit one-at-a-time (never two overlapping libusb contexts),
+     * off the caller so the native event thread is never parked in reinit, and
+     * daemon so it never holds up process exit. Extracted so
+     * {@code MicRecorderUsbReinitDispatchTest} verifies these properties on the
+     * real construction.
+     */
+    static ExecutorService newUsbReinitExecutor() {
+        return Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "USB-Audio-Reinit");
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    /**
+     * Dispatch the backoff + reinit for a stopped USB capture session. The one
+     * job of this seam: the work ALWAYS goes through {@code executor} and NEVER
+     * runs on the calling thread. onCaptureStopped() runs on the native libusb
+     * event thread; running the reinit inline there is exactly what raced
+     * libusb into the destroyed-mutex SIGABRT (nativeStop()'s join() blocks on
+     * the event thread while it drives the next nativeStart()). A unit test
+     * pins this by passing an executor that records where the work ran.
+     */
+    static void dispatchUsbReinit(Executor executor, Runnable backoffAndReinit) {
+        executor.execute(backoffAndReinit);
+    }
     // When the current USB capture session started, to measure how long it
     // stayed alive. SystemClock.elapsedRealtime() (monotonic) — not wall clock:
     // a duration must be immune to NTP/user time jumps, which would otherwise
@@ -90,8 +161,9 @@ public class MicRecorder {
                 GeneralVariables.usbAudioInputProductId));
 
         // Check if USB audio input is selected
-        if (GeneralVariables.audioInputDeviceId == -1
-                && GeneralVariables.usbAudioInputVendorId != 0) {
+        if (com.k1af.ft8af.handoff.RigHandoffGate.mayOpenUsbAudioInput(
+                GeneralVariables.audioInputDeviceId,
+                GeneralVariables.usbAudioInputVendorId)) {
             try {
                 usbAudioDevice = openUsbAudioInput();
             } catch (Exception e) {
@@ -111,20 +183,10 @@ public class MicRecorder {
                     "MicRecorder: USB audio open FAILED, falling back to AudioRecord");
         }
 
-        //calculate minimum buffer size
-        bufferSize = safeBufferSize(
-                AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat));
-
         int audioSource = chooseAudioSource(Build.VERSION.SDK_INT, isUnprocessedSupported());
         String srcName = audioSourceName(audioSource);
-        try {
-            audioRecord = new AudioRecord(audioSource, sampleRateInHz
-                    , channelConfig, audioFormat, bufferSize);//create AudioRecorder object
-        } catch (Exception e) {
-            GeneralVariables.fileLog(
-                    "MicRecorder: AudioRecord init CRASHED: " + e.getClass().getSimpleName()
-                            + ": " + e.getMessage());
-            Log.e(TAG, "AudioRecord init failed", e);
+        audioRecord = createAudioRecord(audioSource); // also sets bufferSize
+        if (audioRecord == null) {
             return; // audioRecord stays null — start() will be a no-op
         }
 
@@ -140,6 +202,46 @@ public class MicRecorder {
             GeneralVariables.fileLog(
                     "MicRecorder: AudioRecord(" + srcName + ") using system default mic");
         }
+    }
+
+    /**
+     * True when capture runs over the direct-libusb USB path — no AudioRecord
+     * exists, so Android's audio capture stack (and the phone mic) is free for
+     * other clients (e.g. the voice-command SpeechRecognizer). False whenever
+     * an AudioRecord is in play, including the "preferred device" USB-UAC
+     * route (that still holds an Android capture session).
+     */
+    public boolean isUsingUsbDirect() {
+        return useUsbAudio;
+    }
+
+    /**
+     * Whether changing the RX channel selection from {@code from} to {@code to}
+     * needs the capture torn down and reopened, or whether the running capture
+     * will simply pick the new value up.
+     *
+     * <p>A reopen is expensive — up to a second joining the capture thread, and
+     * on a USB-direct device a full interface release/re-claim plus a libusb
+     * session restart — so it is only worth paying where the open configuration
+     * actually changes:
+     *
+     * <ul>
+     *   <li>the {@code AudioRecord} path opens mono for Mix and stereo for
+     *       Left/Right, so crossing that line needs a reopen; Left ↔ Right does
+     *       not, because the reader loop folds from the live setting;
+     *   <li>the USB-direct paths: the {@code UsbRequest} loop also reads the
+     *       setting live, but the libusb session bakes its fold in at
+     *       {@code nativeStart} and the two are not told apart here, so any
+     *       change on USB-direct reopens.
+     * </ul>
+     *
+     * @param usbDirect {@link #isUsingUsbDirect()}
+     */
+    static boolean reopenRequiredForChannelChange(int from, int to, boolean usbDirect) {
+        if (AudioChannelSelect.clamp(from) == AudioChannelSelect.clamp(to)) return false;
+        if (usbDirect) return true;
+        return AudioChannelSelect.needsStereoCapture(from)
+                != AudioChannelSelect.needsStereoCapture(to);
     }
 
     /**
@@ -208,7 +310,71 @@ public class MicRecorder {
     }
 
     /**
-     * Find AudioDeviceInfo by device ID
+     * Open the AudioRecord for the operator's current RX channel selection, and
+     * set {@link #bufferSize} / {@link #captureChannelCount} to match.
+     *
+     * <p>"Mix" (the default) keeps the historical mono open: the audio framework
+     * already downmixes a stereo source, so that path is byte-for-byte what it
+     * always was. Left/Right need both channels delivered to us, so we ask for
+     * stereo and pick the wanted side in the reader loop. A device that won't
+     * give us stereo at 12 kHz falls back to mono — both channels would be
+     * identical there anyway, so the selection is simply a no-op rather than a
+     * dead audio input.
+     *
+     * @return the opened AudioRecord, or null when even the mono open failed
+     */
+    @SuppressLint("MissingPermission")
+    private AudioRecord createAudioRecord(int audioSource) {
+        if (AudioChannelSelect.needsStereoCapture(GeneralVariables.rxAudioChannel)) {
+            AudioRecord stereo = openAudioRecord(audioSource, channelConfigStereo);
+            if (stereo != null && stereo.getState() == AudioRecord.STATE_INITIALIZED) {
+                captureChannelCount = 2;
+                GeneralVariables.fileLog("MicRecorder: stereo capture open, channel select="
+                        + GeneralVariables.rxAudioChannel);
+                return stereo;
+            }
+            if (stereo != null) {
+                try {
+                    stereo.release();
+                } catch (Exception e) {
+                    Log.d(TAG, "createAudioRecord: error releasing stereo probe: "
+                            + e.getMessage());
+                }
+            }
+            GeneralVariables.fileLog("MicRecorder: stereo capture unavailable, using mono "
+                    + "(L/R channel select has no effect)");
+        }
+        captureChannelCount = 1;
+        return openAudioRecord(audioSource, channelConfig);
+    }
+
+    /**
+     * Construct one AudioRecord, sizing {@link #bufferSize} for the given
+     * channel mask. Returns null if the constructor threw; the caller decides
+     * whether that is fatal or worth a fallback.
+     */
+    @SuppressLint("MissingPermission")
+    private AudioRecord openAudioRecord(int audioSource, int channelMask) {
+        int size = safeBufferSize(
+                AudioRecord.getMinBufferSize(sampleRateInHz, channelMask, audioFormat));
+        try {
+            AudioRecord rec = new AudioRecord(audioSource, sampleRateInHz,
+                    channelMask, audioFormat, size);
+            bufferSize = size;
+            return rec;
+        } catch (Exception e) {
+            GeneralVariables.fileLog(
+                    "MicRecorder: AudioRecord init CRASHED: " + e.getClass().getSimpleName()
+                            + ": " + e.getMessage());
+            Log.e(TAG, "AudioRecord init failed", e);
+            return null;
+        }
+    }
+
+    /**
+     * Find AudioDeviceInfo by device ID. Falls back to matching by the
+     * persisted input VID:PID (via its current product name) when the exact
+     * id isn't found -- see {@link UsbAudioDevice#resolveDeviceIndex}.
      */
     private AudioDeviceInfo findAudioDeviceById(int deviceId, int deviceType) {
         Context context = GeneralVariables.getMainContext();
@@ -216,15 +382,83 @@ public class MicRecorder {
         AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         if (audioManager == null) return null;
         AudioDeviceInfo[] devices = audioManager.getDevices(deviceType);
-        for (AudioDeviceInfo device : devices) {
-            if (device.getId() == deviceId) {
-                return device;
-            }
+        int[] ids = new int[devices.length];
+        String[] names = new String[devices.length];
+        for (int i = 0; i < devices.length; i++) {
+            ids[i] = devices[i].getId();
+            CharSequence name = devices[i].getProductName();
+            names[i] = name == null ? null : name.toString();
         }
-        return null;
+        UsbDevice fallback = GeneralVariables.usbAudioInputVendorId == 0 ? null
+                : UsbAudioDevice.findDeviceByVidPid(context,
+                        GeneralVariables.usbAudioInputVendorId,
+                        GeneralVariables.usbAudioInputProductId);
+        int idx = UsbAudioDevice.resolveDeviceIndex(ids, names, deviceId,
+                fallback == null ? null : fallback.getProductName());
+        return idx < 0 ? null : devices[idx];
+    }
+
+    /**
+     * {@code AudioDeviceInfo.TYPE_*} the running AudioRecord is actually
+     * capturing from right now, {@code TYPE_UNKNOWN} if the OS reports none yet
+     * (not started / not routed), or {@code -1} when there is no AudioRecord to
+     * ask (USB-direct capture, init failure, API &lt; 24). Used after Bluetooth
+     * SCO connects to see whether the capture path followed the link
+     * (issue #759).
+     */
+    public synchronized int routedInputDeviceType() {
+        if (useUsbAudio || audioRecord == null) return -1;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return -1;
+        try {
+            AudioDeviceInfo routed = audioRecord.getRoutedDevice();
+            return routed == null ? AudioDeviceInfo.TYPE_UNKNOWN : routed.getType();
+        } catch (Exception e) {
+            return AudioDeviceInfo.TYPE_UNKNOWN;
+        }
+    }
+
+    /**
+     * Bluetooth address of the SCO device the running AudioRecord is capturing
+     * from right now, or {@code null} when the capture is not on a SCO endpoint
+     * or there is nothing to ask (USB-direct capture, not started, API &lt; 24,
+     * address withheld by the platform). This is what identifies <em>which</em>
+     * hands-free device carries our SCO link, so the TX path can steer Default
+     * output to that device's A2DP profile and not to another dual-profile
+     * device that merely enumerates a SCO endpoint (Copilot review on #790).
+     */
+    public synchronized String routedScoInputAddress() {
+        if (useUsbAudio || audioRecord == null) return null;
+        // getRoutedDevice() is API 24, but getAddress() is API 28: on Android
+        // 8.x (the platform this exists for) the call is a NoSuchMethodError,
+        // which no catch (Exception) below would stop, and it would abort the
+        // keying that snapshots SCO. Below Pie the address is simply unknown.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null;
+        try {
+            AudioDeviceInfo routed = audioRecord.getRoutedDevice();
+            if (routed == null || routed.getType() != AudioDeviceInfo.TYPE_BLUETOOTH_SCO) {
+                return null;
+            }
+            String address = routed.getAddress();
+            return address == null || address.trim().isEmpty() ? null : address;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * {@code AudioDeviceInfo.TYPE_*} of the input the user pinned in Settings,
+     * or {@code -1} for "system default" / USB-direct / a pinned device that is
+     * no longer present.
+     */
+    public int chosenInputDeviceType() {
+        if (GeneralVariables.audioInputDeviceId <= 0) return -1;
+        AudioDeviceInfo chosen = findAudioDeviceById(
+                GeneralVariables.audioInputDeviceId, AudioManager.GET_DEVICES_INPUTS);
+        return chosen == null ? -1 : chosen.getType();
     }
 
     public synchronized void start(){
+        shouldBeRunning = true;
         if (isRunning) return;
 
         if (useUsbAudio && usbAudioDevice != null) {
@@ -262,60 +496,97 @@ public class MicRecorder {
             }
 
             @Override
-            public void onCaptureStopped() {
-                // The libusb-direct capture session ended without an explicit
-                // stop. Decide whether it counts as a failure by how long it
-                // stayed alive: a session that dies before it can carry a
-                // fraction of an FT8 cycle is useless even if a few samples
-                // arrived first (the Pixel 8 + C-Media field mode: ~100ms of
-                // audio, then every iso transfer retires). The old rule only
-                // counted "no data at all", so that mode never tripped the tally
-                // and churned a fresh libusb_init/exit every 2s forever — the
-                // waterfall freeze, and the churn that raced libusb into a
-                // native SIGSEGV.
+            public void onCaptureStopped(int stopCode) {
                 long now = SystemClock.elapsedRealtime();
                 long aliveMs = now - usbCaptureStartMs;
-                boolean failure = UsbCaptureRetryPolicy.isFailure(usbAudioSawData, aliveMs);
-                if (failure) {
-                    consecutiveUsbFailures++;
-                } else {
-                    consecutiveUsbFailures = 0;
+
+                // A clean stop (code 0) is a nativeStop WE requested — a reinit,
+                // a band change, stopRecord(), or app teardown — not a capture
+                // failure. The initiator restarts capture itself where wanted
+                // (reinitialize() -> start()), so scheduling a retry here would
+                // tear down the capture it just brought back, and that self-kill
+                // then looks like another "failure" and schedules yet another
+                // reinit. That feedback loop pinned the C-Media adapter in a
+                // perpetual fail->backoff->reinit churn (in the field 429 of 434
+                // stops were clean stops misclassified this way), leaving the
+                // decoder deaf for ~87% of receive slots so stations' replies
+                // were never heard — the "QSO sequence broken" report. Only a
+                // genuine failure (non-zero code: transfers retired, NO_DEVICE,
+                // event-loop error) drives the retry below.
+                if (!UsbCaptureRetryPolicy.isRetryableFailure(stopCode)) {
+                    // A clean stop is never a failure, but if this session stayed
+                    // alive and delivering audio long enough to be useful the
+                    // device is healthy — clear any stale failure streak so the
+                    // next genuine failure doesn't inherit an inflated backoff.
+                    int resetTally = UsbCaptureRetryPolicy.tallyAfterCleanStop(
+                            consecutiveUsbFailures, usbAudioSawData, aliveMs);
+                    boolean streakCleared = resetTally != consecutiveUsbFailures;
+                    consecutiveUsbFailures = resetTally;
+                    GeneralVariables.fileLog(String.format(
+                            "startUsbCapture: clean stop (code=%d aliveMs=%d) — not a "
+                                    + "failure, no reinit scheduled%s", stopCode, aliveMs,
+                            streakCleared ? " (healthy session, failure streak reset)" : ""));
+                    return;
                 }
+
+                // Genuine failure. Decide whether it counts against the tally by
+                // how long it stayed alive: a session that dies before it can
+                // carry a fraction of an FT8 cycle is useless even if a few
+                // samples arrived first (the Pixel 8 + C-Media field mode: ~100ms
+                // of audio, then every iso transfer retires).
+                boolean failure = UsbCaptureRetryPolicy.isFailure(usbAudioSawData, aliveMs);
+                UsbCaptureRetryPolicy.ReinitPlan plan = UsbCaptureRetryPolicy.planReinit(
+                        usbAudioSawData, aliveMs, consecutiveUsbFailures);
+                consecutiveUsbFailures = plan.consecutiveFailures;
                 GeneralVariables.fileLog(String.format(
                         "startUsbCapture: capture STOPPED (sawData=%b aliveMs=%d "
                                 + "failure=%b consecFailures=%d)",
                         usbAudioSawData, aliveMs, failure, consecutiveUsbFailures));
 
+                // CRITICAL: this callback runs on the native libusb event thread.
+                // The backoff sleep + reinitialize() (which drives the next
+                // nativeStart()/libusb_init()) MUST NOT run here — an in-flight
+                // nativeStop() is blocked in eventThread.join() waiting on this
+                // very thread, so running the reinit inline overlaps the new
+                // libusb context with the dying one's libusb_exit() and the
+                // process aborts on a destroyed libusb mutex (the USB-attach
+                // crash loop). Hand the sleep + reinit to a dedicated worker so
+                // this thread returns, the event loop exits, and nativeStop()
+                // finishes tearing the old context down first.
+                //
                 // Exponential, capped backoff before the next attempt. We keep
                 // retrying USB and never silently switch to the phone's built-in
                 // mic — an operator wants radio audio or none. A persistently
                 // dead adapter is still retried at the cap in case it recovers,
                 // without spinning the bus or libusb global state.
-                long backoff = UsbCaptureRetryPolicy.backoffMs(consecutiveUsbFailures);
-                if (backoff > 0) {
-                    GeneralVariables.fileLog(
-                            "startUsbCapture: backing off " + backoff
-                                    + "ms before USB reinit (consecFailures="
-                                    + consecutiveUsbFailures + ")");
-                    try {
-                        Thread.sleep(backoff);
-                    } catch (InterruptedException ignored) {
-                        Thread.currentThread().interrupt();
+                final long backoff = plan.backoffMs;
+                final int failuresForLog = plan.consecutiveFailures;
+                dispatchUsbReinit(usbReinitExecutor, () -> {
+                    if (backoff > 0) {
+                        GeneralVariables.fileLog(
+                                "startUsbCapture: backing off " + backoff
+                                        + "ms before USB reinit (consecFailures="
+                                        + failuresForLog + ")");
+                        try {
+                            Thread.sleep(backoff);
+                        } catch (InterruptedException ignored) {
+                            Thread.currentThread().interrupt();
+                            return;
+                        }
+                    }
+
+                    // A stop may have landed during the backoff (app teardown, or
+                    // a real unplug already drove reinitialize elsewhere). Don't
+                    // re-arm capture when we are no longer supposed to be running.
+                    if (!isRunning) {
+                        GeneralVariables.fileLog(
+                                "startUsbCapture: not re-arming USB capture "
+                                        + "(isRunning=false)");
                         return;
                     }
-                }
-
-                // A stop may have landed during the backoff (app teardown, or a
-                // real unplug already drove reinitialize elsewhere). Don't
-                // re-arm capture when we are no longer supposed to be running.
-                if (!isRunning) {
-                    GeneralVariables.fileLog(
-                            "startUsbCapture: not re-arming USB capture "
-                                    + "(isRunning=false)");
-                    return;
-                }
-                lastReinitMs = System.currentTimeMillis();
-                self.reinitialize();
+                    lastReinitMs = System.currentTimeMillis();
+                    self.reinitialize();
+                });
             }
         });
     }
@@ -327,7 +598,19 @@ public class MicRecorder {
         // read(), native releaseBuffer abort from two threads on one instance).
         final AudioRecord rec = audioRecord;
         final int myGeneration = captureGeneration;
+        // Raw capture buffer: audioFormat is ENCODING_PCM_16BIT (see its field
+        // comment for why), so AudioRecord.read() fills a short[], converted
+        // to float[] below for the rest of the pipeline (decode/waterfall)
+        // unchanged.
+        short[] rawBuffer = new short[bufferSize];
         float[] buffer = new float[bufferSize];
+        // Snapshotted with `rec`: the fold below must match the channel count of
+        // the AudioRecord this thread owns, not whatever a later reinit opened.
+        // The scratch buffer is allocated once here — reads never exceed
+        // buffer.length, so it never has to grow on the audio hot path.
+        final int myChannelCount = captureChannelCount;
+        final float[] monoScratch =
+                (myChannelCount == 2) ? new float[buffer.length / 2] : null;
         try {
             rec.startRecording();//start recording
         }catch (Exception e){
@@ -352,7 +635,11 @@ public class MicRecorder {
                     }
 
                     //read recording data
-                    int bufferReadResult = rec.read(buffer, 0, buffer.length,AudioRecord.READ_BLOCKING);
+                    int bufferReadResult = rec.read(rawBuffer, 0, rawBuffer.length, AudioRecord.READ_BLOCKING);
+
+                    if (bufferReadResult > 0) {
+                        int16ToFloat(rawBuffer, bufferReadResult, buffer);
+                    }
 
                     if (bufferReadResult < 0) {
                         // Error codes (ERROR_INVALID_OPERATION=-3, ERROR_BAD_VALUE=-2,
@@ -389,7 +676,19 @@ public class MicRecorder {
                     }
 
                     if (onDataListener!=null && bufferReadResult > 0){
-                        onDataListener.onDataReceived(buffer,bufferReadResult);
+                        if (monoScratch != null) {
+                            // Stereo open: fold L/R to the single channel the
+                            // operator picked before anything downstream sees it,
+                            // so the whole decode chain stays mono. Read live so
+                            // flipping L<->R applies on the next buffer.
+                            int mono = AudioChannelSelect.foldToMono(buffer, bufferReadResult,
+                                    GeneralVariables.rxAudioChannel, monoScratch);
+                            if (mono > 0) {
+                                onDataListener.onDataReceived(monoScratch, mono);
+                            }
+                        } else {
+                            onDataListener.onDataReceived(buffer,bufferReadResult);
+                        }
                     }
                 }
                 try {
@@ -408,11 +707,36 @@ public class MicRecorder {
 
     /**
      * Stop recording. When recording stops, all monitors in the listener list are removed.
+     *
+     * <p>Owner-facing: also clears {@link #shouldBeRunning}, so a later
+     * {@link #reinitialize()} (e.g. from a USB attach event) knows not to
+     * restart capture the operator explicitly stopped. {@link #reinitialize()}
+     * itself does the equivalent teardown inline rather than calling this, so
+     * its own internal stop/rebuild cycle never clears that intent flag.
+     *
+     * <p>Retires the AudioRecord reader thread before returning (new
+     * generation, stop the recording to unblock its read(), bounded join),
+     * so a {@link #start()} right after -- e.g. RX resuming after a short TX
+     * pause -- can't leave the old reader running alongside the new one on
+     * the same AudioRecord (a fatal native abort), or let the old reader's
+     * exit stop the new recording.
      */
     public synchronized void stopRecord() {
+        captureGeneration++;
         isRunning = false;
+        shouldBeRunning = false;
         if (useUsbAudio && usbAudioDevice != null) {
             usbAudioDevice.stopCapture();
+        }
+        if (audioRecord != null) {
+            try {
+                if (audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
+                    audioRecord.stop();
+                }
+            } catch (Exception e) {
+                Log.d(TAG, "stopRecord: error stopping AudioRecord: " + e.getMessage());
+            }
+            joinCaptureThread();
         }
     }
 
@@ -432,14 +756,20 @@ public class MicRecorder {
      */
     @SuppressLint("MissingPermission")
     public synchronized void reinitialize() {
-        boolean wasRunning = isRunning;
         OnDataListener savedListener = onDataListener;
 
-        // Supersede the running reader thread's generation, then stop capture.
+        // Supersede the running reader thread's generation, then stop capture
+        // inline (NOT via stopRecord(): that also clears shouldBeRunning, which
+        // must survive this method's own internal stop/rebuild cycle -- see
+        // shouldBeRunning's field comment for why keying off isRunning here
+        // used to permanently wedge capture after one transient failure).
         captureGeneration++;
-        stopRecord();
+        isRunning = false;
+        if (useUsbAudio && usbAudioDevice != null) {
+            usbAudioDevice.stopCapture();
+        }
 
-        // Release old AudioRecord (stopRecord only sets isRunning=false). The
+        // Release old AudioRecord (the above only sets isRunning=false). The
         // reader thread may still be inside a blocking read() on it: stop()
         // unblocks that read, and we must wait for the thread to exit before
         // release() — releasing mid-read is a fatal native abort
@@ -475,8 +805,9 @@ public class MicRecorder {
         usbAudioDevice = null;
 
         // Re-check for USB audio input
-        if (GeneralVariables.audioInputDeviceId == -1
-                && GeneralVariables.usbAudioInputVendorId != 0) {
+        if (com.k1af.ft8af.handoff.RigHandoffGate.mayOpenUsbAudioInput(
+                GeneralVariables.audioInputDeviceId,
+                GeneralVariables.usbAudioInputVendorId)) {
             try {
                 usbAudioDevice = openUsbAudioInput();
             } catch (Exception e) {
@@ -497,34 +828,57 @@ public class MicRecorder {
 
         // Set up standard AudioRecord if not using USB audio
         if (!useUsbAudio) {
-            bufferSize = safeBufferSize(
-                    AudioRecord.getMinBufferSize(sampleRateInHz, channelConfig, audioFormat));
             int audioSource = chooseAudioSource(Build.VERSION.SDK_INT, isUnprocessedSupported());
             GeneralVariables.fileLog(
                     "MicRecorder: reinit AudioRecord(" + audioSourceName(audioSource) + ")");
-            try {
-                audioRecord = new AudioRecord(audioSource, sampleRateInHz,
-                        channelConfig, audioFormat, bufferSize);
-            } catch (Exception e) {
-                GeneralVariables.fileLog(
-                        "MicRecorder: reinit AudioRecord CRASHED: " + e.getClass().getSimpleName()
-                                + ": " + e.getMessage());
-                Log.e(TAG, "reinitialize: AudioRecord init failed", e);
-                // audioRecord stays null — start() will be a no-op
-            }
+            // audioRecord stays null on failure — start() will be a no-op
+            audioRecord = createAudioRecord(audioSource); // also sets bufferSize
 
             if (audioRecord != null && GeneralVariables.audioInputDeviceId > 0) {
                 AudioDeviceInfo deviceInfo = findAudioDeviceById(
                         GeneralVariables.audioInputDeviceId, AudioManager.GET_DEVICES_INPUTS);
-                audioRecord.setPreferredDevice(deviceInfo);
+                boolean ok = audioRecord.setPreferredDevice(deviceInfo);
+                // Logs the REQUESTED id (what was persisted) and the RESOLVED one
+                // separately: findAudioDeviceById() can fall back to a different,
+                // currently-live id via UsbAudioDevice.resolveDeviceIndex's product-name
+                // match when the requested one went stale across a USB re-enumeration --
+                // confirmed on real hardware (a QMX power-cycle), where logging only the
+                // requested id made a successful fallback look identical to an exact hit.
+                GeneralVariables.fileLog(String.format(
+                        "MicRecorder: reinit preferredDevice requestedId=%d resolvedId=%d ok=%b deviceFound=%b",
+                        GeneralVariables.audioInputDeviceId,
+                        deviceInfo == null ? -1 : deviceInfo.getId(), ok, deviceInfo != null));
             }
         }
 
-        // Restore listener and restart if it was running
         onDataListener = savedListener;
-        if (wasRunning) {
+        if (shouldRestartAfterReinitialize(shouldBeRunning)) {
             start();
         }
+    }
+
+    /**
+     * Whether {@link #reinitialize()} should restart capture once it has
+     * rebuilt the audio input. Keyed on {@code shouldBeRunning} (owner
+     * intent, touched only by {@link #start()}/{@link #stopRecord()}), NOT
+     * {@code isRunning} -- a transient failure in the rebuild above (or an
+     * earlier {@link #reinitialize()} call) can leave {@code isRunning} false
+     * with no owner-driven {@link #stopRecord()} ever happening, and that
+     * must not be read as "capture no longer wanted" (the bug fixed by
+     * introducing {@link #shouldBeRunning} in the first place).
+     */
+    static boolean shouldRestartAfterReinitialize(boolean shouldBeRunning) {
+        return shouldBeRunning;
+    }
+
+    /** Current reader-thread generation. Package-visible for testing. */
+    int captureGenerationForTest() {
+        return captureGeneration;
+    }
+
+    /** The most recent AudioRecord reader thread. Package-visible for testing. */
+    Thread captureThreadForTest() {
+        return captureThread;
     }
 
     /**
@@ -619,6 +973,25 @@ public class MicRecorder {
         if (source == MediaRecorder.AudioSource.UNPROCESSED) return "UNPROCESSED";
         if (source == MediaRecorder.AudioSource.VOICE_RECOGNITION) return "VOICE_RECOGNITION";
         return String.valueOf(source);
+    }
+
+    /**
+     * Convert {@code length} 16-bit PCM samples to float, filling {@code dest}
+     * in place from index 0 -- the caller's hot-path buffer, reused across
+     * reads rather than allocated per call. Matches {@code float2Short()}'s
+     * inverse scale elsewhere in the app (the TX path, {@code
+     * FT8TransmitSignal.java}): full-scale short (+/-32767) maps to +/-1.0f.
+     *
+     * <p>Package-visible for testing.
+     *
+     * @param src    source samples; must be at least {@code length} long
+     * @param length number of samples to convert
+     * @param dest   destination; must be at least {@code length} long
+     */
+    static void int16ToFloat(short[] src, int length, float[] dest) {
+        for (int i = 0; i < length; i++) {
+            dest[i] = src[i] / 32767.0f;
+        }
     }
 
     /**

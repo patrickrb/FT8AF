@@ -77,11 +77,15 @@ public class Yaesu2RigConstant {
         return GET_DISCONNECT;
     }
     public static byte[] setOperationFreq(long freq) {
+        // 4 BCD bytes, most-significant nibble first, weights 1e8..1e1 (10 Hz LSB).
+        // The last nibble is the tens-of-Hz digit (freq % 100 / 10), NOT freq % 100:
+        // Yaesu2Command.getFrequency weights it x10, so packing the full 0-99 remainder
+        // there desynced the encoder from its own decoder (e.g. ...050 read back as ...320).
         byte[] data = new byte[]{
                 (byte) (((byte) (freq % 1000000000 / 100000000) << 4) + (byte) (freq % 100000000 / 10000000))
                 , (byte) (((byte) (freq % 10000000 / 1000000) << 4) + (byte) (freq % 1000000 / 100000))
                 , (byte) (((byte) (freq % 100000 / 10000) << 4) + (byte) (freq % 10000 / 1000))
-                , (byte) (((byte) (freq % 1000 / 100) << 4) + (byte) (freq % 100))
+                , (byte) (((byte) (freq % 1000 / 100) << 4) + (byte) (freq % 100 / 10))
                 ,(byte) 0x01
         };
         return data;

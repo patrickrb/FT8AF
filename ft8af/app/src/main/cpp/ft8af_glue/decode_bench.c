@@ -33,17 +33,24 @@
 //                         which are treated as consecutive 15 s slots)
 //     --assert-floor F    read "name min_matched" lines from F; exit 1 if any
 //                         listed file matches fewer truth messages than its floor
+//     --assert-snr F      read SNR-agreement bounds from F (testdata/ft8/
+//                         snr_bounds.txt); exit 1 if the matched decodes'
+//                         ft8_snr vs jt9 SNR fit falls outside them (#937)
+//     --snr-table         print mean ft8_snr per 5 dB jt9 SNR bin (markdown)
 //     --self-test         synthesize a clean FT8 signal, decode it, expect 1/1
 //     -v                  print each decoded / missed message
 //
 // Output per file (machine-parsable, one line):
 //   RESULT <name> decoded=<n> matched=<n> truth=<n> recall=<pct> extra=<n> passes=<n> ms=<n>
-// and an aggregate TOTAL line at the end.
+// and an aggregate TOTAL line at the end, followed by
+//   SNR n=<pairs> slope=<fit> r=<corr> mae=<dB> bias=<dB> strong_n=<n> strong_mean=<dB> strong_min=<dB>
+// scoring ft8_snr() of every matched decode against jt9's SNR column.
 
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -65,6 +72,9 @@
 void synth_gfsk_offset(const uint8_t* symbols, int n_sym, float f0,
                        float symbol_bt, float symbol_period,
                        int signal_rate, float* signal, int offset);
+
+// ft8_snr is defined (non-static) in decode.c but not declared in decode.h.
+int ft8_snr(const waterfall_t* wf, const candidate_t* candidate);
 
 // ---------------------------------------------------------------------------
 // Tunables (defaults == the app's values, via the shared decode_params.h).
@@ -205,9 +215,12 @@ static void normalize_text(char* s)
     strcpy(s, out);
 }
 
+#define SNR_UNKNOWN INT_MIN // truth line without a parseable SNR column
+
 typedef struct
 {
     char text[64];
+    int snr; // decoded: highest ft8_snr() over duplicate decodes; truth: jt9's SNR
 } bench_msg_t;
 
 typedef struct
@@ -216,19 +229,20 @@ typedef struct
     int count;
 } bench_msglist_t;
 
-static bool msglist_contains(const bench_msglist_t* list, const char* text)
+static bench_msg_t* msglist_find(bench_msglist_t* list, const char* text)
 {
     for (int i = 0; i < list->count; ++i)
         if (strcmp(list->items[i].text, text) == 0)
-            return true;
-    return false;
+            return &list->items[i];
+    return NULL;
 }
 
-static void msglist_add(bench_msglist_t* list, const char* text)
+static void msglist_add(bench_msglist_t* list, const char* text, int snr)
 {
     if (list->count < BENCH_MAX_MSGS)
     {
         snprintf(list->items[list->count].text, sizeof(list->items[0].text), "%s", text);
+        list->items[list->count].snr = snr;
         list->count++;
     }
 }
@@ -427,12 +441,21 @@ static int run_pass(monitor_t* mon, ft8_fine_ctx_t* fine, int ldpc_iters, int mi
             memcpy(dec->payload, message.payload, FTX_PAYLOAD_LENGTH_BYTES);
         }
 
-        if (msglist_contains(seen, text))
+        // Same call, same waterfall, same candidate as the app's JNI decode
+        // path (ft8_decode_jni.cpp). Duplicates keep the highest SNR, as
+        // FT8SignalListener.checkMessageSame does, so this is what the app shows.
+        int snr = ft8_snr(&mon->wf, cand);
+        bench_msg_t* prev = msglist_find(seen, text);
+        if (prev)
+        {
+            if (snr > prev->snr)
+                prev->snr = snr;
             continue;
-        msglist_add(seen, text);
+        }
+        msglist_add(seen, text, snr);
         new_msgs++;
         if (g_verbose)
-            printf("  + %7.1f Hz %5.2f s  %s\n", freq_hz, time_sec, text);
+            printf("  + %7.1f Hz %5.2f s %+4d dB  %s\n", freq_hz, time_sec, snr, text);
     }
     return new_msgs;
 }
@@ -573,6 +596,11 @@ static int load_truth(const char* wav_path, bench_msg_t truth[], int max_truth)
         char* tilde = strchr(line, '~');
         if (!tilde)
             continue;
+        // SNR is the second column; a line without one still counts as truth
+        // but isn't scored for SNR.
+        int snr = SNR_UNKNOWN;
+        if (sscanf(line, "%*s %d", &snr) != 1)
+            snr = SNR_UNKNOWN;
         char* msg = tilde + 1;
         while (*msg == ' ')
             ++msg;
@@ -586,13 +614,19 @@ static int load_truth(const char* wav_path, bench_msg_t truth[], int max_truth)
             continue;
         // Dedupe: jt9 can report the same message text at two frequencies, but
         // the app (and this bench) dedup decodes by text, so truth must be a
-        // set of unique texts or matched could exceed decoded.
+        // set of unique texts or matched could exceed decoded. Keep the highest
+        // SNR, as the decoded side does.
         bool dup = false;
         for (int i = 0; i < count && !dup; ++i)
+        {
             dup = (strcmp(truth[i].text, msg) == 0);
+            if (dup && snr > truth[i].snr)
+                truth[i].snr = snr;
+        }
         if (dup)
             continue;
         snprintf(truth[count].text, sizeof(truth[0].text), "%s", msg);
+        truth[count].snr = snr;
         count++;
     }
     fclose(f);
@@ -650,6 +684,159 @@ static int floor_for(const char* name)
 }
 
 // ---------------------------------------------------------------------------
+// SNR agreement with jt9 truth (issue #937). Every matched decode contributes
+// one (jt9 SNR, ft8_snr) pair; the summary is a least-squares fit of ours on
+// jt9's. The committed bounds file (testdata/ft8/snr_bounds.txt) is a ratchet
+// like floors.txt: "key value" lines, '#' comments. Keys:
+//   slope_min / slope_max   fitted slope of ours vs jt9
+//   r_min                   Pearson correlation
+//   mae_max                 mean |ours - jt9| in dB
+//   bias_min / bias_max     mean (ours - jt9) in dB: the calibration offset
+//   strong_mean_min         mean of ours over pairs where jt9 >= SNR_STRONG_DB
+// ---------------------------------------------------------------------------
+#define SNR_MAX_PAIRS 4096
+#define SNR_STRONG_DB 10
+
+static int g_snr_truth[SNR_MAX_PAIRS];
+static int g_snr_ours[SNR_MAX_PAIRS];
+static int g_snr_pairs = 0;
+
+static void snr_record(int truth, int ours)
+{
+    if (truth != SNR_UNKNOWN && g_snr_pairs < SNR_MAX_PAIRS)
+    {
+        g_snr_truth[g_snr_pairs] = truth;
+        g_snr_ours[g_snr_pairs] = ours;
+        g_snr_pairs++;
+    }
+}
+
+typedef struct
+{
+    int n;
+    double slope, r, mae, bias;
+    int strong_n;
+    double strong_mean;
+    int strong_min;
+} snr_stats_t;
+
+static snr_stats_t snr_compute(void)
+{
+    snr_stats_t s;
+    memset(&s, 0, sizeof(s));
+    s.n = g_snr_pairs;
+    s.strong_min = 999;
+    if (s.n < 2)
+        return s;
+    double mx = 0, my = 0;
+    for (int i = 0; i < s.n; ++i)
+    {
+        mx += g_snr_truth[i];
+        my += g_snr_ours[i];
+    }
+    mx /= s.n;
+    my /= s.n;
+    double sxx = 0, syy = 0, sxy = 0, strong_sum = 0;
+    for (int i = 0; i < s.n; ++i)
+    {
+        double dx = g_snr_truth[i] - mx, dy = g_snr_ours[i] - my;
+        sxx += dx * dx;
+        syy += dy * dy;
+        sxy += dx * dy;
+        s.mae += fabs((double)(g_snr_ours[i] - g_snr_truth[i]));
+        s.bias += g_snr_ours[i] - g_snr_truth[i];
+        if (g_snr_truth[i] >= SNR_STRONG_DB)
+        {
+            s.strong_n++;
+            strong_sum += g_snr_ours[i];
+            if (g_snr_ours[i] < s.strong_min)
+                s.strong_min = g_snr_ours[i];
+        }
+    }
+    s.slope = (sxx > 0) ? sxy / sxx : 0;
+    s.r = (sxx > 0 && syy > 0) ? sxy / sqrt(sxx * syy) : 0;
+    s.mae /= s.n;
+    s.bias /= s.n;
+    s.strong_mean = s.strong_n ? strong_sum / s.strong_n : 0;
+    return s;
+}
+
+// Markdown table of mean ours per 5 dB jt9 bin (the #937 before/after table).
+// Covers -30..+49, the range of an FT8 signal report; empty bins are skipped.
+static void snr_print_table(void)
+{
+    printf("| jt9 SNR | n | ft8_snr mean |\n|---|---|---|\n");
+    for (int lo = -30; lo <= 45; lo += 5)
+    {
+        int n = 0;
+        double sum = 0;
+        for (int i = 0; i < g_snr_pairs; ++i)
+            if (g_snr_truth[i] >= lo && g_snr_truth[i] < lo + 5)
+            {
+                n++;
+                sum += g_snr_ours[i];
+            }
+        if (n)
+            printf("| %+d..%+d | %d | %+.1f |\n", lo, lo + 4, n, sum / n);
+    }
+}
+
+// Returns the number of bound violations, or -1 if the file can't be read.
+static int snr_assert(const char* path, const snr_stats_t* s)
+{
+    FILE* f = fopen(path, "r");
+    if (!f)
+    {
+        fprintf(stderr, "ERROR: cannot open SNR bounds file %s\n", path);
+        return -1;
+    }
+    int failures = 0, checked = 0;
+    char line[256];
+    while (fgets(line, sizeof(line), f))
+    {
+        char key[64];
+        double v;
+        if (line[0] == '#' || sscanf(line, "%63s %lf", key, &v) != 2)
+            continue;
+        bool ok;
+        double got = 0;
+        if (strcmp(key, "slope_min") == 0)
+            ok = (got = s->slope) >= v;
+        else if (strcmp(key, "slope_max") == 0)
+            ok = (got = s->slope) <= v;
+        else if (strcmp(key, "r_min") == 0)
+            ok = (got = s->r) >= v;
+        else if (strcmp(key, "mae_max") == 0)
+            ok = (got = s->mae) <= v;
+        else if (strcmp(key, "bias_min") == 0)
+            ok = (got = s->bias) >= v;
+        else if (strcmp(key, "bias_max") == 0)
+            ok = (got = s->bias) <= v;
+        else if (strcmp(key, "strong_mean_min") == 0)
+            ok = s->strong_n > 0 && (got = s->strong_mean) >= v;
+        else
+        {
+            fprintf(stderr, "ERROR: unknown SNR bound '%s' in %s\n", key, path);
+            failures++;
+            continue;
+        }
+        checked++;
+        if (!ok)
+        {
+            fprintf(stderr, "SNR FAIL %s: got %.3f, bound %.3f\n", key, got, v);
+            failures++;
+        }
+    }
+    fclose(f);
+    if (checked == 0)
+    {
+        fprintf(stderr, "ERROR: no SNR bounds in %s\n", path);
+        failures++;
+    }
+    return failures;
+}
+
+// ---------------------------------------------------------------------------
 // Self-test: encode + synthesize a clean FT8 signal, decode it back.
 // ---------------------------------------------------------------------------
 static int self_test(void)
@@ -697,6 +884,8 @@ static int self_test(void)
 int main(int argc, char** argv)
 {
     const char* floors_path = NULL;
+    const char* snr_bounds_path = NULL;
+    bool snr_table = false;
     bool do_self_test = false;
     const char* wavs[512];
     int num_wavs = 0;
@@ -738,6 +927,10 @@ int main(int argc, char** argv)
             g_max_loops = atoi(argv[++i]);
         else if (strcmp(a, "--assert-floor") == 0 && i + 1 < argc)
             floors_path = argv[++i];
+        else if (strcmp(a, "--assert-snr") == 0 && i + 1 < argc)
+            snr_bounds_path = argv[++i];
+        else if (strcmp(a, "--snr-table") == 0)
+            snr_table = true;
         else if (a[0] == '-')
         {
             fprintf(stderr, "ERROR: unknown flag %s\n", a);
@@ -833,8 +1026,12 @@ int main(int argc, char** argv)
         int matched = 0;
         for (int t = 0; t < num_truth; ++t)
         {
-            if (msglist_contains(&seen, truth[t].text))
+            const bench_msg_t* got = msglist_find(&seen, truth[t].text);
+            if (got)
+            {
                 matched++;
+                snr_record(truth[t].snr, got->snr);
+            }
             else if (g_verbose)
                 printf("  - MISSED  %s\n", truth[t].text);
         }
@@ -864,10 +1061,20 @@ int main(int argc, char** argv)
            total_decoded, total_matched, total_truth,
            total_truth > 0 ? 100.0 * total_matched / total_truth : 0.0, total_extra);
 
+    snr_stats_t ss = snr_compute();
+    printf("SNR n=%d slope=%.2f r=%.2f mae=%.2f bias=%+.2f strong_n=%d strong_mean=%+.1f strong_min=%+d\n",
+           ss.n, ss.slope, ss.r, ss.mae, ss.bias, ss.strong_n, ss.strong_mean,
+           ss.strong_n ? ss.strong_min : 0);
+    if (snr_table)
+        snr_print_table();
+
+    int snr_failures = snr_bounds_path ? snr_assert(snr_bounds_path, &ss) : 0;
+    if (snr_failures < 0)
+        return 2;
+
     if (floor_failures > 0)
-    {
         fprintf(stderr, "%d file(s) below floor\n", floor_failures);
-        return 1;
-    }
-    return 0;
+    if (snr_failures > 0)
+        fprintf(stderr, "%d SNR bound(s) violated\n", snr_failures);
+    return (floor_failures > 0 || snr_failures > 0) ? 1 : 0;
 }

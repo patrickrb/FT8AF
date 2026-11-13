@@ -32,8 +32,19 @@ public class BluetoothSerialSocket implements Runnable {
     private final Context context;
     private BluetoothSerialListener listener;
     private final BluetoothDevice device;
-    private BluetoothSocket socket;
-    private boolean connected;
+    // volatile: assigned on the RFCOMM connect thread (run()), cleared to null on
+    // the disconnect thread (disconnect(), driven by the background
+    // INTENT_ACTION_DISCONNECT receiver or the read loop's error path), and read
+    // on the CAT/TX thread (write()). Readers MUST snapshot it into a local before
+    // check-and-use — see write()/writeIfConnected.
+    private volatile BluetoothSocket socket;
+    // volatile for the same reason as socket: set on the connect thread and read on
+    // the CAT/TX thread (write()) — without it those reads can see a stale value
+    // under the Java memory model. Note it is cleared on the *read* thread, not the
+    // disconnect thread: disconnect() deliberately leaves this flag alone (see the
+    // comment there) and closing the socket is what makes the blocked read() throw,
+    // so the run() error path is the single writer that clears it.
+    private volatile boolean connected;
 
     public BluetoothSerialSocket(Context context, BluetoothDevice device) {
         if(context instanceof Activity)
@@ -74,7 +85,11 @@ public class BluetoothSerialSocket implements Runnable {
 
     void disconnect() {
         listener = null; // ignore remaining data and errors
-        // connected = false; // run loop will reset connected
+        // `connected` is intentionally NOT cleared here: closing the socket below
+        // unblocks read() in run(), whose error path clears it on the read thread.
+        // Callers are not left exposed in the meantime — write() snapshots the
+        // socket, so a null snapshot already yields the "not connected" IOException
+        // even while this flag is still true (see writeIfConnected).
         if(socket != null) {
             try {
                 socket.close();
@@ -89,9 +104,62 @@ public class BluetoothSerialSocket implements Runnable {
     }
 
     void write(byte[] data) throws IOException {
-        if (!connected)
+        // Snapshot the volatile socket ONCE. disconnect() (the background
+        // INTENT_ACTION_DISCONNECT receiver, or the read loop's error path) may
+        // null `socket` on another thread between the connected check and the
+        // getOutputStream() call. Reading the field twice let that concurrent
+        // disconnect turn a passed null-check into a null dereference — an NPE
+        // that escapes BluetoothRigConnector.sendCommand's IOException-only catch
+        // and crashes the CAT/TX worker mid-QSO. Passing the single snapshot to
+        // writeIfConnected reports a torn-down link as the "not connected"
+        // IOException the caller already handles instead. Mirrors the USB-serial
+        // fix in CableSerialPort.writeIfOpen.
+        final BluetoothSocket s = socket;
+        writeIfConnected(connected, s == null ? null : d -> s.getOutputStream().write(d), data);
+    }
+
+    /**
+     * A sink that writes one frame to the live link — the socket's output stream
+     * in production, a capture in tests.
+     */
+    @FunctionalInterface
+    interface ByteSink {
+        void write(byte[] data) throws IOException;
+    }
+
+    /**
+     * Issue a write only if the link is still up. {@code sink} is the caller's
+     * single snapshot of the (volatile) socket's writer, so a concurrent
+     * {@link #disconnect()} that nulls the field afterwards cannot affect this
+     * call. When the link is down ({@code !connected}) or the snapshot was
+     * already null (disconnect() nulled the socket and the read loop has not yet
+     * cleared {@code connected}),
+     * throw the {@code "not connected"} {@link IOException} the CAT connector
+     * already handles ({@code BluetoothRigConnector.sendCommand}) rather than
+     * NPEing on a nulled socket and crashing the CAT/TX worker thread. Mirrors
+     * {@code CableSerialPort.writeIfOpen} on the USB-serial path.
+     */
+    static void writeIfConnected(boolean connected, ByteSink sink, byte[] data) throws IOException {
+        if (!connected || sink == null) {
             throw new IOException("not connected");
-        socket.getOutputStream().write(data);
+        }
+        sink.write(data);
+    }
+
+    /**
+     * Turn one {@link java.io.InputStream#read(byte[])} result into the frame to hand the
+     * listener. A negative length means the remote closed the RFCOMM stream (radio powered
+     * off, link dropped) — a normal end-of-stream, not corrupt data. Report it as a plain
+     * disconnect instead of letting {@code Arrays.copyOf(buffer, -1)} throw a
+     * NegativeArraySizeException whose "-1" message then surfaces to the operator as a bogus
+     * I/O error (every other transport checks {@code read() < 0} for EOF). For {@code len >= 0}
+     * the returned frame is byte-for-byte identical to the previous behaviour.
+     */
+    static byte[] frameFromRead(byte[] buffer, int len) throws IOException {
+        if (len < 0) {
+            throw new IOException("connection closed by remote device");
+        }
+        return Arrays.copyOf(buffer, len);
     }
 
     @SuppressLint("MissingPermission")
@@ -122,7 +190,7 @@ public class BluetoothSerialSocket implements Runnable {
             //noinspection InfiniteLoopStatement
             while (true) {
                 len = socket.getInputStream().read(buffer);
-                byte[] data = Arrays.copyOf(buffer, len);
+                byte[] data = frameFromRead(buffer, len);
                 if(listener != null)
                     listener.onSerialRead(data);
             }

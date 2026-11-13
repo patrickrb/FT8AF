@@ -128,6 +128,7 @@
     <string name="qsopanel_qsoing_with">%1$s ile QSO yapılıyor</string>
     <string name="qsopanel_waiting_for">%1$s bekleniyor</string>
     <string name="qsopanel_tap_to_view">görüntülemek için dokunun ↗</string>
+    <string name="qsopanel_sent_report">gönderilen %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Mesajlar bekleniyor...</string>
     <string name="qsopanel_log_action">GÜNLÜK</string>
@@ -226,9 +227,11 @@
     <string name="log_sync_title_no_services">ETKİN SERVİS YOK</string>
     <string name="log_sync_title_syncing">EŞİTLENİYOR…</string>
     <string name="log_sync_title_complete">EŞİTLEME TAMAMLANDI</string>
-    <string name="log_sync_enable_services">Ayarlar\'da Cloudlog/Wavelog/Nextlog veya QRZ\'yi etkinleştirip yeniden deneyin.</string>
+    <string name="log_sync_enable_services">Ayarlar\'da Cloudlog/Wavelog/Nextlog, QRZ veya World Radio League\'i etkinleştirip yeniden deneyin.</string>
     <string name="log_sync_progress_count">%2$d QSO\'dan %1$d</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d kabul edildi</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d zaten kayıt defterinde</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d indirildi</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d kabul edildi</string>
     <string name="log_sync_nothing_to_upload">Günlükte henüz yüklenecek QSO yok.</string>
     <string name="log_sync_working">İşleniyor…</string>
@@ -237,6 +240,25 @@
     <string name="pota_tab_activate">Aktive Et</string>
     <string name="pota_tab_hunt">Av</string>
     <string name="pota_tab_history">Geçmiş</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">az önce</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="one">%d sn önce</item>
+        <item quantity="other">%d sn önce</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="one">%d dk önce</item>
+        <item quantity="other">%d dk önce</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="one">%d sa önce</item>
+        <item quantity="other">%d sa önce</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="one">%d g önce</item>
+        <item quantity="other">%d g önce</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">UTC saatini göster</string>
     <string name="pota_start_activation">Aktivasyonu başlat</string>
     <string name="pota_park_reference_label">Park referansı (ör. K-1234)</string>
     <string name="pota_notes_optional_label">Notlar (isteğe bağlı)</string>
@@ -248,6 +270,7 @@
     <string name="pota_self_spot_failed">Kendi spotu başarısız — günlüğe bakın</string>
     <string name="pota_active_park">AKTİF — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_dupe">mükerrer</string>
     <string name="pota_contacts_map">Bağlantı haritası</string>
     <string name="pota_back">Geri</string>
     <string name="pota_valid_activation">geçerli aktivasyon</string>
@@ -395,6 +418,9 @@
     <string name="settings_tx_watchdog_desc">Zaman aşımından sonra yayını otomatik durdur</string>
     <string name="settings_stop_after">Şundan Sonra Durdur</string>
     <string name="settings_stop_after_desc">N yanıtsız denemeden sonra çağrıyı durdur</string>
+    <string name="settings_max_73">Maks. 73 gönderimi</string>
+    <string name="settings_max_73_desc">Devam etmeden önce görüşme başına en fazla RR73/73 gönderim sayısı</string>
+    <string name="settings_max_73_auto">Otomatik</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Av (CQ\'lara otomatik yanıt)</string>
@@ -462,6 +488,9 @@
     <string name="settings_qrz_profile_lookup_desc">QRZ XML API için kullanıcı adı + parola (avatarlar)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">QSO\'ları bir Cloudlog, Wavelog veya Nextlog örneğine otomatik yükle</string>
+    <string name="settings_cloudlog_download">Eşitlerken QSO\'ları Wavelog\'dan indir</string>
+    <string name="settings_cloudlog_download_desc">Eşitleme, Wavelog kayıt defterinizde olup bu kayıtta olmayan QSO\'ları da ekler. Bunlar QRZ veya World Radio League\'e gönderilmez.</string>
+    <string name="settings_cloudlog_download_unsupported">Wavelog gerekir: bu sunucu QSO\'larını listeleyemiyor.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">PTT Gecikmesi</string>
@@ -478,8 +507,11 @@
     <string name="bug_report_send_email">E-posta gönder</string>
     <string name="bug_report_no_email_app">Raporu göndermek için e-posta uygulaması bulunamadı</string>
     <string name="bug_report_open_github">GitHub sorunu aç</string>
-    <string name="settings_debug">Hata Ayıklama</string>
     <string name="settings_debug_desc">debug.log\'u görüntüle / paylaş</string>
+    <string name="settings_share_logs">Günlükleri paylaş</string>
+    <string name="settings_share_logs_desc">debug.log\'u e-posta, Discord, Drive… ile gönder</string>
+    <string name="settings_view_logs">Günlükleri görüntüle</string>
+    <string name="settings_share_logs_empty">Henüz kayıtlı günlük yok</string>
     <string name="settings_about_body">Sürüm %1$s (derleme %2$s)\nDerleme tarihi %3$s\n\nFT8, kolaylaştırıldı.\n\nAndroid için bağımsız bir FT8 alıcı-verici uygulaması. Otomatik sıralama ve günlükleme ile USB, Bluetooth ve ağ üzerinden cihaz kontrolü.</string>
     <string name="settings_website">Web Sitesi</string>
     <string name="settings_community">Topluluk</string>
@@ -499,8 +531,6 @@
     <string name="settings_conn_network">Ağ</string>
     <string name="settings_no_usb_serial">USB seri cihaz algılanmadı. Lütfen radyonuza bir USB kablo bağlayıp yeniden deneyin.</string>
     <string name="settings_no_bluetooth_devices">Eşleştirilmiş Bluetooth cihazı bulunamadı. Önce Android Bluetooth ayarlarında bir cihaz eşleştirin.</string>
-    <string name="settings_debug_mode_enabled">Hata ayıklama modu etkin</string>
-    <string name="settings_debug_mode_disabled">Hata ayıklama modu devre dışı</string>
     <string name="settings_edit_operator_identity">Operatör Kimliğini Düzenle</string>
     <string name="settings_callsign">Çağrı İşareti</string>
     <string name="settings_callsign_hint">ör. W1AW</string>
@@ -523,6 +553,7 @@
     <string name="settings_username_hint">QRZ.com kullanıcı adınız</string>
     <string name="settings_password">Parola</string>
     <string name="settings_enabled_bands_dialog_desc">Gizli bantlar frekans seçicilerde görünmez.</string>
+    <string name="settings_enabled_bands_keep_one">En az bir bant etkin kalmalıdır.</string>
     <string name="settings_select_serial_port">Seri Port Seç</string>
     <string name="settings_tx_volume_advice">Canlı ayarlayın — bir sonraki TX\'iniz bu düzeyi kullanır. Radyonuzun ALC\'sini izleyin ve çizgiye değecek kadar düşürün.</string>
     <string name="settings_input_volume">Giriş Ses Düzeyi</string>
@@ -549,6 +580,8 @@
     <string name="cq_offset_moved">CQ ofseti boş bir noktaya taşındı: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Otomatik boş TX ofseti</string>
     <string name="settings_auto_clear_tx_desc">CQ çağrılırken son bant etkinliğine göre boş bir nokta seçer ve doldurulursa başka yere taşınır</string>
+    <string name="settings_auto_clear_tx_min">En düşük otomatik ofset</string>
+    <string name="settings_auto_clear_tx_min_desc">Otomatik seçim bunun altında bir ofset seçmez. Ses harmoniklerini geçiş bandının dışında tutmak için yükseltin</string>
     <string name="tune_content_description">Tune: telsizin tunerini başlatır veya anten ayarı için sürekli taşıyıcı gönderir</string>
     <string name="tune_stopped_timeout">Tune %1$d s sonra durduruldu</string>
     <string name="tune_blocked_tx">Tune kullanmadan önce CQ/QSO\'yu durdurun</string>
@@ -580,4 +613,15 @@
     <string name="settings_bin_agg_max">Maksimum</string>
     <string name="settings_bin_agg_avg">Ortalama</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d kabul edildi</string>
+    <string name="settings_wrl_desc">QSO\'ları World Radio League kayıt defterinize otomatik yükle (Developer API anahtarı gerekir)</string>
+    <string name="settings_wrl_dialog_desc">World Radio League\'de Integrations → Developer API altında bir anahtar oluşturun. Tek anahtar tüm hesabınızı kapsar.</string>
+    <string name="settings_wrl_logbook">Kayıt defteri</string>
+    <string name="settings_wrl_logbook_default">Varsayılan kayıt defteri</string>
+    <string name="settings_wrl_loading_logbooks">Kayıt defterleri yükleniyor…</string>
+    <string name="settings_wrl_no_logbooks">World Radio League hesabınızda henüz kayıt defteri yok.</string>
+    <string name="settings_wrl_create_logbook">“%1$s” kayıt defterini oluştur</string>
+    <string name="settings_wrl_creating_logbook">Kayıt defteri oluşturuluyor…</string>
 </resources>

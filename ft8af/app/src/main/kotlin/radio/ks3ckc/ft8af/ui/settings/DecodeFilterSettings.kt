@@ -14,6 +14,7 @@ import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import radio.ks3ckc.ft8af.ui.components.GlassCard
 import radio.ks3ckc.ft8af.ui.components.SettingsRow
+import radio.ks3ckc.ft8af.ui.decode.WorkedStationScope
 
 /**
  * Decode-list settings: highlight rules, callsign blocklist, display filters,
@@ -26,11 +27,19 @@ fun DecodeFilterSettings(
 ) {
     // Decode-list highlight toggles
     var highlightNewDxcc by remember { mutableStateOf(GeneralVariables.highlightNewDxcc) }
+    var highlightNewZone by remember { mutableStateOf(GeneralVariables.highlightNewZone) }
+    var highlightNewState by remember { mutableStateOf(GeneralVariables.highlightNewState) }
     var highlightNewGrid by remember { mutableStateOf(GeneralVariables.highlightNewGrid) }
+    var highlightNewPrefix by remember { mutableStateOf(GeneralVariables.highlightNewPrefix) }
     var highlightNewBand by remember { mutableStateOf(GeneralVariables.highlightNewBand) }
     var highlightWorked by remember { mutableStateOf(GeneralVariables.highlightWorked) }
+    var workedStationMode by remember { mutableStateOf(GeneralVariables.workedStationMode) }
+    var workedStationScope by remember { mutableStateOf(GeneralVariables.workedStationScope) }
+    var workedSameMode by remember { mutableStateOf(GeneralVariables.workedSameMode) }
+    var workedStationList by remember { mutableStateOf(GeneralVariables.getWorkedStationList()) }
     var highlightPota by remember { mutableStateOf(GeneralVariables.highlightPota) }
     var distanceInMiles by remember { mutableStateOf(GeneralVariables.distanceInMiles) }
+    var showBeamHeading by remember { mutableStateOf(GeneralVariables.showBeamHeading) }
 
     // Callsign blocklist (comma-separated entries) + decode display filters
     var blockedExact by remember { mutableStateOf(GeneralVariables.getBlockedExactCallsigns()) }
@@ -47,6 +56,7 @@ fun DecodeFilterSettings(
     var alertNewState by remember { mutableStateOf(GeneralVariables.alertNewState) }
     var alertOnCqReply by remember { mutableStateOf(GeneralVariables.alertOnCqReply) }
     var alertOnQsoComplete by remember { mutableStateOf(GeneralVariables.alertOnQsoComplete) }
+    var watchCallsigns by remember { mutableStateOf(GeneralVariables.getWatchCallsigns()) }
 
     // Continent codes (stored on the message) and their display names, parallel lists.
     val continentCodes = listOf("NA", "SA", "EU", "AF", "AS", "OC", "AN")
@@ -60,10 +70,30 @@ fun DecodeFilterSettings(
         stringResource(R.string.continent_an),
     )
 
+    // Worked-station handling labels, indexed by the persisted mode/scope ordinals.
+    val workedModeLabels = listOf(
+        stringResource(R.string.settings_worked_mode_highlight),
+        stringResource(R.string.settings_worked_mode_ignore),
+        stringResource(R.string.settings_worked_mode_hide),
+    )
+    val workedScopeLabels = listOf(
+        stringResource(R.string.settings_worked_scope_on_band),
+        stringResource(R.string.settings_worked_scope_before),
+        stringResource(R.string.settings_worked_scope_today),
+        stringResource(R.string.settings_worked_scope_from_list),
+    )
+    // FROM_LIST scope ordinal — the list editor row only appears for this scope.
+    // Derived from the enum so it can't drift if the scope entries are reordered.
+    val workedScopeFromList = WorkedStationScope.FROM_LIST.ordinal
+
     var showBlockExactDialog by remember { mutableStateOf(false) }
     var showBlockPrefixDialog by remember { mutableStateOf(false) }
     var showBlockKeywordDialog by remember { mutableStateOf(false) }
     var showContinentPicker by remember { mutableStateOf(false) }
+    var showWorkedModePicker by remember { mutableStateOf(false) }
+    var showWorkedScopePicker by remember { mutableStateOf(false) }
+    var showWorkedListDialog by remember { mutableStateOf(false) }
+    var showWatchDialog by remember { mutableStateOf(false) }
 
     // -- Blocklist: exact whole-call dialog --
     if (showBlockExactDialog) {
@@ -131,6 +161,70 @@ fun DecodeFilterSettings(
         )
     }
 
+    // -- Worked stations: behavior (highlight / ignore / hide) picker --
+    if (showWorkedModePicker) {
+        ListPickerDialog(
+            title = stringResource(R.string.settings_worked_mode),
+            items = workedModeLabels,
+            selectedIndex = workedStationMode.coerceIn(0, workedModeLabels.size - 1),
+            onDismiss = { showWorkedModePicker = false },
+            onSelect = { index ->
+                showWorkedModePicker = false
+                workedStationMode = index
+                GeneralVariables.workedStationMode = index
+                mainViewModel.databaseOpr.writeConfig("workedStationMode", index.toString(), null)
+            },
+        )
+    }
+
+    // -- Worked stations: scope (on band / before / today / from list) picker --
+    if (showWorkedScopePicker) {
+        ListPickerDialog(
+            title = stringResource(R.string.settings_worked_scope),
+            items = workedScopeLabels,
+            selectedIndex = workedStationScope.coerceIn(0, workedScopeLabels.size - 1),
+            onDismiss = { showWorkedScopePicker = false },
+            onSelect = { index ->
+                showWorkedScopePicker = false
+                workedStationScope = index
+                GeneralVariables.workedStationScope = index
+                mainViewModel.databaseOpr.writeConfig("workedStationScope", index.toString(), null)
+            },
+        )
+    }
+
+    // -- Worked stations: user-maintained "from list" callsigns --
+    if (showWorkedListDialog) {
+        TextListDialog(
+            title = stringResource(R.string.settings_worked_list_title),
+            description = stringResource(R.string.settings_worked_list_desc),
+            initialValue = workedStationList,
+            onDismiss = { showWorkedListDialog = false },
+            onSave = { text ->
+                GeneralVariables.addWorkedStationList(text)
+                workedStationList = GeneralVariables.getWorkedStationList()
+                mainViewModel.databaseOpr.writeConfig("workedStationList", workedStationList, null)
+                showWorkedListDialog = false
+            },
+        )
+    }
+
+    // -- Needed-DX alerts: callsign watchlist editor --
+    if (showWatchDialog) {
+        TextListDialog(
+            title = stringResource(R.string.settings_watch_dialog_title),
+            description = stringResource(R.string.settings_watch_dialog_desc),
+            initialValue = watchCallsigns,
+            onDismiss = { showWatchDialog = false },
+            onSave = { text ->
+                GeneralVariables.addWatchCallsigns(text)
+                watchCallsigns = GeneralVariables.getWatchCallsigns()
+                mainViewModel.databaseOpr.writeConfig("watchCallsigns", watchCallsigns, null)
+                showWatchDialog = false
+            },
+        )
+    }
+
     SettingsDetailScaffold(
         title = stringResource(R.string.settings_cat_decode_filters),
         onBack = onBack,
@@ -155,6 +249,32 @@ fun DecodeFilterSettings(
                     )
                     SectionDivider()
                     SettingsRow(
+                        label = stringResource(R.string.settings_highlight_new_zone),
+                        description = stringResource(R.string.settings_highlight_new_zone_desc),
+                        toggle = highlightNewZone,
+                        onToggleChange = { checked ->
+                            highlightNewZone = checked
+                            GeneralVariables.highlightNewZone = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "highlightNewZone", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_highlight_new_state),
+                        description = stringResource(R.string.settings_highlight_new_state_desc),
+                        toggle = highlightNewState,
+                        onToggleChange = { checked ->
+                            highlightNewState = checked
+                            GeneralVariables.highlightNewState = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "highlightNewState", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
                         label = stringResource(R.string.settings_highlight_new_grid),
                         description = stringResource(R.string.settings_highlight_new_grid_desc),
                         toggle = highlightNewGrid,
@@ -163,6 +283,19 @@ fun DecodeFilterSettings(
                             GeneralVariables.highlightNewGrid = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "highlightNewGrid", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_highlight_new_prefix),
+                        description = stringResource(R.string.settings_highlight_new_prefix_desc),
+                        toggle = highlightNewPrefix,
+                        onToggleChange = { checked ->
+                            highlightNewPrefix = checked
+                            GeneralVariables.highlightNewPrefix = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "highlightNewPrefix", if (checked) "1" else "0", null,
                             )
                         },
                     )
@@ -205,6 +338,59 @@ fun DecodeFilterSettings(
                             )
                         },
                     )
+                    if (highlightWorked) {
+                        SectionDivider()
+                        SettingsRow(
+                            label = stringResource(R.string.settings_worked_mode),
+                            description = stringResource(R.string.settings_worked_mode_desc),
+                            value = workedModeLabels.getOrElse(workedStationMode) {
+                                workedModeLabels.first()
+                            },
+                            showChevron = true,
+                            onClick = { showWorkedModePicker = true },
+                        )
+                        SectionDivider()
+                        SettingsRow(
+                            label = stringResource(R.string.settings_worked_scope),
+                            description = stringResource(R.string.settings_worked_scope_desc),
+                            value = workedScopeLabels.getOrElse(workedStationScope) {
+                                workedScopeLabels.first()
+                            },
+                            showChevron = true,
+                            onClick = { showWorkedScopePicker = true },
+                        )
+                        // "and mode" refinement — meaningless for the user list, so
+                        // only offer it for the band/before/today scopes.
+                        if (workedStationScope != workedScopeFromList) {
+                            SectionDivider()
+                            SettingsRow(
+                                label = stringResource(R.string.settings_worked_same_mode),
+                                description = stringResource(R.string.settings_worked_same_mode_desc),
+                                toggle = workedSameMode,
+                                onToggleChange = { checked ->
+                                    workedSameMode = checked
+                                    GeneralVariables.workedSameMode = checked
+                                    mainViewModel.databaseOpr.writeConfig(
+                                        "workedSameMode", if (checked) "1" else "0", null,
+                                    )
+                                    // Reload the worked lists so the new filter applies now.
+                                    mainViewModel.databaseOpr.getAllQSLCallsigns()
+                                },
+                            )
+                        }
+                        if (workedStationScope == workedScopeFromList) {
+                            SectionDivider()
+                            SettingsRow(
+                                label = stringResource(R.string.settings_worked_list_title),
+                                description = stringResource(R.string.settings_worked_list_desc),
+                                value = workedStationList.ifBlank {
+                                    stringResource(R.string.common_none)
+                                },
+                                showChevron = true,
+                                onClick = { showWorkedListDialog = true },
+                            )
+                        }
+                    }
                     SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_distance_unit),
@@ -215,6 +401,19 @@ fun DecodeFilterSettings(
                             GeneralVariables.distanceInMiles = checked
                             mainViewModel.databaseOpr.writeConfig(
                                 "distanceInMiles", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_show_beam_heading),
+                        description = stringResource(R.string.settings_show_beam_heading_desc),
+                        toggle = showBeamHeading,
+                        onToggleChange = { checked ->
+                            showBeamHeading = checked
+                            GeneralVariables.showBeamHeading = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "showBeamHeading", if (checked) "1" else "0", null,
                             )
                         },
                     )
@@ -359,6 +558,14 @@ fun DecodeFilterSettings(
         SettingsSection(title = stringResource(R.string.settings_section_needed_dx_alerts)) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column {
+                    SettingsRow(
+                        label = stringResource(R.string.settings_alert_watchlist),
+                        description = stringResource(R.string.settings_alert_watchlist_desc),
+                        value = watchCallsigns.ifBlank { stringResource(R.string.common_none) },
+                        showChevron = true,
+                        onClick = { showWatchDialog = true },
+                    )
+                    SectionDivider()
                     SettingsRow(
                         label = stringResource(R.string.settings_alert_new_dxcc),
                         description = stringResource(R.string.settings_alert_new_dxcc_desc),

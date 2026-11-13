@@ -55,21 +55,28 @@ import androidx.lifecycle.ViewModelStoreOwner;
 import com.k1af.ft8af.callsign.CallsignDatabase;
 import com.k1af.ft8af.callsign.CallsignInfo;
 import com.k1af.ft8af.callsign.OnAfterQueryCallsignLocation;
+import com.k1af.ft8af.bluetooth.ScoLinkCoordinator;
+import com.k1af.ft8af.bluetooth.TxScoLatch;
+import com.k1af.ft8af.bluetooth.ScoLinkTracker;
 import com.k1af.ft8af.bluetooth.ScoPolicy;
+import com.k1af.ft8af.connector.BaseRigConnector;
 import com.k1af.ft8af.connector.BluetoothRigConnector;
 import com.k1af.ft8af.connector.CableConnector;
 import com.k1af.ft8af.connector.CableSerialPort;
 import com.k1af.ft8af.connector.ConnectMode;
 import com.k1af.ft8af.connector.FlexConnector;
 import com.k1af.ft8af.connector.IComWifiConnector;
+import com.k1af.ft8af.connector.UsbPermissionThrottle;
 import com.k1af.ft8af.connector.X6100Connector;
 import com.k1af.ft8af.database.ControlMode;
 import com.k1af.ft8af.database.DatabaseOpr;
 import com.k1af.ft8af.database.OnAfterQueryFollowCallsigns;
 import com.k1af.ft8af.database.OperationBand;
 import com.k1af.ft8af.database.RigNameList;
+import com.k1af.ft8af.database.WorkedModeFilter;
 import com.k1af.ft8af.flex.FlexRadio;
 import com.k1af.ft8af.flex.RadioTcpClient;
+import com.k1af.ft8af.ft8listener.FastPassDisposition;
 import com.k1af.ft8af.ft8listener.FT8SignalListener;
 import com.k1af.ft8af.ft8listener.OnFt8Listen;
 import com.k1af.ft8af.ft8transmit.FT8TransmitSignal;
@@ -79,19 +86,27 @@ import com.k1af.ft8af.ft8transmit.OnTransmitSuccess;
 import com.k1af.ft8af.ft8transmit.TuneMethod;
 import com.k1af.ft8af.html.LogHttpServer;
 import com.k1af.ft8af.icom.WifiRig;
+import com.k1af.ft8af.log.AdifFormat;
+import com.k1af.ft8af.log.AdifLogFile;
 import com.k1af.ft8af.log.QSLCallsignRecord;
 import com.k1af.ft8af.log.QSLRecord;
 import com.k1af.ft8af.log.SWLQsoList;
 import com.k1af.ft8af.log.ThirdPartyService;
+import com.k1af.ft8af.log.WrlApi;
 import com.k1af.ft8af.rigs.BaseRig;
 import com.k1af.ft8af.rigs.BaseRigOperation;
 import com.k1af.ft8af.rigs.CatConnectionState;
-import com.k1af.ft8af.rigs.CatLiveness;
+import com.k1af.ft8af.rigs.CivAddressConfig;
+import com.k1af.ft8af.rigs.RetunePolicy;
+import com.k1af.ft8af.rigs.RigDialTarget;
+import radio.core.cat.CatLiveness;
+import com.k1af.ft8af.rigs.CatLivenessTracker;
 import com.k1af.ft8af.rigs.DiscoveryTX500Rig;
 import com.k1af.ft8af.rigs.ElecraftRig;
 import com.k1af.ft8af.rigs.Flex6000Rig;
 import com.k1af.ft8af.rigs.FlexNetworkRig;
 import com.k1af.ft8af.rigs.GuoHeQ900Rig;
+import com.k1af.ft8af.rigs.HamlibRig;
 import com.k1af.ft8af.rigs.IcomRig;
 import com.k1af.ft8af.rigs.InstructionSet;
 import com.k1af.ft8af.rigs.KenwoodKT90Rig;
@@ -99,11 +114,13 @@ import com.k1af.ft8af.rigs.KenwoodTS2000Rig;
 import com.k1af.ft8af.rigs.KenwoodTS440Rig;
 import com.k1af.ft8af.rigs.KenwoodTS570Rig;
 import com.k1af.ft8af.rigs.KenwoodTS590Rig;
+import com.k1af.ft8af.rigs.QrpLabsQmxRig;
 import com.k1af.ft8af.rigs.OnRigStateChanged;
 import com.k1af.ft8af.rigs.TrUSDXRig;
 import com.k1af.ft8af.rigs.Wolf_sdr_450Rig;
 import com.k1af.ft8af.rigs.XieGu6100NetRig;
 import com.k1af.ft8af.rigs.XieGu6100Rig;
+import com.k1af.ft8af.rigs.XieGuG106Rig;
 import com.k1af.ft8af.rigs.XieGuRig;
 import com.k1af.ft8af.rigs.Yaesu2Rig;
 import com.k1af.ft8af.rigs.Yaesu2_847Rig;
@@ -112,15 +129,22 @@ import com.k1af.ft8af.rigs.Yaesu38_450Rig;
 import com.k1af.ft8af.rigs.Yaesu39Rig;
 import com.k1af.ft8af.rigs.YaesuDX10Rig;
 import com.k1af.ft8af.spectrum.SpectrumListener;
+import com.k1af.ft8af.timer.ClockSelfSync;
+import com.k1af.ft8af.timer.DecodeDtDisplay;
 import com.k1af.ft8af.timer.OnUtcTimer;
 import com.k1af.ft8af.timer.UtcTimer;
 import com.k1af.ft8af.ui.ToastMessage;
+import com.k1af.ft8af.wave.AudioChannelSelect;
 import com.k1af.ft8af.wave.HamRecorder;
+import com.k1af.ft8af.wave.MicRecorder;
 import com.k1af.ft8af.wave.OnGetVoiceDataDone;
 import com.k1af.ft8af.x6100.X6100Radio;
 
 import radio.ks3ckc.ft8af.UsbPermissionIntentsKt;
 import radio.ks3ckc.ft8af.pskreporter.PskReporterSender;
+import radio.ks3ckc.ft8af.sync.CloudlogFailureHint;
+import radio.ks3ckc.ft8af.wsjtx.WsjtxCodec;
+import radio.ks3ckc.ft8af.wsjtx.WsjtxUdpService;
 
 import java.io.File;
 import java.io.IOException;
@@ -158,7 +182,26 @@ public class MainViewModel extends ViewModel {
 
     //public int decoded_counter = 0;//total decoded count
     public final ArrayList<Ft8Message> ft8Messages = new ArrayList<>();//message list
+    // "Clear every cycle": a wipe armed at the cycle start and applied with that
+    // cycle's first decodes (see beforeListen / appendToMessageList). Holds the slot
+    // utc the clear was armed for (0 = none pending) so that a straggling late/deep
+    // decode pass from the PREVIOUS slot can't consume the clear armed for the next
+    // slot and leave its decodes appended onto the old slot's list (#976). Guarded by
+    // ft8Messages.
+    private long pendingClearSlotUtc = 0;
     public UtcTimer utcTimer;//timer for sync-triggered actions.
+
+    // Self-syncing clock (opt-in): per-slot median-DT estimator that trims
+    // UtcTimer.delay from the band itself. Fed from afterDecode's fast pass;
+    // reset by the settings toggle / GPS discipline takeover. Public so
+    // TimeSyncSettings can reset it when the operator flips the toggles.
+    public final ClockSelfSync clockSelfSync = new ClockSelfSync();
+
+    // Robust, smoothed source for the DT figure the UI shows (clock-sync pill + Time Sync
+    // readout). Always on — unlike clockSelfSync it never touches the clock, it only decides
+    // what number is honest to display. See DecodeDtDisplay for why the raw per-slot mean
+    // this replaced made a perfectly-synced rig look 2 s out.
+    public final DecodeDtDisplay decodeDtDisplay = new DecodeDtDisplay();
 
 
     //public CallsignDatabase callsignDatabase = null;//callsign information database
@@ -202,8 +245,6 @@ public class MainViewModel extends ViewModel {
 
     private final ExecutorService getQTHThreadPool = Executors.newCachedThreadPool();
     private final ExecutorService sendWaveDataThreadPool = Executors.newCachedThreadPool();
-    private final GetQTHRunnable getQTHRunnable = new GetQTHRunnable(this);
-    private final SendWaveDataRunnable sendWaveDataRunnable = new SendWaveDataRunnable();
 
 
     //variables for displaying shared log generation progress
@@ -229,8 +270,16 @@ public class MainViewModel extends ViewModel {
     public HamRecorder hamRecorder;//recording object
     public FT8SignalListener ft8SignalListener;//object for listening to and decoding FT8 signals
     public FT8TransmitSignal ft8TransmitSignal;//object for transmitting signals
-    // Deep-pass decodes that arrived mid-TX, replayed to the sequencer after key-up
-    private final PendingSequencerDecodes pendingSequencerDecodes = new PendingSequencerDecodes();
+    // "We keyed the rig and haven't confirmed it back off" — settled by
+    // retryPendingUnkey() on reconnect and at slot boundaries.
+    private final PttSafetyLatch pttSafetyLatch = new PttSafetyLatch();
+    /**
+     * Whether our SCO link was up when the current over was keyed — snapshotted
+     * in {@code beginKeying()} before {@code stopSco()} tears it down, because
+     * the TX path asks after the PTT settle delay, by which time the tracker
+     * already says "down" (see {@link TxScoLatch}).
+     */
+    private final TxScoLatch txScoLatch = new TxScoLatch();
     public MeterProtectionController meterProtectionController;//ALC auto-volume + SWR halt
     public SpectrumListener spectrumListener;//object for drawing the spectrum
     public boolean markMessage = true;//whether to mark messages toggle
@@ -264,8 +313,10 @@ public class MainViewModel extends ViewModel {
             //disconnected from rig. A failed connect fires onRunError() then
             //onDisconnected(); afterDisconnect() preserves ERROR so the chip can
             //stay red until the next connect attempt (onConnecting) or a success.
-            stopCatLivenessWatchdog();
-            setCatConnectionState(CatConnectionState.afterDisconnect(catConnectionState));
+            // State write is applied atomically with the tracker stop, so a reply racing
+            // the disconnect can't heal the chip back to CONNECTED afterwards.
+            stopCatLivenessWatchdog(() -> setCatConnectionState(
+                    CatConnectionState.afterDisconnect(catConnectionState)));
             ToastMessage.show(getStringFromResource(R.string.disconnect_rig));
         }
 
@@ -280,6 +331,23 @@ public class MainViewModel extends ViewModel {
             //connected to rig
             setCatConnectionState(CatConnectionState.CONNECTED);
             ToastMessage.show(getStringFromResource(R.string.connected_rig));
+            // A genuinely new link is a new session for the retune rate limit, so its
+            // push below must be unthrottleable — otherwise the reconnect case the
+            // comment below describes silently regresses.
+            //
+            // DEBOUNCED, because this callback is itself the ~1 Hz retune driver:
+            // CableSerialPort fires it on every successful port open(), and the port was
+            // re-opening about once a second on the 2026-07-31 activation. Resetting
+            // unconditionally re-armed the limiter on every iteration of the very loop it
+            // contains, and retunes went up to 73/min from the 57/min measured before the
+            // limit existed. A burst of connects seconds apart is one flapping link; a
+            // reconnect after a real outage is minutes later. See
+            // RetunePolicy.CONNECT_RESET_DEBOUNCE_MS.
+            long connectAtMs = System.currentTimeMillis();
+            if (RetunePolicy.shouldResetOnConnect(connectAtMs, lastConnectCallbackAtMs)) {
+                resetRetuneRateLimit();
+            }
+            lastConnectCallbackAtMs = connectAtMs;
             // Push the app's current band/frequency to the rig on every connect —
             // including an automatic reconnect, which previously left the rig on
             // whatever frequency it powered up on ("no frequency set after connecting").
@@ -311,19 +379,49 @@ public class MainViewModel extends ViewModel {
                     , BaseRigOperation.getFrequencyAllInfo(freq)));
             //write frequency changes back to global variables
             // Compare the meter (wavelength) band, not the band-list index:
-            // OperationBand.getIndexByFreq() appends a new entry for any previously-
-            // unseen frequency, so a small in-band dial move changes the index even
-            // though the band is the same. Wavelength only changes on a real band hop.
+            // an off-plan frequency maps to OperationBand's single ad-hoc slot, so the
+            // index can stay put across a real band hop (14.2 -> 7.1 MHz, both off-plan)
+            // and changes on in-band moves between dials. Wavelength only changes on a
+            // real band hop.
             String oldWaveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
             GeneralVariables.band = freq;
+            // Observing a frequency is not the same as choosing one. Adopt it as the dial
+            // we COMMAND only while the CAT stream is healthy AND no explicit operator
+            // selection is pending — otherwise a reading gets pushed back at the rig by
+            // the reassert heartbeat and fights the operator's band selection. Two
+            // measured failures: a "?;"-desync reading of 14239985 (took a 30m tap ~59s
+            // and four attempts), and a healthy echo of the OLD band overwriting a tap
+            // the connected-gate had dropped before it reached the wire (2026-08-04, the
+            // heartbeat then re-asserted 20m against 30m taps all evening).
+            // See RigDialTarget.
+            if (freq == GeneralVariables.commandedBandHz) {
+                // The rig confirmed the operator's selection — back to follow mode.
+                GeneralVariables.operatorDialAssertedAtMs = 0L;
+            }
+            if (RigDialTarget.shouldAdoptAsTarget(System.currentTimeMillis(),
+                    GeneralVariables.rigRejectedAtMs, freq,
+                    GeneralVariables.commandedBandHz,
+                    GeneralVariables.operatorDialAssertedAtMs,
+                    GeneralVariables.operatorDialDeliveredAtMs)) {
+                GeneralVariables.commandedBandHz = freq;
+            } else {
+                fileLog("rig echo ignored as command target: reported " + freq
+                        + " while CAT desynced or operator selection pending;"
+                        + " still asserting " + GeneralVariables.commandedBandHz);
+            }
             GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(freq);
             GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
+            GeneralVariables.mutableBandFreq.postValue(freq);
             String newWaveLength = BaseRigOperation.getMeterFromFreq(freq);
 
             // A real band hop invalidates the clear-CQ-slot occupancy history —
             // the recorded offsets belong to the old band's activity (issue #418).
             if (ft8TransmitSignal != null && !newWaveLength.equals(oldWaveLength)) {
                 ft8TransmitSignal.clearBandActivity();
+                // New band = new decode context: tell companion apps to wipe their
+                // band + forget our replay history.
+                WsjtxUdpService.INSTANCE.sendClear();
+                WsjtxUdpService.INSTANCE.clearReplayCache();
             }
 
             // The rig reported a band change (e.g. the operator turned the dial) —
@@ -339,9 +437,9 @@ public class MainViewModel extends ViewModel {
 
         @Override
         public void onRunError(String message) {
-            //rig communication error
-            stopCatLivenessWatchdog();
-            setCatConnectionState(CatConnectionState.ERROR);
+            //rig communication error. ERROR is written atomically with the tracker stop:
+            //a reply parsed while the connector still reports connected can't overwrite it.
+            stopCatLivenessWatchdog(() -> setCatConnectionState(CatConnectionState.ERROR));
             ToastMessage.show(String.format(getStringFromResource(R.string.radio_communication_error)
                     , message));
         }
@@ -356,23 +454,29 @@ public class MainViewModel extends ViewModel {
     // that doesn't echo frequency reads is never falsely marked dead).
     private static final long CAT_LIVENESS_TICK_MS = 3000;
     private Timer catLivenessTimer;
-    private volatile long lastRigResponseMs = 0;
-    private volatile boolean sawRigResponseSinceConnect = false;
-    // Transmit state observed on the previous tick, used to detect the TX->RX edge so we can
-    // re-arm lastRigResponseMs (which freezes during TX) before judging staleness.
-    private volatile boolean wasTransmittingLastTick = false;
+    // Arm/trip/recover state lives in the tracker (pure, unit-tested). It is armed ONLY
+    // by replies parsed from the rig (BaseRig.setFreq -> onRigResponded); the app's own
+    // dial pushes go through BaseRig.setCommandedFreq and never count. A trip is not
+    // terminal: probing continues and the next reply flips the chip back to CONNECTED.
+    private final CatLivenessTracker catLiveness =
+            new CatLivenessTracker(CatLiveness.DEFAULT_TIMEOUT_MS);
 
     /** Record that the rig just demonstrably responded (called from onRigResponded). */
     private void markRigResponded() {
-        lastRigResponseMs = System.currentTimeMillis();
-        sawRigResponseSinceConnect = true;
+        // The rig answered after the watchdog had declared it dead: heal the chip. The
+        // CONNECTED write happens under the tracker's monitor, atomic with clearing the
+        // trip. Only the watchdog's own ERROR is undone here: a connector I/O error stops
+        // the tracker (under the same monitor) before writing ERROR, so this can't mask a
+        // real link loss.
+        catLiveness.onResponse(System.currentTimeMillis(), this::isRigConnected, () -> {
+            fileLog("CAT liveness: rig answered again — chip back to CONNECTED");
+            setCatConnectionState(CatConnectionState.CONNECTED);
+        });
     }
 
     private synchronized void startCatLivenessWatchdog() {
         stopCatLivenessWatchdog();
-        lastRigResponseMs = System.currentTimeMillis();
-        sawRigResponseSinceConnect = false;
-        wasTransmittingLastTick = false;
+        catLiveness.start(System.currentTimeMillis());
         catLivenessTimer = new Timer("cat-liveness");
         catLivenessTimer.schedule(new TimerTask() {
             @Override
@@ -383,11 +487,24 @@ public class MainViewModel extends ViewModel {
     }
 
     private synchronized void stopCatLivenessWatchdog() {
+        stopCatLivenessWatchdog(null);
+    }
+
+    /**
+     * Stop the watchdog, applying {@code then} (a chip-state write) atomically with the
+     * tracker stop — see {@link CatLivenessTracker#stop(CatLivenessTracker.Transition)}.
+     */
+    private synchronized void stopCatLivenessWatchdog(CatLivenessTracker.Transition then) {
         if (catLivenessTimer != null) {
             catLivenessTimer.cancel();
             catLivenessTimer.purge();
             catLivenessTimer = null;
         }
+        // Clear the "rig has answered" flag when the watchdog stops (disconnect, error,
+        // or teardown) so hasRigRespondedToCat() can't report a stale true after the rig
+        // is unplugged — the USB Diagnostics page would otherwise show "CAT Response: pass"
+        // alongside "Device Found: fail". A fresh connect re-arms it in start...().
+        catLiveness.stop(then);
     }
 
     /** One watchdog tick: probe the rig, then declare it dead if it's gone quiet too long. */
@@ -398,24 +515,24 @@ public class MainViewModel extends ViewModel {
             long nowMs = System.currentTimeMillis();
             boolean connected = isRigConnected();
             boolean transmitting = ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting();
+            // A trip writes ERROR under the tracker's monitor, and BEFORE this tick's probe
+            // goes out: a fast reply to that probe then always finds the trip applied and
+            // heals it, instead of healing first and being overwritten by a late ERROR
+            // (which left the chip red with the tracker untripped, unrecoverable).
+            CatLivenessTracker.Tick tick = catLiveness.tick(connected, transmitting, nowMs,
+                    () -> setCatConnectionState(CatConnectionState.ERROR));
             // Actively probe (a frequency read); the reply lands in onRigResponded ->
             // markRigResponded() (onFreqChanged only fires on a change, so a stable dial
             // can't be used). On a dead-but-powered BT module the write succeeds but no
-            // reply comes, so the quiet timer below eventually trips.
-            if (CatLiveness.shouldProbe(connected, transmitting) && baseRig != null) {
+            // reply comes, so the quiet timer eventually trips. Probing continues while
+            // tripped so the next reply can heal the chip.
+            if (tick.probe && baseRig != null) {
                 baseRig.readFreqFromRig();
             }
-            // Transmit freezes lastRigResponseMs (we don't probe while keyed). On the TX->RX
-            // edge, restart the quiet window from now so the just-sent probe has time to reply
-            // before we judge staleness — otherwise a >8s FT8 over falsely trips ERROR.
-            if (CatLiveness.shouldRearmAfterTx(wasTransmittingLastTick, transmitting)) {
-                lastRigResponseMs = nowMs;
-            }
-            wasTransmittingLastTick = transmitting;
-            if (CatLiveness.isRigStale(connected, transmitting, sawRigResponseSinceConnect,
-                    nowMs, lastRigResponseMs, CatLiveness.DEFAULT_TIMEOUT_MS)) {
-                stopCatLivenessWatchdog();
-                setCatConnectionState(CatConnectionState.ERROR);
+            if (tick.event == CatLivenessTracker.Event.TRIPPED) {
+                // Watchdog stays running (see markRigResponded for the recovery path).
+                fileLog("CAT liveness: no reply to freq reads for " + tick.quietMs
+                        + "ms (transport still open) — chip ERROR until the rig answers");
                 ToastMessage.show(String.format(
                         getStringFromResource(R.string.radio_communication_error),
                         getStringFromResource(R.string.disconnect_rig)));
@@ -508,6 +625,15 @@ public class MainViewModel extends ViewModel {
         //get configuration info.
         databaseOpr = DatabaseOpr.getInstance(GeneralVariables.getMainContext()
                 , "data.db");
+        // World Radio League: when an upload finds no saved logbook and the account has
+        // exactly one, keep that choice. Uploads run on background threads, so write
+        // synchronously rather than through the AsyncTask-based writeConfig.
+        WrlApi.setLogbookIdSaver(logbookId -> {
+            if (databaseOpr != null) {
+                databaseOpr.writeConfigSync(
+                        java.util.Collections.singletonMap("wrlLogbookId", logbookId));
+            }
+        });
         mutableIsDecoding.postValue(false);//decode state
         //create recording object
         hamRecorder = new HamRecorder(null);
@@ -556,12 +682,34 @@ public class MainViewModel extends ViewModel {
                 // Deep decodes later in this same cycle augment the cleared list instead of
                 // re-wiping it.
                 if (GeneralVariables.clearDecodesEveryCycle) {
+                    // The wipe is deferred to this cycle's first decodes
+                    // (appendToMessageList), so the list goes straight from the old slot to
+                    // the new one: clearing here left it empty until decodes arrived, and
+                    // the screen flashed "No signals decoded" every slot. If last cycle's
+                    // clear is still pending, that slot decoded nothing: clear now, so a
+                    // silent slot still empties the list.
+                    boolean clearedNow = false;
                     synchronized (ft8Messages) {
-                        ft8Messages.clear();
+                        if (pendingClearSlotUtc != 0) {
+                            ft8Messages.clear();
+                            clearedNow = true;
+                        }
+                        // Arm the clear for THIS cycle, keyed by its slot utc. The first
+                        // decode pass of this slot applies it; a straggler from the previous
+                        // slot (smaller utc) is rejected in appendToMessageList, so it can't
+                        // consume this cycle's clear (#976).
+                        pendingClearSlotUtc = utc;
                     }
                     decodeCycleState.resetCount();
                     mutable_Decoded_Counter.postValue(0);
-                    publishFt8MessageList();
+                    if (clearedNow) publishFt8MessageList();
+                }
+                // Backstop for the unkey latch. The reconnect path is the fast
+                // route (~2s), but it only fires when the USB attach broadcast
+                // arrives; this bounds a stuck key at one slot even if the link
+                // recovered without one.
+                if (!ft8TransmitSignal.isTransmitting()) {
+                    retryPendingUnkey();
                 }
                 mutableIsDecoding.postValue(true);
             }
@@ -592,6 +740,25 @@ public class MainViewModel extends ViewModel {
                 // already ignore own-callsign messages.
                 OwnTxEchoFilter filtered = OwnTxEchoFilter.filter(decoded);
                 ArrayList<Ft8Message> messages = filtered.kept;
+                // This pass's per-decode DTs (seconds). Feeds both the self-syncing clock
+                // (fast pass only, below) and the displayed DT (every pass), so the number
+                // on screen and the correction the estimator makes are measured from
+                // exactly the same samples.
+                final float[] dtSamples = new float[messages.size()];
+                for (int i = 0; i < messages.size(); i++) {
+                    dtSamples[i] = messages.get(i).time_sec;
+                }
+                // Full duplex (satellite operating): our own downlink coming back
+                // IS the measurement, so put the echoes the filter just dropped
+                // back on screen. Strictly display — `display` feeds only the
+                // message list, the waterfall labels and the decode counter, while
+                // `messages` keeps feeding the auto-sequencer, the SWL/QSO
+                // databases, PSKReporter, the WSJT-X broadcast and the clock-sync
+                // DT samples, none of which may ever act on our own callsign. With
+                // the feature off this is the same list instance as `messages`.
+                // See FullDuplexMonitor.
+                final ArrayList<Ft8Message> display = FullDuplexMonitor.displayList(
+                        messages, filtered.echoes, GeneralVariables.fullDuplexMonitor);
                 // Diagnostic for the "missing other station responses" report: record how
                 // many decodes survived, how many own-echoes were dropped, and whether any
                 // message addressed to us was decoded this cycle. Lets us tell "decoded but
@@ -599,14 +766,65 @@ public class MainViewModel extends ViewModel {
                 // passes to avoid log spam (they re-report the same cycle).
                 if (!isDeep) {
                     fileLog(filtered.decodeLogLine(sequential));
+
+                    // Self-syncing clock (opt-in): sample this slot's per-decode DTs
+                    // from the fast pass only — it fires exactly once per slot with
+                    // that pass's own (deduped, echo-filtered) messages. Deep/late
+                    // passes re-deliver the same slot and are skipped by the isDeep
+                    // gate; beginSlot() dedupes by slot utc as a second line of
+                    // defense. GPS or NTP discipline owns the clock when enabled, so
+                    // this stands down (and clears its state) rather than fight it.
+                    if (ClockSelfSync.mayRun(GeneralVariables.autoSyncClockFromDecodes,
+                            GeneralVariables.disciplineClockFromGPS,
+                            GeneralVariables.disciplineClockFromNtp)) {
+                        // onSlot is atomic: slot dedup/ordering + streak update under
+                        // one lock, so concurrent adjacent-slot deliveries can't
+                        // interleave (out-of-order slots are rejected inside).
+                        Integer newDelay =
+                                clockSelfSync.onSlot(utc, dtSamples, UtcTimer.delay);
+                        if (newDelay != null) {
+                            int oldDelay = UtcTimer.delay;
+                            // Same three-way fan-out as TimeSyncSettings.apply():
+                            // live timer, in-memory config mirror, and DB.
+                            UtcTimer.delay = newDelay;
+                            GeneralVariables.manualTimeCorrectionMs = newDelay;
+                            databaseOpr.writeConfig("timeCorrectionMs",
+                                    String.valueOf(newDelay), null);
+                            // Status for the Time Sync screen: show the operator that
+                            // auto-sync is doing the work, so they stop tapping the
+                            // manual "apply suggestion" on top of it.
+                            GeneralVariables.selfSyncLastStepMs = newDelay - oldDelay;
+                            GeneralVariables.mutableSelfSyncApplied.postValue(UtcTimer.getSystemTime());
+                            fileLog("selfSync: applied clock correction "
+                                    + oldDelay + " -> " + newDelay + " ms ("
+                                    + dtSamples.length + " decodes, slot utc=" + utc + ")");
+                        }
+                    } else {
+                        // Feature off or GPS/NTP disciplining: drop any half-built
+                        // confirmation streak so stale state can't act later.
+                        clockSelfSync.reset();
+                    }
                 }
                 if (messages.size() == 0) {
                     //nothing left after filtering own echoes
-                    // Same overlay refresh as the no-decode case: an all-filtered slot is
-                    // visually silent, so clear the previous slot's labels (normal pass)
-                    // rather than leaving them to be re-stamped.
-                    decodeCycleState.labelsAfterPass(new ArrayList<>(), isDeep);
-                    mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), 0));
+                    if (display.isEmpty()) {
+                        // Same overlay refresh as the no-decode case: an all-filtered slot is
+                        // visually silent, so clear the previous slot's labels (normal pass)
+                        // rather than leaving them to be re-stamped.
+                        decodeCycleState.labelsAfterPass(new ArrayList<>(), isDeep);
+                        mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), 0));
+                        return;
+                    }
+                    // Full duplex, and the only thing that decoded this slot was our
+                    // own signal — the normal case for a TX slot on a quiet
+                    // transponder. Not a silent slot: show the echo on the list and
+                    // the waterfall, then stop here. Everything below this point acts
+                    // on decodes (sequencer, databases, spotting) and must not see an
+                    // own-callsign message, and `messages` is empty anyway.
+                    appendToMessageList(display, utc);
+                    publishFt8MessageList();
+                    finishDisplayPass(display, decoded.size(), isDeep);
+                    resolveEchoLocations(display);
                     return;
                 }
 
@@ -623,18 +841,32 @@ public class MainViewModel extends ViewModel {
                     }
                 }
 
-                synchronized (ft8Messages) {
-                    // "Clear every cycle" mode does its wipe in beforeListen (start of the
-                    // cycle), so by here the list is already fresh — just append. The
-                    // excess-trim must hold the same lock: it removes from the list, and
-                    // an unguarded removal can race the snapshot copy in
-                    // publishFt8MessageList().
-                    ft8Messages.addAll(messages);//add messages to list
-                    GeneralVariables.deleteArrayListMore(ft8Messages);//remove excess messages; FT8CN limits the total displayable messages
-                }
-
+                appendToMessageList(display, utc);
                 publishFt8MessageList();//post an immutable snapshot so the UI recomposes immediately
-                mutableTimerOffset.postValue(time_sec);//this cycle's time offset
+                // Displayed DT. NOT the slot's raw mean (the `time_sec` argument, kept for
+                // the diagnostic below): a mean is at the mercy of one late station's DT, and
+                // it was re-posted on every decode pass, so the pill flashed "2.5 s off" on a
+                // rig that was working stations perfectly. DecodeDtDisplay applies the same
+                // robust measurement the self-syncing clock uses — MAD-rejected median per
+                // slot, accumulated across that slot's passes, then the median of the last
+                // few slots — and returns null when the reading hasn't meaningfully moved,
+                // which is what makes the indicator sit still when the clock is right.
+                Float shownDt = decodeDtDisplay.onDecodes(utc, dtSamples, UtcTimer.delay);
+                if (shownDt != null && !Float.isNaN(shownDt)) {
+                    mutableTimerOffset.postValue(shownDt);
+                }
+                if (!isDeep) {
+                    // Both numbers, once per slot: a debug.log where `raw` swings while
+                    // `shown` holds is the smoothing doing its job, not a drifting clock.
+                    fileLog(String.format(java.util.Locale.US,
+                            "DT: raw=%+.2f shown=%s n=%d",
+                            time_sec,
+                            decodeDtDisplay.lastPublished() == null
+                                    ? "--"
+                                    : String.format(java.util.Locale.US, "%+.2f",
+                                            decodeDtDisplay.lastPublished()),
+                            dtSamples.length));
+                }
 
 
                 findIncludedCallsigns(messages);//find matching messages and add to the call list
@@ -648,12 +880,28 @@ public class MainViewModel extends ViewModel {
                 //check transmit procedure. Parse transmit procedure from message list
                 //if exceeded cycle by 2 seconds, should not parse
                 int autoReplyBudgetMs = Math.max(2000, GeneralVariables.lateStartTolerance);
-                if (!ft8TransmitSignal.isTransmitting()
-                        && !isDeep//deep passes go through the evidence-only path below
-                        && (ft8SignalListener.timeSec
-                        + GeneralVariables.pttDelay
-                        + GeneralVariables.transmitDelay <= autoReplyBudgetMs)) {//budget scales with late-start tolerance
-                    ft8TransmitSignal.parseMessageToFunction(messages);//parse messages and process
+                if (!isDeep) {//deep passes go through the evidence-only path below
+                    long replyCostMs = ft8SignalListener.timeSec
+                            + GeneralVariables.pttDelay
+                            + GeneralVariables.transmitDelay;
+                    // Sample TX state ONCE: it is read by the decision and again by the
+                    // branch that words the log line, and it can flip between the two.
+                    final boolean transmitting = ft8TransmitSignal.isTransmitting();
+                    // Never dropped and never deferred — a decode too late to decide
+                    // this cycle is parsed right now as evidence, so it can amend the
+                    // over already on the air (mid-cycle swap) and inform the next
+                    // one. See FastPassDisposition.
+                    if (FastPassDisposition.decide(transmitting, replyCostMs, autoReplyBudgetMs)
+                            == FastPassDisposition.Action.PARSE) {
+                        ft8TransmitSignal.parseMessageToFunction(messages);//parse messages and process
+                    } else {
+                        fileLog(transmitting
+                                ? "QSO: fast decode landed after key-up — parsing "
+                                        + messages.size() + " msg(s) as evidence"
+                                : "QSO: fast decode over reply budget (" + replyCostMs
+                                        + "ms > " + autoReplyBudgetMs + "ms) — parsing as evidence");
+                        ft8TransmitSignal.parseMessageToFunction(messages, true);
+                    }
                 }
 
                 // Deep/subtraction/late passes routinely find replies the fast
@@ -661,57 +909,67 @@ public class MainViewModel extends ViewModel {
                 // (advance/RR73/complete/enqueue — never no-reply counting, see
                 // parseMessageToFunction(list, true)). When they land before TX
                 // keys (~:29.0-:29.8 vs key-up ~:29.9) this upgrades the very
-                // next transmission; when TX is already playing they are
-                // stashed and replayed after key-up so the evidence still
-                // advances the next cycle instead of being dropped.
+                // next transmission; when TX is already playing, the parse
+                // advances the order at once and — inside the audio slack —
+                // swaps the over on the air for the right message
+                // (FT8TransmitSignal.shouldRestartForNewOrder). Past the slack
+                // the advanced order simply keys the next cycle. Stashing these
+                // for replay after key-up (the previous design) made the swap
+                // unreachable and cost a full cycle per late reply.
                 if (isDeep) {
-                    if (ft8TransmitSignal.isTransmitting()) {
-                        // UtcTimer.getSystemTime(), not System.currentTimeMillis():
-                        // Ft8Message.utcTime is in the NTP/GPS-corrected time base,
-                        // and the stash ages entries against it — mixing bases would
-                        // shift eviction by the (possibly large) clock correction.
-                        pendingSequencerDecodes.stash(messages, UtcTimer.getSystemTime());
-                    } else {
-                        ft8TransmitSignal.parseMessageToFunction(messages, true);
-                    }
-                }
-                // First delivery with TX idle (typically the own-slot fast pass
-                // ~1s after key-up): replay anything stashed mid-TX.
-                if (!ft8TransmitSignal.isTransmitting() && !pendingSequencerDecodes.isEmpty()) {
-                    ArrayList<Ft8Message> stashed =
-                            pendingSequencerDecodes.drain(UtcTimer.getSystemTime());
-                    if (!stashed.isEmpty()) {
-                        ft8TransmitSignal.parseMessageToFunction(stashed, true);
-                    }
+                    ft8TransmitSignal.parseMessageToFunction(messages, true);
                 }
 
-                decodeCycleState.labelsAfterPass(messages, isDeep);
-
-                // Take the count from the same atomic update we made, not a re-read of
-                // shared state a concurrently-delivering pass may have advanced since.
-                int decodeCountAfterPass = decodeCycleState.countAfterPass(messages.size(), isDeep);
-
-                //decode state, triggers marker action in spectrum display
-                mutableIsDecoding.postValue(decodingMarkerAfterPass(decoded.size(), messages.size()));
+                // Labels/counts follow what is on screen, so they use `display`:
+                // with full duplex on, our own signal has to be stamped on the
+                // waterfall too — reading its offset off the waterfall against the
+                // TX marker is how the operator measures transponder drift.
+                finishDisplayPass(display, decoded.size(), isDeep);
 
 
-                getQTHRunnable.messages = messages;
+                // A fresh task per dispatch, bound to *this* pass's messages. slot N's
+                // late/deep pass and slot N+1's early pass enter afterDecode concurrently
+                // (#398, same reason ft8Messages/decodeCycleState are synchronized above):
+                // a single shared Runnable whose `messages` field is overwritten per call
+                // and re-submitted to the pool loses one pass's list — that pass's QTH
+                // lookup (country/grid flags) and Needed-DX alerts are silently dropped,
+                // and two pool workers race on the one non-volatile field.
                 // Guard against the ViewModel-teardown race: a late deep-decode
                 // pass can deliver here after onCleared() shut the pool down,
                 // and a raw execute() on a terminated pool throws
                 // RejectedExecutionException on this decode thread (crash).
-                SafeExecutor.tryExecute(getQTHThreadPool, getQTHRunnable);//query location via thread pool
-
-                //this variable also notifies message list changes
-                mutable_Decoded_Counter.postValue(
-                        decodeCountAfterPass);//notify the UI of the total message count
+                SafeExecutor.tryExecute(getQTHThreadPool,
+                        new GetQTHRunnable(MainViewModel.this, messages));//query location via thread pool
+                resolveEchoLocations(display);
 
                 if (GeneralVariables.saveSWLMessage) {
                     databaseOpr.writeMessage(messages);//write SWL messages to database
                 }
                 //check QSO of SWL, and save to the QSO list in SWLQSOTable
                 if (GeneralVariables.saveSWL_QSO) {
-                    swlQsoList.findSwlQso(messages, ft8Messages, new SWLQsoList.OnFoundSwlQso() {
+                    // findSwlQso scans the "all messages" list with index-based backward
+                    // loops (checkPart1/checkPart2: for i = size()-1 .. 0, get(i)). Passing
+                    // the live ft8Messages let it iterate off-lock while a concurrent decode
+                    // pass (slot N's late/deep pass vs slot N+1's early pass, #398) held
+                    // synchronized(ft8Messages) running addAll + trimToMessageCount's
+                    // remove(0), shrinking the list mid-scan -> IndexOutOfBoundsException on
+                    // the decode thread. Scan a snapshot copied under the same monitor the
+                    // writers use (mirrors publishFt8MessageList). The freshly decoded
+                    // `messages` were appended to ft8Messages under lock above, so they are
+                    // already in this snapshot and QSO detection is unchanged.
+                    final ArrayList<Ft8Message> allMessagesSnapshot;
+                    synchronized (ft8Messages) {
+                        // Own-TX echoes sit in ft8Messages once full duplex has been
+                        // on (display only) — and they stay there after it is turned
+                        // off, for as long as the list keeps them. findSwlQso pairs a
+                        // station's messages into a logged QSO, so leaving ours in
+                        // would let it "hear" us working ourselves and write that to
+                        // the SWL QSO table. Strip by what the list holds, never by
+                        // the live toggle. With no echoes present this is the same
+                        // snapshot the scan always saw.
+                        allMessagesSnapshot = FullDuplexMonitor.withoutOwnEchoes(ft8Messages);
+                    }
+                    swlQsoList.findSwlQso(messages, allMessagesSnapshot, new SWLQsoList.OnFoundSwlQso() {
                         @Override
                         public void doFound(QSLRecord record) {
                             databaseOpr.addSWL_QSO(record);//save SWL QSO to database
@@ -724,6 +982,9 @@ public class MainViewModel extends ViewModel {
 
                 //upload decoded spots to PSKReporter
                 PskReporterSender.INSTANCE.enqueue(messages);
+
+                //broadcast decodes over the WSJT-X UDP interface
+                broadcastWsjtxDecodes(messages);
             }
         });
 
@@ -753,40 +1014,111 @@ public class MainViewModel extends ViewModel {
                         baseRig != null && baseRig.supportWaveOverCAT());
             }
 
+            // Whether the FT8 over's / the tune carrier's beginKeying() actually
+            // paused RX capture, so its endKeying() only resumes what it paused
+            // (see shouldPauseRxCaptureForTx's javadoc for why/when). One flag
+            // per keying source: arming TX only *requests* a tune stop, so the
+            // tune's endKeying() can run after the over's beginKeying(), and a
+            // single shared flag would let one consume the other's pause.
+            private volatile boolean rxPausedForOver = false;
+            private volatile boolean rxPausedForTune = false;
+
             /**
              * Assert PTT (+ pause SCO) through the configured control path. Shared
              * by the FT8 TX path and the tune carrier (issue #408) so the
              * CAT/RTS/DTR branching lives in one place; with no control path
              * (VOX), this is a no-op and the audio itself keys the rig.
              */
-            private void beginKeying() {
-                if (GeneralVariables.controlMode == ControlMode.CAT
+            private void beginKeying(boolean tune) {
+                boolean keysViaControlPath = GeneralVariables.controlMode == ControlMode.CAT
                         || GeneralVariables.controlMode == ControlMode.RTS
-                        || GeneralVariables.controlMode == ControlMode.DTR) {
-                    if (baseRig != null) {
-                        //if (GeneralVariables.connectMode != ConnectMode.NETWORK) stopSco();
-                        if (needControlSco()) stopSco();
-                        baseRig.setPTT(true);
-                    }
+                        || GeneralVariables.controlMode == ControlMode.DTR;
+                // Two different questions (Copilot review on #790):
+                //  - needControlSco(): is this a Bluetooth RIG whose TX audio must
+                //    not ride SCO? That decides whether the TX path may steer
+                //    Default output to the rig's A2DP. It is true for Bluetooth +
+                //    VOX too — VOX leaves SCO up, so its media stream is on the
+                //    SCO route and needs the steering just as much. A USB/network
+                //    rig with a Bluetooth headset picked as its mic also holds a
+                //    SCO link of ours, but its audio belongs on the rig: false.
+                //  - control-path keying with a rig: the only case that pauses
+                //    SCO around PTT (the pre-existing condition, unchanged).
+                // keyDown() takes the snapshot BEFORE it stops SCO — the TX worker
+                // reads it after the PTT settle delay, when the tracker has already
+                // been told to drop the link — and that order lives in TxScoLatch
+                // so it is the tested one.
+                boolean bluetoothRigTx = needControlSco();
+                txScoLatch.keyDown(
+                        bluetoothRigTx,
+                        keysViaControlPath && baseRig != null && bluetoothRigTx,
+                        MainViewModel.this::isScoLinkUpOrPending,
+                        MainViewModel.this::routedScoInputAddress,
+                        MainViewModel.this::stopSco);
+                if (keysViaControlPath && baseRig != null) {
+                    // Arm before the write, not after: if setPTT throws or the
+                    // process dies mid-key, we still recorded that the rig may
+                    // be keyed and the next reconnect settles it.
+                    pttSafetyLatch.onKeyed();
+                    baseRig.setPTT(true);
+                }
+
+                // Last, so nothing above can throw between the pause and the
+                // caller's matching endKeying(): the TX audio itself only opens
+                // after the PTT settle delay, still well after this.
+                boolean pause = hamRecorder != null && shouldPauseRxCaptureForTx(
+                        isQmxRig(baseRig),
+                        hamRecorder.isMicSource(),
+                        hamRecorder.getMicRecorder().isUsingUsbDirect(),
+                        GeneralVariables.usbAudioInputVendorId,
+                        GeneralVariables.usbAudioInputProductId,
+                        GeneralVariables.usbAudioOutputVendorId,
+                        GeneralVariables.usbAudioOutputProductId);
+                if (pause) {
+                    hamRecorder.pauseForTx();
+                }
+                if (tune) {
+                    rxPausedForTune = pause;
+                } else {
+                    rxPausedForOver = pause;
                 }
             }
 
-            /** Release PTT (+ restore SCO); counterpart of {@link #beginKeying()}. */
-            private void endKeying() {
+            /** Release PTT (+ restore SCO); counterpart of {@link #beginKeying(boolean)}. */
+            private void endKeying(boolean tune) {
                 if (GeneralVariables.controlMode == ControlMode.CAT
                         || GeneralVariables.controlMode == ControlMode.RTS
                         || GeneralVariables.controlMode == ControlMode.DTR) {
                     if (baseRig != null) {
                         baseRig.setPTT(false);
+                        // Only a confirmed write clears the latch. A PTT-off issued
+                        // at a port that has already gone away leaves the rig keyed,
+                        // so keep the debt and let retryPendingUnkey() settle it when
+                        // the link is back.
+                        pttSafetyLatch.onUnkeyAttempted(lastPttWriteReachedRig());
                         //if (GeneralVariables.connectMode != ConnectMode.NETWORK) startSco();
                         if (needControlSco()) startSco();
                     }
+                }
+                // The post-TX restart has been requested; the next over takes a
+                // fresh snapshot in beginKeying().
+                txScoLatch.keyUp();
+
+                boolean paused;
+                if (tune) {
+                    paused = rxPausedForTune;
+                    rxPausedForTune = false;
+                } else {
+                    paused = rxPausedForOver;
+                    rxPausedForOver = false;
+                }
+                if (paused) {
+                    hamRecorder.resumeAfterTx();
                 }
             }
 
             @Override
             public void onBeforeTransmit(Ft8Message message, int functionOder) {
-                beginKeying();
+                beginKeying(false);
                 if (ft8TransmitSignal.isActivated()) {
                     GeneralVariables.transmitMessages.add(message);
                     //mutableTransmitMessages.postValue(GeneralVariables.transmitMessages);
@@ -796,17 +1128,17 @@ public class MainViewModel extends ViewModel {
 
             @Override
             public void onAfterTransmit(Ft8Message message, int functionOder) {
-                endKeying();
+                endKeying(false);
             }
 
             @Override
             public void onTuneKeyDown() {
-                beginKeying();
+                beginKeying(true);
             }
 
             @Override
             public void onTuneKeyUp() {
-                endKeying();
+                endKeying(true);
             }
 
             @Override
@@ -814,10 +1146,11 @@ public class MainViewModel extends ViewModel {
                 if (GeneralVariables.connectMode == ConnectMode.NETWORK) {
                     if (baseRig != null) {
                         if (baseRig.isConnected()) {
-                            sendWaveDataRunnable.baseRig = baseRig;
-                            sendWaveDataRunnable.message = msg;
-                            //send network data packets via thread pool
-                            SafeExecutor.tryExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
+                            //send network data packets via thread pool. A fresh task per
+                            //dispatch (not a shared, per-call-mutated instance) so a re-entrant
+                            //transmit/tune can't race the baseRig/message fields on the pool.
+                            SafeExecutor.tryExecute(sendWaveDataThreadPool,
+                                    new SendWaveDataRunnable(baseRig, msg));
                         }
                     }
                 }
@@ -843,37 +1176,74 @@ public class MainViewModel extends ViewModel {
                 if (!supportTransmitOverCAT()) {
                     return;
                 }
-                sendWaveDataRunnable.baseRig = baseRig;
-                sendWaveDataRunnable.message = msg;
-                SafeExecutor.tryExecute(sendWaveDataThreadPool, sendWaveDataRunnable);
+                SafeExecutor.tryExecute(sendWaveDataThreadPool,
+                        new SendWaveDataRunnable(baseRig, msg));
+            }
+
+            @Override
+            public boolean supportQmxCatTones() {
+                return GeneralVariables.qmxCatTones
+                        && GeneralVariables.controlMode == ControlMode.CAT
+                        && baseRig instanceof HamlibRig
+                        && ((HamlibRig) baseRig).isQmx()
+                        && baseRig.isConnected()
+                        && baseRig.getConnector() != null;
+            }
+
+            @Override
+            public void sendQmxCatCommand(String command) {
+                BaseRig rig = baseRig;
+                if (rig == null || rig.getConnector() == null) return;
+                rig.getConnector().sendData(
+                        command.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
             }
 
         }, new OnTransmitSuccess() {//when QSO is successful
             @Override
             public void doAfterTransmit(QSLRecord qslRecord) {
-                databaseOpr.addQSL_Callsign(qslRecord);//two operations: record callsign and QSL
+                // Upload to third-party services only once the QSLTable row exists:
+                // markQsoSynced UPDATEs that row, so an upload finishing before the async
+                // insert lands would mark nothing, and the next catch-up sync would send the
+                // contact again.
+                databaseOpr.addQSL_Callsign(qslRecord, () -> {
+                    // record to third-party service; may take some time
+                    new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            boolean cloudlogOk = false;
+                            boolean qrzOk = false;
+                            boolean wrlOk = false;
+                            if (GeneralVariables.enableCloudlog){
+                                StringBuilder why = new StringBuilder();
+                                cloudlogOk = ThirdPartyService.UploadToCloudLog(qslRecord, why);
+                                if (!cloudlogOk) {
+                                    // Say why on screen, not just in debug.log: a Station ID
+                                    // from the wrong Wavelog user passes Test Connection and
+                                    // then rejects every QSO with no visible symptom. Only
+                                    // server rejections toast; no-signal stays queued.
+                                    CloudlogFailureHint.showCloudlogRejectionToast(why.toString());
+                                }
+                            }
+                            if (GeneralVariables.enableQRZ){
+                                qrzOk = ThirdPartyService.UploadToQRZ(qslRecord);
+                            }
+                            if (GeneralVariables.enableWRL){
+                                wrlOk = ThirdPartyService.UploadToWrl(qslRecord);
+                            }
+                            if (databaseOpr != null && (cloudlogOk || qrzOk || wrlOk)) {
+                                ThirdPartyService.markQsoSynced(
+                                        databaseOpr.getDb(), qslRecord, cloudlogOk, qrzOk, wrlOk);
+                            }
+                        }
+                    }).start();
+                });
 
                 // QSO-complete alert (opt-in). Fires once per logged contact.
                 dxAlertNotifier.notifyQsoComplete(qslRecord);
 
-                // record to third-party service; may take some time
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        boolean cloudlogOk = false;
-                        boolean qrzOk = false;
-                        if (GeneralVariables.enableCloudlog){
-                            cloudlogOk = ThirdPartyService.UploadToCloudLog(qslRecord);
-                        }
-                        if (GeneralVariables.enableQRZ){
-                            qrzOk = ThirdPartyService.UploadToQRZ(qslRecord);
-                        }
-                        if (databaseOpr != null && (cloudlogOk || qrzOk)) {
-                            ThirdPartyService.markQsoSynced(
-                                    databaseOpr.getDb(), qslRecord, cloudlogOk, qrzOk);
-                        }
-                    }
-                }).start();
+                // broadcast the logged QSO over the WSJT-X UDP interface
+                broadcastWsjtxQso(qslRecord);
+
 
                 if (qslRecord.getToCallsign() != null) {//add successfully contacted zone to zone list
                     GeneralVariables.callsignDatabase.getCallsignInformation(qslRecord.getToCallsign()
@@ -890,10 +1260,37 @@ public class MainViewModel extends ViewModel {
         });
 
 
+        // Let the transmitter hold key-up while this slot's fast decode is still running,
+        // so a busy band answers callers in the right cycle instead of one late.
+        // See FastDecodeGate.
+        ft8TransmitSignal.setFastDecodeGate(ft8SignalListener.getFastDecodeGate());
+
         //create meter protection controller (ALC auto-volume + SWR halt)
         meterProtectionController = new MeterProtectionController();
         meterProtectionController.setTransmitSignal(ft8TransmitSignal);
         ft8TransmitSignal.setMeterProtectionController(meterProtectionController);
+
+        // Voice assistant: TTS must never leak into a transmission (it would be
+        // mixed into the rig audio and go out over the air — see the TX audio
+        // hazards in AGENTS.md). Two layers: the announcer refuses to start an
+        // utterance while isTransmitting(), and this observer hard-stops any
+        // in-flight speech the instant TX begins. observeForever is safe here:
+        // the ViewModel constructor runs on the main thread (setValue above),
+        // and both objects live for the whole process.
+        {
+            final com.k1af.ft8af.voice.VoiceAnnouncer announcer =
+                    dxAlertNotifier.getVoiceAnnouncer();
+            announcer.setTransmitGate(
+                    () -> ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting());
+            ft8TransmitSignal.mutableIsTransmitting.observeForever(transmitting -> {
+                if (Boolean.TRUE.equals(transmitting)) {
+                    announcer.stopNow();
+                }
+            });
+        }
+
+        //bring up the WSJT-X UDP interface (status provider + inbound request handlers)
+        setupWsjtxUdp();
 
         //open HTTP SERVER
         httpServer = new LogHttpServer(this, LogHttpServer.DEFAULT_PORT);
@@ -946,7 +1343,7 @@ public class MainViewModel extends ViewModel {
                 }
             }
         }
-        GeneralVariables.deleteArrayListMore(GeneralVariables.transmitMessages);//remove excess messages
+        GeneralVariables.trimToMessageCount(GeneralVariables.transmitMessages);//remove excess messages
         //mutableTransmitMessages.postValue(GeneralVariables.transmitMessages);
         mutableTransmitMessagesCount.postValue(count);
     }
@@ -994,8 +1391,8 @@ public class MainViewModel extends ViewModel {
      * True only when the auto-clear option is on AND the meter (wavelength) band
      * actually changed, so a no-op band re-select or a small in-band dial report from
      * the rig doesn't clear. Compares wavelength rather than the band-list index
-     * because {@link OperationBand#getIndexByFreq} appends a new entry for any unseen
-     * frequency, so the index can change within a single band. Pure decision logic,
+     * because {@link OperationBand#getIndexByFreq} reuses one ad-hoc slot for every
+     * off-plan frequency, so the index doesn't track the band. Pure decision logic,
      * unit-tested without the Android runtime.
      */
     public static boolean shouldClearOnBandChange(boolean enabled, String oldWaveLength, String newWaveLength) {
@@ -1016,6 +1413,43 @@ public class MainViewModel extends ViewModel {
     }
 
     /**
+     * Bounds-checked, lock-guarded read of the live {@link #ft8Messages} decode
+     * list; returns {@code null} when {@code position} is out of range.
+     *
+     * <p>UI item-click handlers (e.g. the Grid Tracker calling list) turn a
+     * RecyclerView row into a position and then index the live list on the main
+     * thread. The decode thread mutates {@code ft8Messages} — {@code addAll} plus
+     * {@link GeneralVariables#trimToMessageCount} ({@code remove(0)}) and
+     * {@code clear()} — under {@code synchronized (ft8Messages)}. A main-thread
+     * {@code size()}-check-then-{@code get(pos)} is therefore not atomic: a
+     * concurrent {@code remove(0)}/{@code clear()} landing between the two steps
+     * throws {@link IndexOutOfBoundsException} on the UI thread (an uncaught,
+     * whole-app crash), and a {@code remove(0)} that merely shifts indices makes
+     * an in-bounds {@code get} return the wrong station. Reading under the
+     * writers' monitor makes the check-and-get atomic. Package-visible for
+     * testing.
+     */
+    @Nullable
+    static Ft8Message messageAt(ArrayList<Ft8Message> list, int position) {
+        synchronized (list) {
+            if (position < 0 || position >= list.size()) {
+                return null;
+            }
+            return list.get(position);
+        }
+    }
+
+    /**
+     * Safe accessor for a decoded message by list position for main-thread UI
+     * callers; {@code null} if the position is no longer valid. See
+     * {@link #messageAt(ArrayList, int)} for why the lock is required.
+     */
+    @Nullable
+    public Ft8Message getFt8MessageAtOrNull(int position) {
+        return messageAt(ft8Messages, position);
+    }
+
+    /**
      * Wipe the now-stale decode list and reset the TX target to CQ after a band or
      * mode change, so the decode screen and TX target reflect the new band/mode
      * instead of leftover spots from the old one (tester request). Callers gate this
@@ -1026,6 +1460,105 @@ public class MainViewModel extends ViewModel {
         if (ft8TransmitSignal != null && !ft8TransmitSignal.isTransmitting()) {
             ft8TransmitSignal.resetToCQ();
         }
+    }
+
+    /**
+     * Append one decode pass's messages to the displayed list, trimming it back
+     * to the display cap under the same lock.
+     *
+     * <p>"Clear every cycle" mode arms a clear for the new cycle's slot utc in
+     * {@code beforeListen} (start of the cycle); the first pass OF THAT SLOT applies
+     * it, wiping the old slot and adding the new one under the same lock, so the UI
+     * never sees an empty list in between. A straggling late/deep pass from the
+     * previous slot carries the older slot utc and is rejected by
+     * {@link #shouldApplyPendingClear}, so it augments the slot already shown rather
+     * than consuming the next slot's clear (#976). The excess-trim must hold the same
+     * monitor: it removes from the list, and an unguarded removal can race the
+     * snapshot copy in {@link #publishFt8MessageList()}.
+     *
+     * @param messages the pass's display list — with full duplex on this includes
+     *                 our own transmission's echoes, which is why nothing else in
+     *                 the decode pipeline is fed from it (see
+     *                 {@link FullDuplexMonitor})
+     * @param slotUtc  the utc of the slot this pass decoded (matches the
+     *                 {@code beforeListen} utc for the same slot)
+     */
+    private void appendToMessageList(ArrayList<Ft8Message> messages, long slotUtc) {
+        synchronized (ft8Messages) {
+            // Apply the deferred "clear every cycle" wipe only for the slot it was armed
+            // for (or a newer one). A straggling late/deep pass from an earlier slot
+            // (slotUtc < pendingClearSlotUtc) must NOT consume it, or the next real pass
+            // of this slot would append onto the previous slot's decodes (#976).
+            if (shouldApplyPendingClear(pendingClearSlotUtc, slotUtc)) {
+                pendingClearSlotUtc = 0;
+                if (GeneralVariables.clearDecodesEveryCycle) ft8Messages.clear();
+            }
+            ft8Messages.addAll(messages);
+            //remove excess messages; FT8CN limits the total displayable messages
+            GeneralVariables.trimToMessageCount(ft8Messages);
+        }
+    }
+
+    /**
+     * Whether a decode pass delivering slot {@code passSlotUtc} should apply (and
+     * consume) a "clear every cycle" wipe armed for slot {@code pendingClearSlotUtc}.
+     * True only when a clear is pending ({@code != 0}) and the pass belongs to the
+     * armed cycle or a newer one. A straggler from an earlier slot
+     * ({@code passSlotUtc < pendingClearSlotUtc}) returns false, so it can't consume
+     * the next slot's clear. Pure decision logic, unit-tested without the Android
+     * runtime.
+     */
+    static boolean shouldApplyPendingClear(long pendingClearSlotUtc, long passSlotUtc) {
+        return pendingClearSlotUtc != 0 && passSlotUtc >= pendingClearSlotUtc;
+    }
+
+    /**
+     * The per-pass display bookkeeping that follows what is on screen: the
+     * waterfall labels, the running decode count, the spectrum decoding marker
+     * and the UI's total-count notification. Shared by the normal path and the
+     * full-duplex echo-only path so the two cannot drift.
+     *
+     * @param display        what this pass put on screen
+     * @param rawDecodeCount how many decodes the pass produced before filtering
+     */
+    private void finishDisplayPass(ArrayList<Ft8Message> display, int rawDecodeCount,
+                                   boolean isDeep) {
+        decodeCycleState.labelsAfterPass(display, isDeep);
+        // Take the count from the same atomic update we made, not a re-read of
+        // shared state a concurrently-delivering pass may have advanced since.
+        int countAfterPass = decodeCycleState.countAfterPass(display.size(), isDeep);
+        //decode state, triggers marker action in spectrum display
+        mutableIsDecoding.postValue(decodingMarkerAfterPass(rawDecodeCount, display.size()));
+        //this variable also notifies message list changes
+        mutable_Decoded_Counter.postValue(countAfterPass);
+    }
+
+    /**
+     * Resolve country/continent for the own-TX echoes in a full-duplex display
+     * list, so their rows render like every other decode. Deliberately separate
+     * from {@link GetQTHRunnable}: that task also fires Needed-DX alerts, and our
+     * own callsign must never raise one. No-op when the list carries no echoes.
+     */
+    private void resolveEchoLocations(ArrayList<Ft8Message> display) {
+        final ArrayList<Ft8Message> echoes = FullDuplexMonitor.onlyOwnEchoes(display);
+        if (echoes.isEmpty()) return;
+        SafeExecutor.tryExecute(getQTHThreadPool, () -> {
+            CallsignDatabase.getMessagesLocation(
+                    GeneralVariables.callsignDatabase.getDb(), echoes);
+            publishFt8MessageList();
+        });
+    }
+
+    /**
+     * Whether a tapped decode row is our own transmission. Checks the echo tag
+     * first — set by {@link OwnTxEchoFilter} on the one path that decides "this
+     * is us" — and falls back to the same callsign test that filter uses, so a
+     * compound or hashed call (K1AF/P echoing as {@code K1AF}) is caught the
+     * way a raw {@code equalsIgnoreCase(myCallsign)} would not.
+     */
+    static boolean isOurOwnRow(Ft8Message message) {
+        return message.isOwnEcho
+                || GeneralVariables.checkIsMyCallsign(message.getCallsignFrom());
     }
 
     /**
@@ -1094,8 +1627,7 @@ public class MainViewModel extends ViewModel {
             return;
         }
         String from = message.callsignFrom;
-        if (from == null || from.trim().isEmpty()
-                || from.equalsIgnoreCase(GeneralVariables.myCallsign)) {
+        if (from == null || from.trim().isEmpty() || isOurOwnRow(message)) {
             return;
         }
 
@@ -1120,6 +1652,223 @@ public class MainViewModel extends ViewModel {
                 order,
                 message.extraInfo);
         ft8TransmitSignal.transmitNow();
+    }
+
+    // --- Voice assistant --------------------------------------------------------
+
+    /**
+     * Whether FT8 RX currently holds an Android audio-capture session (system
+     * mic or Android-routed USB input). The voice-command push-to-talk button
+     * is disabled while true: a SpeechRecognizer would fight our capture under
+     * Android's concurrent-capture rules. False for direct-libusb USB audio
+     * and LAN audio sources, where the capture stack is free.
+     */
+    public boolean isPhoneMicInUse() {
+        return hamRecorder != null && hamRecorder.isPhoneMicInUse();
+    }
+
+    /** The voice announcer (TTS), for the command button's spoken echo. */
+    public com.k1af.ft8af.voice.VoiceAnnouncer getVoiceAnnouncer() {
+        return dxAlertNotifier.getVoiceAnnouncer();
+    }
+
+    /**
+     * "Answer" voice command: call the best current candidate — the newest
+     * decode addressed to me, else the caller-queue head's newest decode
+     * (selection logic in {@link com.k1af.ft8af.voice.VoiceAnswerSelector}).
+     *
+     * @return the callsign being answered, or null when there was no candidate
+     *         (the spoken/toast feedback branches on this)
+     */
+    public String voiceAnswerBestCaller() {
+        if (ft8TransmitSignal == null) return null;
+        ArrayList<Ft8Message> snapshot;
+        synchronized (ft8Messages) {
+            snapshot = new ArrayList<>(ft8Messages);
+        }
+        ArrayList<com.k1af.ft8af.ft8transmit.QueuedCaller> queue =
+                ft8TransmitSignal.mutableCallerQueue.getValue();
+        String queueHead = (queue != null && !queue.isEmpty()) ? queue.get(0).callsign : null;
+
+        Ft8Message target = com.k1af.ft8af.voice.VoiceAnswerSelector.pick(
+                snapshot,
+                m -> GeneralVariables.checkIsMyCallsign(m.getCallsignTo()),
+                Ft8Message::getCallsignFrom,
+                queueHead);
+        if (target == null) return null;
+        // callStation guards against TX-in-progress, empty sender, and own call.
+        callStation(target);
+        return target.getCallsignFrom();
+    }
+
+    // --- WSJT-X UDP interface -------------------------------------------------
+
+    /**
+     * Wire the WSJT-X UDP service to this ViewModel's state + transmit path, then
+     * (re)bind from the persisted settings. Called once after the transmit signal
+     * is created; the Settings screen calls {@link WsjtxUdpService#reload()}
+     * directly when the operator changes the options.
+     */
+    private void setupWsjtxUdp() {
+        WsjtxUdpService svc = WsjtxUdpService.INSTANCE;
+        svc.statusProvider = this::buildWsjtxStatus;
+        svc.onReply = this::handleWsjtxReply;
+        svc.onHaltTx = (autoOnly) -> {
+            if (ft8TransmitSignal != null) {
+                ft8TransmitSignal.setTransmitting(false);
+                ft8TransmitSignal.setActivated(false);
+            }
+        };
+        svc.onFreeText = this::handleWsjtxFreeText;
+        svc.onReplay = () -> { /* decodes are re-sent inside the service */ };
+        svc.reload();
+    }
+
+    /** Build a WSJT-X Status snapshot from current state (called ~1 Hz). */
+    private WsjtxCodec.Status buildWsjtxStatus() {
+        boolean transmitting = ft8TransmitSignal != null && ft8TransmitSignal.isTransmitting();
+        boolean txEnabled = ft8TransmitSignal != null && ft8TransmitSignal.isActivated();
+        boolean decoding = Boolean.TRUE.equals(mutableIsDecoding.getValue());
+        String myGrid = GeneralVariables.getMyMaidenheadGrid();
+        if (myGrid == null) myGrid = "";
+        String mode = ModeProfile.fromId(GeneralVariables.operatingMode).displayName;
+        int baseFreq = Math.max(0, (int) GeneralVariables.getBaseFrequency());
+        return new WsjtxCodec.Status(
+                GeneralVariables.band,       // dial frequency (Hz)
+                mode,
+                "",                           // dx call
+                "",                           // report
+                mode,                         // tx mode
+                txEnabled,
+                transmitting,
+                decoding,
+                baseFreq,                     // rx df
+                baseFreq,                     // tx df
+                GeneralVariables.myCallsign,  // de call
+                myGrid,                       // de grid
+                "",                           // dx grid
+                false,                        // tx watchdog
+                "",                           // sub mode
+                false,                        // fast mode
+                0,                            // special op mode
+                0xFFFFFFFF,                   // freq tolerance (u32 max)
+                15,                           // T/R period (s)
+                "Default",                    // config name
+                "");                          // tx message
+    }
+
+    /** Broadcast a slot's decodes as WSJT-X Decode messages. */
+    private void broadcastWsjtxDecodes(ArrayList<Ft8Message> messages) {
+        WsjtxUdpService svc = WsjtxUdpService.INSTANCE;
+        if (!svc.getEnabled()) {
+            return;
+        }
+        for (Ft8Message m : messages) {
+            String text = m.getMessageText();
+            if (text == null) {
+                text = "";
+            }
+            int timeMs = (int) (m.utcTime % 86_400_000L);
+            int snr = m.hasSnr() ? m.snr : 0;
+            int df = Math.max(0, (int) m.freq_hz);
+            String mode = ModeProfile.fromId(m.signalFormat).displayName;
+            svc.sendDecode(new WsjtxCodec.Decode(
+                    true, timeMs, snr, (double) m.time_sec, df, mode, text, false, false));
+        }
+    }
+
+    /** Broadcast a logged QSO as WSJT-X QSO-Logged + Logged-ADIF messages. */
+    private void broadcastWsjtxQso(QSLRecord r) {
+        WsjtxUdpService svc = WsjtxUdpService.INSTANCE;
+        if (!svc.getEnabled()) {
+            return;
+        }
+        long txFreq = r.getBandFreq() + Math.max(0, r.getWavFrequency());
+        WsjtxCodec.QsoLogged q = new WsjtxCodec.QsoLogged(
+                WsjtxCodec.DateTime.fromAdif(r.getQso_date_off(), r.getTime_off()),
+                nz(r.getToCallsign()),
+                nz(r.getToMaidenGrid()),
+                txFreq,
+                r.getMode() == null ? "FT8" : r.getMode(),
+                AdifFormat.formatReport(r.getMode(), r.getSendReport()),
+                AdifFormat.formatReport(r.getMode(), r.getReceivedReport()),
+                "",                            // tx power
+                nz(r.getComment()),
+                "",                            // name
+                WsjtxCodec.DateTime.fromAdif(r.getQso_date(), r.getTime_on()),
+                nz(r.getMyCallsign()),         // operator call
+                nz(r.getMyCallsign()),         // my call
+                nz(r.getMyMaidenGrid()),
+                "", "", "");                   // exch sent/recv, prop mode
+        String adif = AdifLogFile.fromQslRecord(r).build();
+        svc.sendQsoLogged(q, adif);
+    }
+
+    /**
+     * The audio TX offset (Hz) to adopt for an inbound WSJT-X Reply's requested {@code df},
+     * or -1 to keep the current frequency. Bounds the untrusted UDP value to the same
+     * audio passband the tuning UI permits: {@code [100, spectrumWidthHz - 100]}, matching
+     * {@code WaterfallView}'s click-to-tune clamp of {@code freq_hz} to
+     * {@code [100, spectrumWidth - 100]}. A df below 100, above {@code spectrumWidthHz - 100},
+     * non-positive, or absent is ignored — a malformed/garbled datagram, or one asking for a
+     * tone the user could never dial in by hand, must not push the TX marker outside the
+     * visible/tunable range.
+     */
+    static int replyTxFrequencyHz(int deltaFreq, int spectrumWidthHz) {
+        int max = spectrumWidthHz - 100;
+        return (deltaFreq >= 100 && deltaFreq <= max) ? deltaFreq : -1;
+    }
+
+    /** Inbound Reply: call the referenced station, preferring the real decode. */
+    private void handleWsjtxReply(String call, String grid, int snr, int deltaFreq) {
+        if (ft8TransmitSignal == null || call == null || call.isEmpty()) {
+            return;
+        }
+        // Honor the audio frequency the companion asked us to answer on (WSJT-X's `df`),
+        // so we key up on the requested tone rather than the current TX offset — matching
+        // the iOS port. getBaseFrequency() is the shared RX/TX audio offset
+        // FT8TransmitSignal reads when it generates the waveform.
+        int txHz = replyTxFrequencyHz(deltaFreq, GeneralVariables.getSpectrumWidth());
+        if (txHz > 0) {
+            GeneralVariables.setBaseFrequency(txHz);
+        }
+        Ft8Message target = findRecentDecode(call);
+        if (target == null) {
+            target = new Ft8Message("", call, grid == null ? "" : grid);
+        }
+        callStation(target);
+    }
+
+    /** Inbound Free Text: send the given text (only when the request asks to send). */
+    private void handleWsjtxFreeText(String text, boolean send) {
+        if (ft8TransmitSignal == null || !send || text == null) {
+            return;
+        }
+        // Route through the purpose-built one-shot entry point instead of open-coding the
+        // arming sequence. An inbound Free-Text request can be the very first TX action of a
+        // session (a companion app sends it before any CQ or decode tap), and transmitNow()
+        // dereferences toCallsign — which stays null until the first setTransmit/resetToCQ —
+        // for its status toast. sendFreeTextOnce() seeds a CQ baseline in that case (issue
+        // #401), validates the callsign, and arms freeTextOneShot so the text goes out once
+        // (WSJT-X Tx5 semantics) rather than repeating every cycle.
+        ft8TransmitSignal.sendFreeTextOnce(text);
+    }
+
+    /** Most recent decode from {@code call} in the master list, or null. */
+    private Ft8Message findRecentDecode(String call) {
+        synchronized (ft8Messages) {
+            for (int i = ft8Messages.size() - 1; i >= 0; i--) {
+                Ft8Message m = ft8Messages.get(i);
+                if (m.callsignFrom != null && m.callsignFrom.equalsIgnoreCase(call)) {
+                    return m;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String nz(String s) {
+        return s == null ? "" : s;
     }
 
     /**
@@ -1214,8 +1963,33 @@ public class MainViewModel extends ViewModel {
         return false;
     }
 
+    // Rate-limit state for setOperationBand(). See RetunePolicy for why this exists and
+    // what is still unexplained about the caller.
+    private long lastPushedBandFreq = RetunePolicy.NO_PUSH;
+    private long lastBandPushAtMs = 0L;
+    private long lastRetuneSuppressionLogAtMs = RetunePolicy.NEVER_LOGGED;
+    private int suppressedRetunes = 0;
+    /** When the previous onConnected() callback arrived; see RetunePolicy.shouldResetOnConnect. */
+    private volatile long lastConnectCallbackAtMs = RetunePolicy.NO_CONNECT;
+
+    /**
+     * Forget what we last pushed, so the next {@code setOperationBand()} is treated as a
+     * first push and goes out unthrottled. Called on every successful connect.
+     */
+    private void resetRetuneRateLimit() {
+        lastPushedBandFreq = RetunePolicy.NO_PUSH;
+        lastBandPushAtMs = 0L;
+        lastRetuneSuppressionLogAtMs = RetunePolicy.NEVER_LOGGED;
+        suppressedRetunes = 0;
+    }
+
     /**
      * Set the operating carrier frequency. Only operates if the rig is connected.
+     *
+     * <p>Redundant requests — same dial as the last push, rig already reporting it — are
+     * suppressed down to a slow reassert heartbeat by {@link RetunePolicy}. A genuine
+     * retune (new dial, or a rig that has moved) is never delayed. This is containment for
+     * a ~1 Hz caller that has not been identified; the suppression log below names it.
      */
     public void setOperationBand() {
         if (!isRigConnected()) {
@@ -1223,7 +1997,31 @@ public class MainViewModel extends ViewModel {
             return;
         }
 
-        fileLog("setOperationBand: sending USB mode, then freq=" + GeneralVariables.band
+        long nowMs = System.currentTimeMillis();
+        // Assert the dial we CHOSE, never one echoed back by the rig. See RigDialTarget.
+        final long dialHz = RigDialTarget.dialToCommand(
+                GeneralVariables.commandedBandHz, GeneralVariables.band);
+        if (!RetunePolicy.shouldRetune(dialHz, baseRig.getFreq(),
+                lastPushedBandFreq, nowMs, lastBandPushAtMs)) {
+            suppressedRetunes++;
+            if (RetunePolicy.shouldLogSuppression(nowMs, lastRetuneSuppressionLogAtMs)) {
+                // Name the caller: the ~1 Hz driver of this loop is not identifiable from
+                // the source, so record who is actually asking. Only on the rate-limited
+                // path — building a stack trace per suppressed call would be its own leak.
+                fileLog("setOperationBand: suppressed " + suppressedRetunes
+                        + " redundant retunes (freq=" + dialHz
+                        + " already set) caller=" + RetunePolicy.callerOf(
+                                Thread.currentThread().getStackTrace(),
+                                MainViewModel.class.getName()));
+                lastRetuneSuppressionLogAtMs = nowMs;
+                suppressedRetunes = 0;
+            }
+            return;
+        }
+        lastPushedBandFreq = dialHz;
+        lastBandPushAtMs = nowMs;
+
+        fileLog("setOperationBand: sending USB mode, then freq=" + dialHz
                 + " in 800ms (controlMode=" + GeneralVariables.controlMode + ")");
         //set USB mode first, then set frequency
         baseRig.setUsbModeToRig();//set USB mode
@@ -1232,10 +2030,27 @@ public class MainViewModel extends ViewModel {
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
-                fileLog("setOperationBand: setting freq=" + GeneralVariables.band
+                // Re-read the commanded dial HERE rather than using the value captured
+                // 800ms ago: the operator can change band inside that window, and a
+                // stale capture would briefly retune the rig back to the old one.
+                long sendHz = RigDialTarget.dialToCommand(
+                        GeneralVariables.commandedBandHz, GeneralVariables.band);
+                fileLog("setOperationBand: setting freq=" + sendHz
                         + " (rig.getFreq=" + baseRig.getFreq() + ")");
-                baseRig.setFreq(GeneralVariables.band);//set frequency
+                // Commanded, not reported: must NOT arm the CAT liveness watchdog (#781).
+                baseRig.setCommandedFreq(sendHz);//set frequency
                 baseRig.setFreqToRig();
+                // A pending operator selection has now actually been dispatched (the
+                // connected-gate above passed): start the confirm grace, after which a
+                // still-differing rig report is trusted again. Only if the write really
+                // reached the rig, though — a port that died between the gate and the
+                // send returns false from sendData without throwing, and stamping that
+                // as delivered would re-open the overwrite. See RigDialTarget.
+                boolean catOk = baseRig.getConnector() != null
+                        && baseRig.getConnector().isLastCatWriteOk();
+                GeneralVariables.operatorDialDeliveredAtMs = RigDialTarget.deliveredStamp(
+                        catOk, System.currentTimeMillis(),
+                        GeneralVariables.operatorDialDeliveredAtMs);
             }
         }, 800);
     }
@@ -1289,13 +2104,26 @@ public class MainViewModel extends ViewModel {
         // Retune within the SAME band to the new mode's dial (see safety note above).
         String waveLength = BaseRigOperation.getMeterFromFreq(GeneralVariables.band);
         long newFreq = OperationBand.getModeBandFreq(waveLength, normId);
+        boolean retuned = false;
         if (newFreq > 0 && newFreq != GeneralVariables.band) {
             GeneralVariables.band = newFreq;
+            // Mode retune within the same band is an explicit choice too. See RigDialTarget.
+            GeneralVariables.operatorChoseDial(newFreq);
             GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(newFreq);
             databaseOpr.writeConfig("bandFreq", String.valueOf(newFreq), null);
-            databaseOpr.getAllQSLCallsigns();
+            retuned = true;
             GeneralVariables.mutableBandChange.postValue(GeneralVariables.bandListIndex);
             setOperationBand();//push the new dial to the rig over CAT (no-op if not connected)
+        }
+
+        // Reload the worked lists when this switch invalidated them. A retune always
+        // does (they are built per band), but with "same mode only" on they are also
+        // built per operating mode — so a mode switch that does NOT move the dial
+        // (no band entry for the new mode, or the dial is already on target) would
+        // otherwise leave the previous mode's worked stations highlighted/hidden
+        // until some unrelated reload happened to run. See WorkedModeFilter.
+        if (WorkedModeFilter.reloadNeededOnModeChange(retuned, GeneralVariables.workedSameMode)) {
+            databaseOpr.getAllQSLCallsigns();
         }
 
         // Mode changed (and possibly retuned within the band) — optionally wipe the
@@ -1354,6 +2182,16 @@ public class MainViewModel extends ViewModel {
             databaseOpr.writeConfig("ctrMode", String.valueOf(ControlMode.CAT), null);
             GeneralVariables.mutableControlMode.postValue(GeneralVariables.controlMode);
         }
+        // Tear down any previous connector FIRST. It owns an open port and an
+        // auto-reconnect loop; just overwriting the reference leaked both, so every
+        // re-enumeration of a flapping link stacked another live connector — measured
+        // 2026-08-04 as an orphaned port's poll timers spamming "port not open!"
+        // interleaved with the live port's sends, and concurrent reconnect loops each
+        // hammering port opens. disconnect() sets that connector's userDisconnected,
+        // which is what actually ends its loop.
+        if (baseRig != null && baseRig.getConnector() != null) {
+            baseRig.getConnector().disconnect();
+        }
         connectRig();
 
         if (baseRig == null) {
@@ -1381,6 +2219,11 @@ public class MainViewModel extends ViewModel {
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
+                // Settle any unkey owed from before the link dropped BEFORE
+                // retuning. If a brown-out killed the port mid-transmission the
+                // rig is still keyed, and sending frequency/mode to a keyed rig
+                // is exactly what makes it click and mis-set.
+                retryPendingUnkey();
                 setOperationBand();//set carrier frequency
             }
         }, 1000);
@@ -1459,12 +2302,15 @@ public class MainViewModel extends ViewModel {
             }
         });
 
-        iComWifiConnector.connect();
         connectRig();//assign baseRig
 
         baseRig.setControlMode(GeneralVariables.controlMode);
         baseRig.setOnRigStateChanged(onRigStateChanged);
         baseRig.setConnector(iComWifiConnector);
+        // Connect AFTER the rig-state listener is wired (setConnector above), otherwise the
+        // onConnecting/onConnected edges the connector now emits (#754) would fire into a
+        // null listener and the CAT chip would never leave grey.
+        iComWifiConnector.connect();
 
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {//connection takes time, wait before setting frequency
             @Override
@@ -1560,6 +2406,161 @@ public class MainViewModel extends ViewModel {
 
 
     /**
+     * One-time repair for a CI-V address the 2026-05..08 Compose rig picker persisted in
+     * decimal (#753). {@link com.k1af.ft8af.database.DatabaseOpr} already un-mangles the
+     * unambiguous (three-digit) cases at load. The two-digit ones ("88" for an IC-706's
+     * 0x58) are ambiguous: the same text is what a deliberate 0x88 override written by the
+     * legacy hex field looks like, and there is no longer any UI to restore such an override
+     * — so they are never rewritten (Copilot review on #778). Instead, when the value's
+     * provenance is unknown ({@link CivAddressConfig#FORMAT_KEY} absent) and it is the
+     * model's decimal twin, the user is told once to re-select the rig if it uses the
+     * default; the picker then stores hex with the marker. Whenever the marker is missing or
+     * the stored text isn't canonical hex, the value is written back canonically together
+     * with the marker, so the repair (and the hint) really is one-time.
+     */
+    private void repairCivAddressAgainstModel() {
+        if (GeneralVariables.instructionSet != InstructionSet.ICOM
+                && GeneralVariables.instructionSet != InstructionSet.ICOM_756) {
+            return;
+        }
+        try {
+            android.content.Context ctx = GeneralVariables.getMainContext();
+            if (ctx == null) return;
+            RigNameList.RigName model = RigNameList.getInstance(ctx)
+                    .getRigNameByIndex(GeneralVariables.modelNo);
+            int before = GeneralVariables.civAddress;
+            CivAddressConfig.Repair plan = CivAddressConfig.planRepair(
+                    GeneralVariables.civAddressStored, GeneralVariables.civAddressFormatKnown,
+                    before, model.address);
+            if (plan.address != before) {
+                GeneralVariables.civAddress = plan.address;
+                GeneralVariables.fileLog(String.format(java.util.Locale.US,
+                        "CIV: repaired stored address 0x%02X -> 0x%02X (model %s)",
+                        before, plan.address, model.modelName));
+            }
+            if (plan.ambiguous) {
+                String hint = String.format(java.util.Locale.US,
+                        getStringFromResource(R.string.civ_address_ambiguous_hint),
+                        plan.address, model.modelName, model.address);
+                GeneralVariables.fileLog(String.format(java.util.Locale.US,
+                        "CIV: stored address 0x%02X is the decimal twin of model %s (0x%02X); "
+                                + "kept as-is, user hinted to re-select the rig",
+                        plan.address, model.modelName, model.address));
+                ToastMessage.show(hint);
+            }
+            if (plan.writeBack && databaseOpr != null) {
+                String encoded = CivAddressConfig.encode(plan.address);
+                databaseOpr.writeConfig("civ", encoded, null);
+                databaseOpr.writeConfig(CivAddressConfig.FORMAT_KEY,
+                        CivAddressConfig.FORMAT_HEX, null);
+                GeneralVariables.civAddressStored = encoded;
+                GeneralVariables.civAddressFormatKnown = true;
+                GeneralVariables.fileLog(String.format(java.util.Locale.US,
+                        "CIV: stored address canonicalized to \"%s\" (+%s=%s)",
+                        encoded, CivAddressConfig.FORMAT_KEY, CivAddressConfig.FORMAT_HEX));
+            }
+        } catch (Exception e) {
+            GeneralVariables.fileLog("CIV: repair skipped: " + e.getMessage());
+        }
+    }
+
+    /**
+     * The QRP Labs QMX needs mono/left-channel TX audio to fully drive its
+     * modulator -- confirmed on real hardware across three independent apps
+     * (WSJT-X, QFT8, and this one): FT8AF's historical {@code BOTH} default
+     * opens a mono {@code AudioTrack} and leaves the mono-to-stereo upmix to
+     * Android/the USB Audio Class device, with no control over how much gain
+     * that upmix applies per channel, while an explicit {@code LEFT}
+     * selection opens a genuine stereo track with the left channel at full
+     * scale and the right silenced (see {@link AudioChannelSelect}) --
+     * underdriven either way until the operator finds the manual Settings
+     * toggle. While a QMX is the connected rig, uses {@code LEFT} for TX, but
+     * only when the operator has never touched that setting at all (no
+     * "txAudioChannel" config row) -- an explicit choice, even {@code BOTH}
+     * itself, is never overridden. Applied in memory on every rig connect and
+     * never saved, so switching to another rig goes back to {@code BOTH}
+     * instead of leaving that rig on a left-only TX it never asked for.
+     */
+    private void applyTxChannelDefaultForRig(boolean rigIsQmx) {
+        if (databaseOpr == null) return;
+        boolean keyExists = databaseOpr.hasConfigKey(AudioChannelSelect.TX_CONFIG_KEY);
+        int channel = defaultTxChannelForRig(rigIsQmx, keyExists, GeneralVariables.txAudioChannel);
+        if (channel != GeneralVariables.txAudioChannel) {
+            GeneralVariables.txAudioChannel = channel;
+            GeneralVariables.fileLog("TX audio channel defaulted to "
+                    + (channel == AudioChannelSelect.LEFT ? "LEFT (QMX)" : "BOTH")
+                    + " (no saved user choice)");
+        }
+    }
+
+    /**
+     * The decision behind {@link #applyTxChannelDefaultForRig}, pure and
+     * testable without a real {@code DatabaseOpr}/{@code Context}: the TX
+     * channel to use for the rig being connected. A saved choice
+     * ({@code txChannelConfigKeyExists}) keeps {@code current}; otherwise the
+     * QMX gets {@code LEFT} and every other rig the {@code BOTH} default.
+     */
+    static int defaultTxChannelForRig(boolean rigIsQmx, boolean txChannelConfigKeyExists,
+                                      int current) {
+        if (txChannelConfigKeyExists) return current;
+        return rigIsQmx ? AudioChannelSelect.LEFT : AudioChannelSelect.BOTH;
+    }
+
+    /**
+     * Whether {@code rig} is a QRP Labs QMX, through either rig-list entry: the
+     * hamlib backend or the native {@link QrpLabsQmxRig}. The RX pause and the
+     * LEFT TX channel default work around the radio's USB audio, so they apply
+     * whichever CAT driver talks to it.
+     */
+    static boolean isQmxRig(BaseRig rig) {
+        return rig instanceof QrpLabsQmxRig
+                || (rig instanceof HamlibRig && ((HamlibRig) rig).isQmx());
+    }
+
+    /**
+     * Whether RX capture must be paused for the duration of this TX (see
+     * {@link HamRecorder#pauseForTx()} for the real-hardware failure this
+     * works around). True only for the QRP Labs QMX, and only when RX is
+     * actually holding an Android capture session on the exact same USB
+     * device TX is about to play on. The QMX gate matters: matching VID:PID
+     * alone is true for every single-cable USB rig (IC-7300, IC-705,
+     * IC-9700, FT-991A, Digirig, SignaLink...) whose operator picked the
+     * rig's codec for both directions, and pausing those would blank the
+     * waterfall during TX, break full-duplex satellite monitoring, and risk
+     * delaying the last RX slot's decode -- for a HAL conflict only ever
+     * confirmed with a QMX:
+     *
+     * <ul>
+     *   <li>the rig must be a QMX ({@link #isQmxRig});
+     *   <li>RX must be the phone-audio path ({@code HamRecorder.isMicSource()}),
+     *       not a LAN-connected rig -- those never touch this HAL at all, and
+     *       toggling capture off would spuriously gate their audio too (see
+     *       {@code HamRecorder.doOnWaveDataReceived}'s {@code isRunning} check);
+     *   <li>RX must not already be USB-direct (raw libusb capture, a
+     *       different HAL path with no ALSA proxy to conflict over);
+     *   <li>the input and output VID:PID must both be set and match -- two
+     *       different USB devices, or a non-USB default mic/speaker, have no
+     *       reason to share this HAL's single ALSA card.
+     * </ul>
+     *
+     * <p>USB-direct TX output pauses too: it takes the rig's streaming
+     * interface away from the kernel driver, and with the HAL's capture still
+     * open on the same device every iso submit failed with
+     * {@code LIBUSB_ERROR_IO} (motorola edge 2022 + QMX). The reference app
+     * that drives the QMX to full level over raw USB stops capture first.
+     */
+    static boolean shouldPauseRxCaptureForTx(boolean rigIsQmx, boolean rxIsMicSource,
+            boolean rxIsUsbDirect, int usbInputVendorId, int usbInputProductId,
+            int usbOutputVendorId, int usbOutputProductId) {
+        if (!rigIsQmx || !rxIsMicSource || rxIsUsbDirect) {
+            return false;
+        }
+        return usbInputVendorId != 0
+                && usbInputVendorId == usbOutputVendorId
+                && usbInputProductId == usbOutputProductId;
+    }
+
+    /**
      * Create different rig models based on the instruction set
      */
     private void connectRig() {
@@ -1568,6 +2569,7 @@ public class MainViewModel extends ViewModel {
             baseRig.onDisconnecting();
         }
         baseRig = null;
+        repairCivAddressAgainstModel();
         //determine the rig type: ICOM, YAESU 2, YAESU 3
         switch (GeneralVariables.instructionSet) {
             case InstructionSet.ICOM:
@@ -1606,11 +2608,17 @@ public class MainViewModel extends ViewModel {
             case InstructionSet.KENWOOD_TS590:
                 baseRig = new KenwoodTS590Rig();//KENWOOD TS590
                 break;
+            case InstructionSet.QRPLABS_QMX:
+                baseRig = new QrpLabsQmxRig();//QRP Labs QMX (TS-590 CAT, DATA mode MD6;)
+                break;
             case InstructionSet.GUOHE_Q900:
                 baseRig = new GuoHeQ900Rig();//GuoHe Q900
                 break;
             case InstructionSet.XIEGUG90S://XieGu, USB mode
                 baseRig = new XieGuRig(GeneralVariables.civAddress);//XieGu G90S
+                break;
+            case InstructionSet.XIEGU_G106:
+                baseRig = new XieGuG106Rig(GeneralVariables.civAddress);
                 break;
             case InstructionSet.ELECRAFT:
                 baseRig = new ElecraftRig();//ELECRAFT
@@ -1652,7 +2660,23 @@ public class MainViewModel extends ViewModel {
             case InstructionSet.KENWOOD_TS440:
                 baseRig = new KenwoodTS440Rig();//KENWOOD TS-440S (TS-570 CAT, USB mode)
                 break;
+            case InstructionSet.HAMLIB: {
+                // hamlib model number is carried in the rig table's address column
+                // (parsed base-16), e.g. FT-891 = 1036 = 0x40C. Derived fresh from the
+                // selected rig entry (HamlibRig.modelIdFor), not persisted separately --
+                // a separate "hamlibModel" config key existed briefly but could go stale
+                // or hold a non-hamlib address (civAddress's own persistence is byte-
+                // masked, a real ICOM CI-V address being a byte where a hamlib model ID
+                // routinely isn't, so it can't carry this value either).
+                android.content.Context ctx = GeneralVariables.getMainContext();
+                RigNameList.RigName selected = ctx == null ? null
+                        : RigNameList.getInstance(ctx).getRigNameByIndex(GeneralVariables.modelNo);
+                int hamlibModelId = HamlibRig.modelIdFor(selected);
+                baseRig = new HamlibRig(hamlibModelId);
+                break;
+            }
         }
+        applyTxChannelDefaultForRig(isQmxRig(baseRig));
 
         // Store the rig name for PSKReporter software string.
         // Use the user-selected model name from RigNameList (same source as the
@@ -1711,6 +2735,146 @@ public class MainViewModel extends ViewModel {
     }
 
     /**
+     * RECORD_AUDIO was just granted: bring up the mic capture that could not
+     * open at startup without it (see {@link HamRecorder#restartMicAfterPermissionGrant}).
+     * On a plain daemon thread, not the caller's: the grant arrives on the main
+     * thread, and the reinit joins the old capture thread (up to a second) and
+     * can wait on another reinit holding the MicRecorder lock.
+     */
+    public void restartAudioAfterMicGrant() {
+        final HamRecorder recorder = hamRecorder;
+        if (recorder == null) return;
+        GeneralVariables.fileLog("RECORD_AUDIO granted: restarting mic capture");
+        Thread restart = new Thread(recorder::restartMicAfterPermissionGrant, "MicGrantRestart");
+        restart.setDaemon(true);
+        restart.start();
+    }
+
+    /**
+     * Settling time before an RX channel change actually reopens the capture.
+     * The selector is an A/B control — the operator flips it while watching the
+     * waterfall — and each reopen costs up to a second of RX plus, on USB-direct,
+     * an interface re-claim and a libusb session restart. Rapid taps therefore
+     * collapse to one reopen at the final value.
+     */
+    static final long RX_CHANNEL_REOPEN_DEBOUNCE_MS = 400;
+
+    // Generation stamp for the debounce above: each reopen request bumps it, and
+    // a request only fires if nothing newer superseded it while it waited.
+    private final java.util.concurrent.atomic.AtomicInteger rxChannelReopenGeneration =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    /**
+     * The operator changed the RX channel selection from {@code from} to
+     * {@code to}. Reopens the audio input if — and only if — the running capture
+     * cannot pick the new value up live (see
+     * {@link com.k1af.ft8af.wave.MicRecorder#reopenRequiredForChannelChange}),
+     * debounced and on a plain daemon thread rather than a composition-scoped
+     * coroutine: the settings screen may be popped in the same gesture as the
+     * tap, and a reopen that dies with the screen leaves the stored setting and
+     * the open capture silently disagreeing until the next USB attach.
+     */
+    public void onRxAudioChannelChanged(int from, int to) {
+        if (hamRecorder == null || !hamRecorder.rxChannelChangeNeedsReopen(from, to)) {
+            return;
+        }
+        final int generation = rxChannelReopenGeneration.incrementAndGet();
+        Thread reopen = new Thread(() -> {
+            try {
+                Thread.sleep(RX_CHANNEL_REOPEN_DEBOUNCE_MS);
+            } catch (InterruptedException e) {
+                return;
+            }
+            if (rxChannelReopenGeneration.get() != generation) {
+                return; // a later tap took over; it will do the reopen
+            }
+            reinitializeAudioInput();
+        }, "RxChannelReopen");
+        reopen.setDaemon(true);
+        reopen.start();
+    }
+
+    // Tracks whether we've put the phone into Bluetooth headset (SCO) mode for audio, so
+    // refreshBluetoothHeadsetMode() only toggles on an actual change. setBlueToothOn() does a
+    // stop+start of SCO, which is disruptive to re-issue on every settings tap. (#723)
+    private boolean btHeadsetModeActive = false;
+
+    /**
+     * Bring the phone's Bluetooth headset (SCO) link up or down to match the current rig +
+     * audio-device selection (issue #723).
+     *
+     * <p>Before this, SCO was entered only when the <em>rig</em> connection was Bluetooth. A
+     * user on a USB/VOX rig who selected a Bluetooth headset as the FT8 mic got no SCO, so the
+     * app captured the built-in mic instead and the headset never appeared to work — the
+     * documented workaround was to launch FT8CN first purely to turn SCO on. This now also
+     * enters headset mode when the selected input or output device is a Bluetooth-SCO endpoint,
+     * and rebuilds the AudioRecord so capture actually routes over the link.
+     *
+     * <p>Idempotent and safe to call from launch and from each device-picker change.
+     */
+    public void refreshBluetoothHeadsetMode() {
+        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
+                .getSystemService(Context.AUDIO_SERVICE);
+        if (audioManager == null) return;
+
+        int inputType = audioDeviceType(audioManager,
+                GeneralVariables.audioInputDeviceId, AudioManager.GET_DEVICES_INPUTS);
+        int outputType = audioDeviceType(audioManager,
+                GeneralVariables.audioOutputDeviceId, AudioManager.GET_DEVICES_OUTPUTS);
+
+        boolean want = ScoPolicy.shouldEnterHeadsetMode(GeneralVariables.connectMode,
+                isBTConnected(), inputType, outputType);
+
+        // Cross-check the cached flag against the coordinator's tracked link state: SCO
+        // drops by itself when the headset disconnects (and setBlueToothOn() can fail), so
+        // the flag alone would skip re-entering and leave the selected BT mic/speaker dead
+        // until restart. Not AudioManager.isBluetoothScoOn(): that only mirrors the legacy
+        // force-use flag, which the setSpeakerphoneOn(false) in the SCO sink clears on newer
+        // builds, so it can read false with the link up — and then a "deselect BT headset"
+        // would FORGET instead of LEAVE and the coordinator would keep SCO on (Copilot #778).
+        boolean linkUp = scoLink.isLinkUpOrPending();
+        boolean linkHeld = scoLink.isWanted();
+        boolean bluetoothRig = GeneralVariables.connectMode == ConnectMode.BLUE_TOOTH;
+        switch (ScoPolicy.headsetModeAction(want, btHeadsetModeActive, linkUp, linkHeld,
+                bluetoothRig)) {
+            case ScoPolicy.HEADSET_MODE_ENTER:
+                setBlueToothOn();
+                btHeadsetModeActive = true;
+                // Rebuild capture so the AudioRecord binds to the freshly-opened SCO route
+                // rather than the built-in mic it was created on.
+                reinitializeAudioInput();
+                break;
+            case ScoPolicy.HEADSET_MODE_LEAVE:
+                // Leave headset mode when the user picks a non-BT device — never from under
+                // a Bluetooth rig, whose TX/RX path owns SCO (headsetModeAction guards that).
+                setBlueToothOff();
+                btHeadsetModeActive = false;
+                reinitializeAudioInput();
+                break;
+            case ScoPolicy.HEADSET_MODE_FORGET:
+                // The coordinator no longer holds a request (TX stopSco / shutdown already
+                // took the link down); nothing to tear down.
+                btHeadsetModeActive = false;
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * {@link android.media.AudioDeviceInfo#getType()} of the routed device matching
+     * {@code deviceId} among {@code flags} (inputs or outputs), or -1 if none match (Default
+     * row, USB-direct entry, or nothing connected).
+     */
+    private int audioDeviceType(AudioManager audioManager, int deviceId, int flags) {
+        if (deviceId <= 0) return -1;
+        for (android.media.AudioDeviceInfo d : audioManager.getDevices(flags)) {
+            if (d.getId() == deviceId) return d.getType();
+        }
+        return -1;
+    }
+
+    /**
      * Check whether the rig is connected. Two cases: rigBaseClass not created, or serial port connection failed.
      *
      * @return whether connected
@@ -1721,6 +2885,81 @@ public class MainViewModel extends ViewModel {
         } else {
             return baseRig.isConnected();
         }
+    }
+
+    /** Whether the rig's connector believes the last PTT write was delivered. */
+    private boolean lastPttWriteReachedRig() {
+        if (baseRig == null) return false;
+        BaseRigConnector connector = baseRig.getConnector();
+        // No connector at all means nothing was written; treat as undelivered so
+        // the latch stays armed rather than silently forgiving a lost unkey.
+        return connector != null && connector.isLastPttWriteOk();
+    }
+
+    /**
+     * Send PTT-off if we still owe the rig one, and clear the debt when it lands.
+     *
+     * <p>Called wherever a CAT link may have just come back: after a cable
+     * reconnect, and at every slot boundary as a backstop. Safe to call at any
+     * time — it is a no-op unless an unkey is actually outstanding, and CAT
+     * PTT-off is idempotent on a rig that is already receiving.
+     *
+     * <p>This is the recovery for the field failure where a USB brown-out killed
+     * the port mid-transmission and the rig stayed keyed for 97 seconds while the
+     * port itself was back within two.
+     *
+     * @return true if an unkey was owed and has now been sent successfully
+     */
+    public boolean retryPendingUnkey() {
+        if (!pttSafetyLatch.needsUnkey()) return false;
+        if (baseRig == null || !baseRig.isConnected()) return false;
+        fileLog("PTT: unkey still owed after link loss — re-sending PTT-off");
+        baseRig.setPTT(false);
+        boolean ok = lastPttWriteReachedRig();
+        pttSafetyLatch.onUnkeyAttempted(ok);
+        fileLog("PTT: unkey retry " + (ok ? "delivered" : "FAILED, still owed"));
+        return ok;
+    }
+
+    /**
+     * Whether the connected rig has answered at least one CAT probe since the
+     * current connection came up. Backs the USB Diagnostics "CAT Response" check:
+     * the serial port can open ({@link #isRigConnected()}) while the rig never
+     * replies — wrong baud rate, wrong CAT protocol, or a powered-but-silent
+     * adapter — and this flag distinguishes "link up" from "rig actually talking".
+     * Reset to false on every (re)connect and set true in {@link #markRigResponded()}.
+     *
+     * @return true once a valid CAT reply has been seen on the live connection
+     */
+    public boolean hasRigRespondedToCat() {
+        return catLiveness.hasSeenResponse();
+    }
+
+    /**
+     * The USB serial port the current rig connector drives, or null when the rig
+     * is not on a USB cable (Bluetooth, network, nothing). Backs the USB
+     * Diagnostics "CAT Port" row — on a dual-UART chip that row is what tells
+     * the operator they are on the Standard port when their rig wants Enhanced
+     * (issue #817).
+     */
+    public CableSerialPort.SerialPort connectedCableSerialPort() {
+        if (baseRig == null) return null;
+        BaseRigConnector connector = baseRig.getConnector();
+        if (connector instanceof CableConnector) {
+            return ((CableConnector) connector).getSerialPort();
+        }
+        return null;
+    }
+
+    /**
+     * Whether a CAT reply can be expected on the current link at all. False in the
+     * FT-710 cable mode, where the read loop is deliberately never started (see
+     * {@link CableSerialPort#isFt710WriteOnlyCatMode}) — so "CAT Response: fail"
+     * is the designed state there, not a fault.
+     */
+    public boolean isCatReadExpected() {
+        return !CableSerialPort.isFt710WriteOnlyCatMode(GeneralVariables.instructionSet,
+                GeneralVariables.connectMode, GeneralVariables.controlMode);
     }
 
     /**
@@ -1737,6 +2976,190 @@ public class MainViewModel extends ViewModel {
         baseRig.getConnector().connect();
     }
 
+    /** A transmission or tune carrier is on the air (rig-handoff view). */
+    public boolean isTransmittingForHandoff() {
+        return ft8TransmitSignal != null
+                && (ft8TransmitSignal.isTransmitting() || ft8TransmitSignal.isTuning());
+    }
+
+    /**
+     * Stop whatever is on the air because a sibling app is taking the rig over, and
+     * disarm auto-TX so the next cycle does not key a rig we no longer hold.
+     */
+    public void stopTransmitForHandoff() {
+        if (ft8TransmitSignal == null) return;
+        ft8TransmitSignal.stopTune();
+        ft8TransmitSignal.setTransmitting(false);
+        ft8TransmitSignal.setActivated(false);
+    }
+
+    /**
+     * Let go of the rig for a sibling app: close the CAT link (which also ends its
+     * auto-reconnect loop) and rebuild the audio input, which — with
+     * {@code RigHandoffGate} already set — comes back up on the phone's own input
+     * instead of the rig's USB audio. The rebuild runs off the main thread because it
+     * joins the old capture thread.
+     */
+    public void releaseRigForHandoff() {
+        fileLog("RigHandoff: releasing rig (connected=" + isRigConnected() + ")");
+        // Armed auto-TX would otherwise fire next cycle with no rig: PTT to a closed
+        // port and the tones out of the phone speaker.
+        if (ft8TransmitSignal != null) {
+            ft8TransmitSignal.setActivated(false);
+        }
+        // A PTT-off that never reached the rig must be settled while the port is still
+        // open; after disconnect() there is nothing left to send it through.
+        retryPendingUnkey();
+        if (baseRig != null && baseRig.getConnector() != null) {
+            baseRig.getConnector().disconnect();
+        }
+        Thread t = new Thread(this::reinitializeAudioInput, "RigHandoffRelease");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /**
+     * Take the rig back after a handoff (or after a sibling confirmed it let go).
+     * Deliberately gentle: a healthy link and a live USB audio stream are left alone, so
+     * a redundant call never punches a capture gap into a decode in progress.
+     */
+    public void reclaimRigAfterHandoff() {
+        boolean connected = isRigConnected();
+        boolean usbAudioWanted = com.k1af.ft8af.handoff.RigHandoffGate.mayOpenUsbAudioInput(
+                GeneralVariables.audioInputDeviceId, GeneralVariables.usbAudioInputVendorId);
+        boolean usbAudioLive = hamRecorder != null
+                && hamRecorder.getMicRecorder().isUsingUsbDirect();
+        fileLog("RigHandoff: reclaiming rig (connected=" + connected
+                + " usbAudioWanted=" + usbAudioWanted + " usbAudioLive=" + usbAudioLive + ")");
+        if (!connected) {
+            if (baseRig != null && baseRig.getConnector() != null) {
+                reconnectRig();
+            } else {
+                // Never connected this process: let the port scan drive auto-connect.
+                getUsbDevice();
+            }
+        }
+        if (usbAudioWanted && !usbAudioLive) {
+            Thread t = new Thread(this::reinitializeAudioInput, "RigHandoffReclaim");
+            t.setDaemon(true);
+            t.start();
+        }
+    }
+
+    /**
+     * The operator's "Take control of radio" button: a hard reset of this app's hold on
+     * the rig. Claims the rig from sibling apps, stops anything on the air, drops the
+     * CAT link, asks again for every USB permission this app needs and does not hold
+     * (ignoring the dialog cooldown), then reconnects the rig and rebuilds the audio
+     * input. See {@link com.k1af.ft8af.handoff.RigHardReset}.
+     *
+     * @return what was found and what is missing, so the button can tell the operator
+     *         whether a permission prompt is coming or everything was already allowed
+     */
+    public com.k1af.ft8af.handoff.RigHardReset.Result hardResetRigConnection() {
+        fileLog("RigReset: hard reset requested (connected=" + isRigConnected()
+                + " yieldedTo=" + com.k1af.ft8af.handoff.RigHandoffGate.yieldedTo() + ")");
+        // 1. Claim the rig: opens the gate and tells the siblings to let go.
+        com.k1af.ft8af.handoff.RigHandoffController handoff =
+                com.k1af.ft8af.handoff.RigHandoff.get();
+        if (handoff != null) {
+            handoff.onForegrounded(System.currentTimeMillis());
+        }
+        // 2. Tear down. An owed PTT-off goes out while the port is still open.
+        stopTransmitForHandoff();
+        retryPendingUnkey();
+        final boolean hadConnector = baseRig != null && baseRig.getConnector() != null;
+        if (hadConnector) {
+            baseRig.getConnector().disconnect();
+        }
+        // 3. Permissions. The serial device is asked for by the reconnect below.
+        UsbPermissionThrottle.forgetAll();
+        final boolean usbCable = GeneralVariables.connectMode == ConnectMode.USB_CABLE;
+        final java.util.List<com.k1af.ft8af.handoff.RigHardReset.UsbId> attached = attachedUsbIds(usbCable);
+        final int found = com.k1af.ft8af.handoff.RigHardReset.rigDevices(attached).size();
+        final int missing = com.k1af.ft8af.handoff.RigHardReset.missingPermission(attached).size();
+        fileLog("RigReset: rig USB devices found=" + found + " missingPermission=" + missing);
+        final int asked = requestMissingUsbAudioPermissions(attached);
+        // 4. Reconnect once the siblings have had time to release.
+        final com.k1af.ft8af.handoff.RigHardReset.Reconnect plan =
+                com.k1af.ft8af.handoff.RigHardReset.planReconnect(
+                        usbCable, hadConnector);
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            fileLog("RigReset: reconnecting (" + plan + ", permissionDialogs=" + asked + ")");
+            switch (plan) {
+                case SCAN_USB:
+                    getUsbDevice();
+                    break;
+                case RECONNECT_EXISTING:
+                    reconnectRig();
+                    break;
+                default:
+                    break;
+            }
+            // Unconditional, unlike the gentle reclaim: this is the hard reset.
+            Thread t = new Thread(this::reinitializeAudioInput, "RigHardReset");
+            t.setDaemon(true);
+            t.start();
+        }, com.k1af.ft8af.handoff.RigHardReset.RECONNECT_DELAY_MS);
+        return new com.k1af.ft8af.handoff.RigHardReset.Result(found, missing, usbCable);
+    }
+
+    /**
+     * Every attached USB device, tagged with how this app would use it: the operator's
+     * configured audio device, and (in USB-cable mode) a serial port for the CAT link.
+     */
+    private java.util.List<com.k1af.ft8af.handoff.RigHardReset.UsbId> attachedUsbIds(boolean usbCable) {
+        java.util.List<com.k1af.ft8af.handoff.RigHardReset.UsbId> ids = new ArrayList<>();
+        Context context = GeneralVariables.getMainContext();
+        if (context == null) return ids;
+        UsbManager usbManager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
+        if (usbManager == null) return ids;
+        java.util.List<CableSerialPort.SerialPort> ports = usbCable
+                ? CableSerialPort.listSerialPorts(context)
+                : new ArrayList<CableSerialPort.SerialPort>();
+        for (UsbDevice d : usbManager.getDeviceList().values()) {
+            boolean audio = GeneralVariables.isConfiguredUsbAudioInput(
+                    d.getVendorId(), d.getProductId())
+                    || GeneralVariables.isConfiguredUsbAudioOutput(
+                    d.getVendorId(), d.getProductId());
+            boolean serial = false;
+            for (CableSerialPort.SerialPort p : ports) {
+                if (p.deviceId == d.getDeviceId()) {
+                    serial = true;
+                    break;
+                }
+            }
+            ids.add(new com.k1af.ft8af.handoff.RigHardReset.UsbId(d.getVendorId(), d.getProductId(),
+                    audio, serial, usbManager.hasPermission(d)));
+        }
+        return ids;
+    }
+
+    /**
+     * Raise a permission dialog for each configured USB audio device this app may not
+     * open. A grant rebinds the audio input (see {@link #requestUsbPermissionIfNeeded}).
+     */
+    private int requestMissingUsbAudioPermissions(
+            java.util.List<com.k1af.ft8af.handoff.RigHardReset.UsbId> attached) {
+        Context context = GeneralVariables.getMainContext();
+        if (context == null) return 0;
+        UsbManager usbManager = (UsbManager) context.getSystemService(Context.USB_SERVICE);
+        if (usbManager == null) return 0;
+        int asked = 0;
+        for (com.k1af.ft8af.handoff.RigHardReset.UsbId id : com.k1af.ft8af.handoff.RigHardReset.audioDevicesToAsk(attached)) {
+            for (UsbDevice d : usbManager.getDeviceList().values()) {
+                if (d.getVendorId() == id.vendorId && d.getProductId() == id.productId) {
+                    fileLog(String.format("RigReset: asking USB permission for audio %04X:%04X",
+                            id.vendorId, id.productId));
+                    requestUsbPermissionIfNeeded(d);
+                    asked++;
+                    break;
+                }
+            }
+        }
+        return asked;
+    }
+
     /**
      * Get the serial port device list
      */
@@ -1747,73 +3170,188 @@ public class MainViewModel extends ViewModel {
     }
 
 
+    // ---- Bluetooth SCO (hands-free audio link) -------------------------------
+    //
+    // All entry points below go through ScoLinkCoordinator (one ScoLinkTracker
+    // driven on the main thread) so that (a) a link that is already being built
+    // is never stopped and restarted underneath itself, (b) a start that fails
+    // or a link that drops is retried, bounded, (c) once the link is up the
+    // AudioRecord is verified to be capturing from it, and (d) requests from
+    // the TX executor and the main-thread broadcasts/timers are applied in
+    // order, never interleaved. Issue #759 (Android 8.x: Bluetooth RX dead).
+
+    /**
+     * Whether this app currently holds a SCO session (CONNECTING or CONNECTED),
+     * per the tracker rather than {@code AudioManager.isBluetoothScoOn()} — see
+     * {@link ScoLinkCoordinator#isLinkUpOrPending()}. Snapshotted by the keying
+     * path into {@link #isScoHeldForTx()}; the TX path must read that snapshot,
+     * not this live value, because keying stops SCO before the audio starts.
+     */
+    public boolean isScoLinkUpOrPending() {
+        return scoLink.isLinkUpOrPending();
+    }
+
+    /**
+     * Whether our own SCO link was up (or coming up) when the current over or
+     * tune carrier was keyed. Read by the TX path, which must not steer Default
+     * output onto a Bluetooth sink unless our own SCO link is the thing
+     * displacing the media route (see {@code AudioOutputRoutingPolicy}). Stable
+     * for the whole over even though {@code beginKeying()} has already asked
+     * the tracker to drop the link (Copilot review on #790, {@link TxScoLatch}).
+     */
+    public boolean isScoHeldForTx() {
+        return txScoLatch.heldForTx();
+    }
+
+    /**
+     * Address of the device our SCO link was on when the current over was
+     * keyed, or null when unknown (see {@link TxScoLatch#scoAddress()}).
+     */
+    public String scoAddressForTx() {
+        return txScoLatch.scoAddress();
+    }
+
+    /**
+     * Address of the SCO device the mic is being captured from right now, or
+     * null when the capture is not on SCO / the platform withholds it. Read at
+     * keying time, before SCO is stopped, so the TX path knows which of several
+     * hands-free devices actually carries our link.
+     */
+    private String routedScoInputAddress() {
+        if (hamRecorder == null) return null;
+        MicRecorder mic = hamRecorder.getMicRecorder();
+        return mic == null ? null : mic.routedScoInputAddress();
+    }
+
+    private final Handler scoHandler = new Handler(Looper.getMainLooper());
+    private final ScoLinkCoordinator scoLink = ScoLinkCoordinator.onMainThread(
+            new ScoLinkCoordinator.Sink() {
+                @Override
+                public void startSco() {
+                    AudioManager audioManager = scoAudioManager();
+                    if (audioManager == null) return;
+                    audioManager.setBluetoothScoOn(true);
+                    audioManager.startBluetoothSco();//71ms
+                    audioManager.setSpeakerphoneOn(false);//enter headset mode
+                }
+
+                @Override
+                public void stopScoForRestart() {
+                    AudioManager audioManager = scoAudioManager();
+                    if (audioManager != null) audioManager.stopBluetoothSco();
+                }
+
+                @Override
+                public void stopSco() {
+                    AudioManager audioManager = scoAudioManager();
+                    if (audioManager == null) return;
+                    audioManager.setBluetoothScoOn(false);
+                    audioManager.stopBluetoothSco();
+                    audioManager.setSpeakerphoneOn(true);//exit headset mode
+                }
+
+                @Override
+                public void verifyMicRouting() {
+                    verifyMicOnScoLink();
+                }
+
+                @Override
+                public void log(String message) {
+                    GeneralVariables.fileLog(message);
+                }
+            });
+
+    private AudioManager scoAudioManager() {
+        Context ctx = GeneralVariables.getMainContext();
+        if (ctx == null) return null;
+        return (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
+    }
+
+    /** Bring SCO up (after TX). Idempotent while a link is pending/up. */
     public void startSco() {
-        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
-                .getSystemService(Context.AUDIO_SERVICE);
+        AudioManager audioManager = scoAudioManager();
         if (audioManager == null) return;
         if (!audioManager.isBluetoothScoAvailableOffCall()) {
             //Bluetooth device does not support recording
             ToastMessage.show(getStringFromResource(R.string.does_not_support_recording));
             return;
         }
-        audioManager.setBluetoothScoOn(true);
-        audioManager.startBluetoothSco();//71ms
-        audioManager.setSpeakerphoneOn(false);//enter headset mode
+        scoLink.requestOn("startSco", null);
     }
 
+    /** Take SCO down (before TX). No-op unless we asked for it. */
     public void stopSco() {
-        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
-                .getSystemService(Context.AUDIO_SERVICE);
-        if (audioManager == null) return;
-        if (audioManager.isBluetoothScoOn()) {
-            audioManager.setBluetoothScoOn(false);
-            audioManager.stopBluetoothSco();
-            audioManager.setSpeakerphoneOn(true);//exit headset mode
-        }
-
+        scoLink.requestOff("stopSco", null);
     }
 
-
+    /** Enter Bluetooth headset mode: SCO up for RX audio from the rig. */
     public void setBlueToothOn() {
-        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
-                .getSystemService(Context.AUDIO_SERVICE);
+        AudioManager audioManager = scoAudioManager();
         if (audioManager == null) return;
         if (!audioManager.isBluetoothScoAvailableOffCall()) {
             //Bluetooth device does not support recording
             ToastMessage.show(getStringFromResource(R.string.does_not_support_recording));
         }
-
-        /*
-        MODE_NORMAL corresponds to music playback. For speaker output, call audioManager.setSpeakerphoneOn(true).
-        For headset or earpiece, set mode to MODE_IN_CALL (pre-3.0) or MODE_IN_COMMUNICATION (3.0+).
-         */
-        audioManager.setMode(AudioManager.MODE_NORMAL);//178ms
-        audioManager.setBluetoothScoOn(true);
-        audioManager.stopBluetoothSco();
-        audioManager.startBluetoothSco();//71ms
-        audioManager.setSpeakerphoneOn(false);//enter headset mode
-
-        //entering Bluetooth headset mode
-        ToastMessage.show(getStringFromResource(R.string.bluetooth_headset_mode));
-
+        scoLink.requestOn("setBlueToothOn", () -> {
+            /*
+            MODE_NORMAL corresponds to music playback. For speaker output, call audioManager.setSpeakerphoneOn(true).
+            For headset or earpiece, set mode to MODE_IN_CALL (pre-3.0) or MODE_IN_COMMUNICATION (3.0+).
+            Stays NORMAL on purpose: TX audio goes out over A2DP (SCO is dropped
+            around PTT), and an in-call mode would pull media to the earpiece.
+             */
+            audioManager.setMode(AudioManager.MODE_NORMAL);//178ms
+            //entering Bluetooth headset mode
+            ToastMessage.show(getStringFromResource(R.string.bluetooth_headset_mode));
+        });
     }
 
+    /** Leave Bluetooth headset mode. */
     public void setBlueToothOff() {
-
-        AudioManager audioManager = (AudioManager) GeneralVariables.getMainContext()
-                .getSystemService(Context.AUDIO_SERVICE);
+        AudioManager audioManager = scoAudioManager();
         if (audioManager == null) return;
-        if (audioManager.isBluetoothScoOn()) {
+        scoLink.requestOff("setBlueToothOff", () -> {
             audioManager.setMode(AudioManager.MODE_NORMAL);
-            audioManager.setBluetoothScoOn(false);
-            audioManager.stopBluetoothSco();
-            audioManager.setSpeakerphoneOn(true);//exit headset mode
-        }
-        //leaving Bluetooth headset mode
-        ToastMessage.show(getStringFromResource(R.string.bluetooth_Headset_mode_cancelled));
-
+            //leaving Bluetooth headset mode
+            ToastMessage.show(getStringFromResource(R.string.bluetooth_Headset_mode_cancelled));
+        });
     }
 
+    /**
+     * {@code AudioManager.ACTION_SCO_AUDIO_STATE_UPDATED} landed (main thread).
+     * Logs every transition, retries a failed/dropped link while we want it,
+     * and once CONNECTED makes sure the mic is really on the headset.
+     */
+    public void onScoAudioStateUpdated(int state, int previousState) {
+        scoLink.onStateUpdated(state, previousState);
+    }
+
+    /**
+     * SCO is up: is the AudioRecord capturing from it? Android's own recipe is
+     * to create the record only after SCO_AUDIO_STATE_CONNECTED; ours already
+     * exists (opened at app start on the built-in mic), and on some builds -
+     * Oreo in the field - the force-use change never re-routes it. Rebuild it
+     * so the fresh open picks the headset.
+     */
+    private void verifyMicOnScoLink() {
+        if (!scoLink.isWanted()
+                || scoLink.linkState() != AudioManager.SCO_AUDIO_STATE_CONNECTED
+                || hamRecorder == null) {
+            return;
+        }
+        MicRecorder mic = hamRecorder.getMicRecorder();
+        int routed = mic.routedInputDeviceType();
+        int chosen = mic.chosenInputDeviceType();
+        boolean reinit = ScoLinkTracker.needsMicReinit(routed, chosen);
+        GeneralVariables.fileLog("SCO: mic routedType=" + routed + " chosenType=" + chosen
+                + (reinit ? " -> rebuilding AudioRecord on the SCO link" : " ok"));
+        if (!reinit) return;
+        reinitializeAudioInput();
+        scoHandler.postDelayed(() -> {
+            if (hamRecorder == null) return;
+            GeneralVariables.fileLog("SCO: mic after rebuild routedType="
+                    + hamRecorder.getMicRecorder().routedInputDeviceType());
+        }, ScoLinkCoordinator.MIC_ROUTE_CHECK_DELAY_MS);
+    }
 
     /**
      * Check whether Bluetooth is connected
@@ -1846,14 +3384,22 @@ public class MainViewModel extends ViewModel {
         }
     }
 
-    private static class GetQTHRunnable implements Runnable {
-        MainViewModel mainViewModel;
-        ArrayList<Ft8Message> messages;
+    // Per-dispatch, immutable payload. One instance per afterDecode() call — never shared
+    // and mutated between submissions — so overlapping decode passes (#398) each get their
+    // own message list processed instead of racing/clobbering a single shared field.
+    static final class GetQTHRunnable implements Runnable {
+        private final MainViewModel mainViewModel;
+        private final ArrayList<Ft8Message> messages;
 
-        public GetQTHRunnable(MainViewModel mainViewModel) {
+        GetQTHRunnable(MainViewModel mainViewModel, ArrayList<Ft8Message> messages) {
             this.mainViewModel = mainViewModel;
+            this.messages = messages;
         }
 
+        /** The decode pass this task resolves locations for (bound at construction). */
+        ArrayList<Ft8Message> messages() {
+            return messages;
+        }
 
         @Override
         public void run() {
@@ -1865,10 +3411,22 @@ public class MainViewModel extends ViewModel {
         }
     }
 
-    private static class SendWaveDataRunnable implements Runnable {
-        BaseRig baseRig;
-        //float[] data;
-        Ft8Message message;
+    // Per-dispatch, immutable payload (see GetQTHRunnable): a fresh instance per transmit so
+    // a re-entrant TX/tune can't clobber baseRig/message on a worker still playing the prior
+    // waveform (the same shared-Runnable hazard fixed in IcomAudioUdp).
+    static final class SendWaveDataRunnable implements Runnable {
+        private final BaseRig baseRig;
+        private final Ft8Message message;
+
+        SendWaveDataRunnable(BaseRig baseRig, Ft8Message message) {
+            this.baseRig = baseRig;
+            this.message = message;
+        }
+
+        /** The message whose waveform this task sends (bound at construction). */
+        Ft8Message message() {
+            return message;
+        }
 
         @Override
         public void run() {
@@ -1885,9 +3443,35 @@ public class MainViewModel extends ViewModel {
         // ViewModel is cleared while still "connected" the Timer thread would keep probing
         // the rig indefinitely. Tear it down here too.
         stopCatLivenessWatchdog();
+        // The rig's own poll Timers (IcomRig's dial follow and meter polls) are
+        // cancelled only by onDisconnecting(), which connectRig() and the
+        // disconnect path run — a cleared ViewModel did not. Without this a
+        // non-daemon Timer and the rig it holds stay alive, polling a connector
+        // nobody owns any more (Copilot review on #789).
+        releaseRigOnClear(baseRig);
+        // Drop the SCO retry/timeout timers and balance an outstanding start,
+        // else a retained ViewModel keeps restarting SCO after the activity is
+        // gone and AudioService is left holding our request.
+        scoLink.shutdown();
         PskReporterSender.INSTANCE.stop();
+        WsjtxUdpService.INSTANCE.stop();
         getQTHThreadPool.shutdown();
         sendWaveDataThreadPool.shutdown();
+    }
+
+    /**
+     * The rig half of {@link #onCleared()}: run the rig's teardown hook so its
+     * poll timers stop with the ViewModel. A static seam because this class
+     * cannot be constructed in a unit test (the constructor starts the audio
+     * recorder, the FT8 listener and its thread pools), so
+     * {@code MainViewModelRigCleanupTest} exercises the hook wiring through
+     * this method with a recording rig. Null-safe: nothing to release before a
+     * rig was ever connected.
+     */
+    static void releaseRigOnClear(BaseRig rig) {
+        if (rig != null) {
+            rig.onDisconnecting();
+        }
     }
 
     private static final String ACTION_USB_AUDIO_PERMISSION =
@@ -1908,6 +3492,18 @@ public class MainViewModel extends ViewModel {
             Log.d(TAG, "USB audio device already has permission");
             return;
         }
+
+        // Same nag-storm containment as the serial path (CableSerialPort.connect):
+        // a flapping link re-fires the ATTACH handler per bounce, and each call here
+        // raised a fresh system dialog for the audio device.
+        if (!UsbPermissionThrottle.shouldRequestNow(
+                device.getVendorId(), System.currentTimeMillis())) {
+            fileLog(String.format("usbPermission: audio request for vendor 0x%04x throttled"
+                    + " (asked <%ds ago)", device.getVendorId(),
+                    UsbPermissionThrottle.REQUEST_COOLDOWN_MS / 1000));
+            return;
+        }
+        UsbPermissionThrottle.markRequested(device.getVendorId(), System.currentTimeMillis());
 
         Log.d(TAG, "Requesting USB permission for audio device: " + device.getProductName());
         PendingIntent permissionIntent = UsbPermissionIntentsKt.createUsbPermissionIntent(

@@ -45,6 +45,7 @@ import com.k1af.ft8af.database.ControlMode;
 import com.k1af.ft8af.database.OperationBand;
 import com.k1af.ft8af.database.RigNameList;
 import com.k1af.ft8af.databinding.FragmentConfigBinding;
+import com.k1af.ft8af.ft8listener.DecodeDepth;
 import com.k1af.ft8af.ft8signal.FT8Package;
 import com.k1af.ft8af.log.ThirdPartyService;
 import com.k1af.ft8af.maidenhead.MaidenheadGrid;
@@ -54,6 +55,7 @@ import com.k1af.ft8af.timer.UtcTimer;
 import java.io.IOException;
 
 import radio.ks3ckc.ft8af.UsbPermissionIntentsKt;
+import radio.ks3ckc.ft8af.ui.settings.LoggingSettingsKt;
 
 /**
  * A simple {@link Fragment} subclass.
@@ -234,6 +236,18 @@ public class ConfigFragment extends Fragment {
 
         @Override
         public void afterTextChanged(Editable editable) {
+            // Station Location ID is a number (#926); strip pasted non-digits, or drop an old
+            // callsign value on its first edit. The replace re-fires this with the clean text.
+            String saved = GeneralVariables.getCloudlogStationID();
+            String digits = LoggingSettingsKt.cleanStationLocationIdEdit(
+                    saved == null ? "" : saved, editable.toString());
+            if (!digits.contentEquals(editable)) {
+                editable.replace(0, editable.length(), digits);
+                return;
+            }
+            // Unchanged text (a restored view) can still be an old callsign; keep it flagged.
+            binding.cloudlogStationIdEdit.setError(LoggingSettingsKt.isValidStationLocationId(
+                    editable.toString()) ? null : getString(R.string.settings_station_id_invalid));
             GeneralVariables.cloudlogStationID = editable.toString();
             writeConfig("cloudlogStationID", GeneralVariables.getCloudlogStationID());
         }
@@ -324,6 +338,13 @@ public class ConfigFragment extends Fragment {
             if (s.matches("\\b0[xX][0-9a-fA-F]+\\b")) {// Match hexadecimal
                 String temp = editable.toString().substring(0, 2).toUpperCase();
                 writeConfig("civ", temp);
+                // Provenance marker: a hex-aware writer stored this, so the #753 repair
+                // must trust it verbatim (a deliberate override may be a decimal twin of
+                // the model address, e.g. 0x88 on an IC-706).
+                writeConfig(com.k1af.ft8af.rigs.CivAddressConfig.FORMAT_KEY,
+                        com.k1af.ft8af.rigs.CivAddressConfig.FORMAT_HEX);
+                GeneralVariables.civAddressStored = temp;
+                GeneralVariables.civAddressFormatKnown = true;
                 GeneralVariables.civAddress = Integer.parseInt(temp, 16);
                 mainViewModel.setCivAddress();
             }
@@ -493,6 +514,11 @@ public class ConfigFragment extends Fragment {
 
         binding.cloudlogStationIdEdit.removeTextChangedListener(onCloudlogStationIDChanged);
         binding.cloudlogStationIdEdit.setText(GeneralVariables.getCloudlogStationID());
+        // Flag a value saved before #926 (a callsign or name), as the Compose dialog does.
+        String savedStationId = GeneralVariables.getCloudlogStationID();
+        binding.cloudlogStationIdEdit.setError(LoggingSettingsKt.isValidStationLocationId(
+                savedStationId == null ? "" : savedStationId)
+                ? null : getString(R.string.settings_station_id_invalid));
         binding.cloudlogStationIdEdit.addTextChangedListener(onCloudlogStationIDChanged);
 
         // QRZ configuration
@@ -750,6 +776,10 @@ public class ConfigFragment extends Fragment {
                     public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
                         GeneralVariables.bandListIndex = i;
                         GeneralVariables.band = OperationBand.getBandFreq(i);// Save the current band frequency
+                        // An explicit operator choice — this path used to leave
+                        // commandedBandHz stale, so setOperationBand re-commanded the OLD
+                        // dial. See RigDialTarget.
+                        GeneralVariables.operatorChoseDial(GeneralVariables.band);
 
                         mainViewModel.databaseOpr.getAllQSLCallsigns();// Load successfully contacted callsigns
                         writeConfig("bandFreq", String.valueOf(GeneralVariables.band));
@@ -895,11 +925,31 @@ public class ConfigFragment extends Fragment {
                                     String.valueOf(GeneralVariables.usbAudioInputProductId));
                             requestUsbPermissionIfNeeded(usbInfo.device);
                         } else if (deviceId != -1) {
-                            // Clear USB audio settings if non-USB device selected
-                            GeneralVariables.usbAudioInputVendorId = 0;
-                            GeneralVariables.usbAudioInputProductId = 0;
-                            writeConfig("usbAudioInputVid", "0");
-                            writeConfig("usbAudioInputPid", "0");
+                            // A framework-routed USB device (e.g. "USB-Audio -
+                            // QMX Transceiver") carries no VID:PID of its own --
+                            // find the raw UsbDevice by product-name overlap and
+                            // persist ITS VID:PID, so a later re-enumeration
+                            // (which changes the numeric id but not the product
+                            // name) can still resolve it instead of falling back
+                            // to Default. See AudioDeviceSpinnerAdapter's
+                            // getUsbFrameworkDeviceProductName javadoc.
+                            String productName =
+                                    audioInputDeviceAdapter.getUsbFrameworkDeviceProductName(i);
+                            UsbAudioDevice.UsbAudioDeviceInfo rawUsb = productName == null ? null
+                                    : UsbAudioDevice.matchByProductName(
+                                            UsbAudioDevice.findUsbAudioDevices(requireContext()),
+                                            productName, true);
+                            if (rawUsb != null) {
+                                GeneralVariables.usbAudioInputVendorId = rawUsb.device.getVendorId();
+                                GeneralVariables.usbAudioInputProductId = rawUsb.device.getProductId();
+                            } else {
+                                GeneralVariables.usbAudioInputVendorId = 0;
+                                GeneralVariables.usbAudioInputProductId = 0;
+                            }
+                            writeConfig("usbAudioInputVid",
+                                    String.valueOf(GeneralVariables.usbAudioInputVendorId));
+                            writeConfig("usbAudioInputPid",
+                                    String.valueOf(GeneralVariables.usbAudioInputProductId));
                         }
                     }
 
@@ -928,10 +978,24 @@ public class ConfigFragment extends Fragment {
                                     String.valueOf(GeneralVariables.usbAudioOutputProductId));
                             requestUsbPermissionIfNeeded(usbInfo.device);
                         } else if (deviceId != -1) {
-                            GeneralVariables.usbAudioOutputVendorId = 0;
-                            GeneralVariables.usbAudioOutputProductId = 0;
-                            writeConfig("usbAudioOutputVid", "0");
-                            writeConfig("usbAudioOutputPid", "0");
+                            // Same reasoning as the input picker above.
+                            String productName =
+                                    audioOutputDeviceAdapter.getUsbFrameworkDeviceProductName(i);
+                            UsbAudioDevice.UsbAudioDeviceInfo rawUsb = productName == null ? null
+                                    : UsbAudioDevice.matchByProductName(
+                                            UsbAudioDevice.findUsbAudioDevices(requireContext()),
+                                            productName, false);
+                            if (rawUsb != null) {
+                                GeneralVariables.usbAudioOutputVendorId = rawUsb.device.getVendorId();
+                                GeneralVariables.usbAudioOutputProductId = rawUsb.device.getProductId();
+                            } else {
+                                GeneralVariables.usbAudioOutputVendorId = 0;
+                                GeneralVariables.usbAudioOutputProductId = 0;
+                            }
+                            writeConfig("usbAudioOutputVid",
+                                    String.valueOf(GeneralVariables.usbAudioOutputVendorId));
+                            writeConfig("usbAudioOutputPid",
+                                    String.valueOf(GeneralVariables.usbAudioOutputProductId));
                         }
                     }
 
@@ -1318,19 +1382,27 @@ public class ConfigFragment extends Fragment {
 
     private void setDecodeMode() {
         binding.decodeModeRadioGroup.clearCheck();
-        binding.fastDecodeRadioButton.setChecked(!GeneralVariables.deepDecodeMode);
-        binding.deepDecodeRadioButton.setChecked(GeneralVariables.deepDecodeMode);
+        binding.fastDecodeRadioButton.setChecked(GeneralVariables.decodeDepth == DecodeDepth.FAST);
+        binding.balancedDecodeRadioButton.setChecked(GeneralVariables.decodeDepth == DecodeDepth.BALANCED);
+        binding.deepDecodeRadioButton.setChecked(GeneralVariables.decodeDepth == DecodeDepth.DEEP);
 
         View.OnClickListener listener = new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 int buttonId = binding.decodeModeRadioGroup.getCheckedRadioButtonId();
-                GeneralVariables.deepDecodeMode= buttonId ==binding.deepDecodeRadioButton.getId();
-                writeConfig("deepMode", GeneralVariables.deepDecodeMode? "1" : "0");
+                if (buttonId == binding.fastDecodeRadioButton.getId()) {
+                    GeneralVariables.decodeDepth = DecodeDepth.FAST;
+                } else if (buttonId == binding.balancedDecodeRadioButton.getId()) {
+                    GeneralVariables.decodeDepth = DecodeDepth.BALANCED;
+                } else {
+                    GeneralVariables.decodeDepth = DecodeDepth.DEEP;
+                }
+                writeConfig("decodeDepth", String.valueOf(GeneralVariables.decodeDepth));
             }
         };
 
         binding.fastDecodeRadioButton.setOnClickListener(listener);
+        binding.balancedDecodeRadioButton.setOnClickListener(listener);
         binding.deepDecodeRadioButton.setOnClickListener(listener);
 
     }

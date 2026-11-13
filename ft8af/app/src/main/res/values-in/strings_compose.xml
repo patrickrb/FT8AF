@@ -139,6 +139,7 @@
     <string name="qsopanel_qsoing_with">QSO dengan %1$s</string>
     <string name="qsopanel_waiting_for">Menunggu %1$s</string>
     <string name="qsopanel_tap_to_view">ketuk untuk lihat ↗</string>
+    <string name="qsopanel_sent_report">dikirim %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">Menunggu pesan...</string>
     <string name="qsopanel_log_action">LOG</string>
@@ -237,9 +238,11 @@
     <string name="log_sync_title_no_services">TIDAK ADA LAYANAN AKTIF</string>
     <string name="log_sync_title_syncing">MENYINKRONKAN…</string>
     <string name="log_sync_title_complete">SINKRONISASI SELESAI</string>
-    <string name="log_sync_enable_services">Aktifkan Cloudlog/Wavelog/Nextlog atau QRZ di Setelan, lalu coba lagi.</string>
+    <string name="log_sync_enable_services">Aktifkan Cloudlog/Wavelog/Nextlog, QRZ, atau World Radio League di Setelan, lalu coba lagi.</string>
     <string name="log_sync_progress_count">%1$d dari %2$d QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d diterima</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d sudah ada di logbook</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d diunduh</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d diterima</string>
     <string name="log_sync_nothing_to_upload">Belum ada QSO di buku log untuk diunggah.</string>
     <string name="log_sync_working">Memproses…</string>
@@ -248,6 +251,21 @@
     <string name="pota_tab_activate">Aktivasi</string>
     <string name="pota_tab_hunt">Hunt</string>
     <string name="pota_tab_history">Riwayat</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">baru saja</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="other">%d dtk lalu</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="other">%d mnt lalu</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="other">%d jam lalu</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="other">%d hari lalu</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">Tampilkan waktu UTC</string>
     <string name="pota_start_activation">Mulai aktivasi</string>
     <string name="pota_park_reference_label">Referensi taman (mis. K-1234)</string>
     <string name="pota_notes_optional_label">Catatan (opsional)</string>
@@ -259,6 +277,7 @@
     <string name="pota_self_spot_failed">Self-spot gagal — periksa log</string>
     <string name="pota_active_park">AKTIF — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_dupe">duplikat</string>
     <string name="pota_contacts_map">Peta kontak</string>
     <string name="pota_back">Kembali</string>
     <string name="pota_valid_activation">aktivasi valid</string>
@@ -406,6 +425,9 @@
     <string name="settings_tx_watchdog_desc">Hentikan transmisi otomatis setelah waktu habis</string>
     <string name="settings_stop_after">Hentikan Setelah</string>
     <string name="settings_stop_after_desc">Berhenti memanggil setelah N percobaan tak terjawab</string>
+    <string name="settings_max_73">Maks kirim 73</string>
+    <string name="settings_max_73_desc">Jumlah maksimum transmisi RR73/73 per kontak sebelum melanjutkan</string>
+    <string name="settings_max_73_auto">Otomatis</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">Hunt (jawab CQ otomatis)</string>
@@ -473,6 +495,9 @@
     <string name="settings_qrz_profile_lookup_desc">Nama pengguna + kata sandi untuk QRZ XML API (avatar)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">Unggah QSO otomatis ke instans Cloudlog, Wavelog, atau Nextlog</string>
+    <string name="settings_cloudlog_download">Unduh QSO dari Wavelog saat sinkronisasi</string>
+    <string name="settings_cloudlog_download_desc">Sinkronisasi juga menambahkan QSO yang ada di logbook Wavelog Anda tetapi tidak ada di log ini. QSO tersebut tidak dikirim ke QRZ atau World Radio League.</string>
+    <string name="settings_cloudlog_download_unsupported">Memerlukan Wavelog: server ini tidak dapat menampilkan daftar QSO-nya.</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">Penundaan PTT</string>
@@ -489,8 +514,11 @@
     <string name="bug_report_send_email">Kirim email</string>
     <string name="bug_report_no_email_app">Tidak ditemukan aplikasi email untuk mengirim laporan</string>
     <string name="bug_report_open_github">Buka isu GitHub</string>
-    <string name="settings_debug">Debug</string>
     <string name="settings_debug_desc">Lihat / bagikan debug.log</string>
+    <string name="settings_share_logs">Bagikan log</string>
+    <string name="settings_share_logs_desc">Kirim debug.log ke email, Discord, Drive…</string>
+    <string name="settings_view_logs">Lihat log</string>
+    <string name="settings_share_logs_empty">Belum ada log yang tercatat</string>
     <string name="settings_about_body">Versi %1$s (build %2$s)\nTanggal build %3$s\n\nFT8, dipermudah.\n\nAplikasi transceiver FT8 mandiri untuk Android. Kontrol rig via USB, Bluetooth, dan jaringan dengan sequencing dan logging otomatis.</string>
     <string name="settings_website">Situs Web</string>
     <string name="settings_community">Komunitas</string>
@@ -510,8 +538,6 @@
     <string name="settings_conn_network">Jaringan</string>
     <string name="settings_no_usb_serial">Tidak ada perangkat serial USB terdeteksi. Hubungkan kabel USB ke radio Anda dan coba lagi.</string>
     <string name="settings_no_bluetooth_devices">Tidak ditemukan perangkat Bluetooth terpasang. Pasangkan perangkat di setelan Bluetooth Android terlebih dahulu.</string>
-    <string name="settings_debug_mode_enabled">Mode debug diaktifkan</string>
-    <string name="settings_debug_mode_disabled">Mode debug dinonaktifkan</string>
     <string name="settings_edit_operator_identity">Ubah Identitas Operator</string>
     <string name="settings_callsign">Tanda Panggil</string>
     <string name="settings_callsign_hint">mis. W1AW</string>
@@ -534,6 +560,7 @@
     <string name="settings_username_hint">Nama pengguna QRZ.com Anda</string>
     <string name="settings_password">Kata Sandi</string>
     <string name="settings_enabled_bands_dialog_desc">Band yang disembunyikan tidak akan muncul di pemilih frekuensi.</string>
+    <string name="settings_enabled_bands_keep_one">Setidaknya satu band harus tetap aktif.</string>
     <string name="settings_select_serial_port">Pilih Port Serial</string>
     <string name="settings_tx_volume_advice">Sesuaikan langsung — TX berikutnya menggunakan tingkat ini. Perhatikan ALC radio Anda dan turunkan sampai hanya menyentuh garis.</string>
     <string name="settings_input_volume">Volume Masukan</string>
@@ -560,6 +587,8 @@
     <string name="cq_offset_moved">Offset CQ dipindahkan ke tempat kosong: %1$d Hz</string>
     <string name="settings_auto_clear_tx">Offset TX kosong otomatis</string>
     <string name="settings_auto_clear_tx_desc">Saat memanggil CQ, memilih tempat kosong dari aktivitas band terkini dan berpindah jika terisi</string>
+    <string name="settings_auto_clear_tx_min">Offset otomatis terendah</string>
+    <string name="settings_auto_clear_tx_min_desc">Offset otomatis tidak pernah memilih di bawah nilai ini. Naikkan agar harmonik audio berada di luar passband</string>
     <string name="tune_content_description">Tune: memulai tuner radio atau memancarkan gelombang pembawa kontinu untuk penalaan antena</string>
     <string name="tune_stopped_timeout">Tune dihentikan setelah %1$d dtk</string>
     <string name="tune_blocked_tx">Hentikan CQ/QSO sebelum menggunakan Tune</string>
@@ -591,4 +620,15 @@
     <string name="settings_bin_agg_max">Maksimum</string>
     <string name="settings_bin_agg_avg">Rata-rata</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d diterima</string>
+    <string name="settings_wrl_desc">Unggah QSO otomatis ke logbook World Radio League Anda (memerlukan kunci Developer API)</string>
+    <string name="settings_wrl_dialog_desc">Buat kunci di World Radio League pada Integrations → Developer API. Satu kunci berlaku untuk seluruh akun Anda.</string>
+    <string name="settings_wrl_logbook">Logbook</string>
+    <string name="settings_wrl_logbook_default">Logbook default</string>
+    <string name="settings_wrl_loading_logbooks">Memuat logbook…</string>
+    <string name="settings_wrl_no_logbooks">Akun World Radio League Anda belum memiliki logbook.</string>
+    <string name="settings_wrl_create_logbook">Buat logbook “%1$s”</string>
+    <string name="settings_wrl_creating_logbook">Membuat logbook…</string>
 </resources>

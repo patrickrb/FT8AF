@@ -99,6 +99,7 @@
     <string name="qsopanel_qsoing_with">正在與 %1$s 通聯</string>
     <string name="qsopanel_waiting_for">等待 %1$s 中</string>
     <string name="qsopanel_tap_to_view">點按以檢視 ↗</string>
+    <string name="qsopanel_sent_report">已發 %1$s</string>
     <string name="qsopanel_tx_message">TX：%1$s</string>
     <string name="qsopanel_waiting_messages">等待訊息中…</string>
 
@@ -194,9 +195,11 @@
     <string name="log_sync_title_no_services">未啟用任何服務</string>
     <string name="log_sync_title_syncing">同步中…</string>
     <string name="log_sync_title_complete">同步完成</string>
-    <string name="log_sync_enable_services">請在設定中啟用 Cloudlog/Wavelog/Nextlog 或 QRZ，然後再試一次。</string>
+    <string name="log_sync_enable_services">請在設定中啟用 Cloudlog/Wavelog/Nextlog、QRZ 或 World Radio League，然後再試一次。</string>
     <string name="log_sync_progress_count">%2$d 筆 QSOs 中的第 %1$d 筆</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog：已接受 %1$d 筆</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog：%1$d 筆已在日誌中</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog：已下載 %1$d 筆</string>
     <string name="log_sync_qrz_accepted">QRZ：已接受 %1$d 筆</string>
     <string name="log_sync_nothing_to_upload">日誌中尚無可上傳的 QSOs。</string>
     <string name="log_sync_working">處理中…</string>
@@ -205,6 +208,21 @@
     <string name="pota_tab_activate">啟動</string>
     <string name="pota_tab_hunt">獵取</string>
     <string name="pota_tab_history">歷史紀錄</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">剛剛</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="other">%d秒前</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="other">%d分鐘前</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="other">%d小時前</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="other">%d天前</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">顯示UTC時間</string>
     <string name="pota_start_activation">開始啟動</string>
     <string name="pota_park_reference_label">公園代碼（例如 K-1234）</string>
     <string name="pota_notes_optional_label">備註（選填）</string>
@@ -216,6 +234,7 @@
     <string name="pota_self_spot_failed">自我點位失敗 — 請查看日誌</string>
     <string name="pota_active_park">啟動中 — %1$s</string>
     <string name="pota_qsos">QSOs</string>
+    <string name="pota_dupe">重複</string>
     <string name="pota_contacts_map">通聯地圖</string>
     <string name="pota_back">返回</string>
     <string name="pota_valid_activation">有效啟動</string>
@@ -329,6 +348,9 @@
     <string name="settings_tx_watchdog_desc">逾時後自動停止發射</string>
     <string name="settings_stop_after">停止於</string>
     <string name="settings_stop_after_desc">於 N 次無回應嘗試後停止呼叫</string>
+    <string name="settings_max_73">73 發送上限</string>
+    <string name="settings_max_73_desc">每次通聯中 RR73/73 的最大發送次數，達到後轉往下一個</string>
+    <string name="settings_max_73_auto">自動</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">獵取（自動回應 CQ）</string>
@@ -396,6 +418,9 @@
     <string name="settings_qrz_profile_lookup_desc">QRZ XML API 的使用者名稱＋密碼（頭像）</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">自動將 QSOs 上傳至 Cloudlog、Wavelog 或 Nextlog 執行個體</string>
+    <string name="settings_cloudlog_download">同步時從 Wavelog 下載 QSO</string>
+    <string name="settings_cloudlog_download_desc">同步時也會加入 Wavelog 日誌中有、而本日誌中沒有的 QSO。這些 QSO 不會再上傳到 QRZ 或 World Radio League。</string>
+    <string name="settings_cloudlog_download_unsupported">需要 Wavelog：此伺服器無法列出其 QSO。</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">PTT 延遲</string>
@@ -412,8 +437,11 @@
     <string name="bug_report_send_email">傳送郵件</string>
     <string name="bug_report_no_email_app">找不到可傳送報告的郵件應用程式</string>
     <string name="bug_report_open_github">開啟 GitHub issue</string>
-    <string name="settings_debug">除錯</string>
     <string name="settings_debug_desc">檢視／分享 debug.log</string>
+    <string name="settings_share_logs">分享日誌</string>
+    <string name="settings_share_logs_desc">透過郵件、Discord、雲端硬碟等傳送 debug.log</string>
+    <string name="settings_view_logs">檢視日誌</string>
+    <string name="settings_share_logs_empty">尚無日誌記錄</string>
     <string name="settings_about_body">版本 %1$s（build %2$s）\n建置日期 %3$s\n\nFT8，輕鬆上手。\n\n一款適用於 Android 的獨立 FT8 收發器應用程式。支援 USB、Bluetooth 與網路電台控制，並具備自動序列與日誌功能。</string>
     <string name="settings_website">網站</string>
     <string name="settings_community">社群</string>
@@ -432,8 +460,6 @@
     <string name="settings_conn_bluetooth">Bluetooth</string>
     <string name="settings_conn_network">網路</string>
     <string name="settings_no_usb_serial">未偵測到 USB 序列裝置。請將 USB 連接線接上您的無線電並再試一次。</string>
-    <string name="settings_debug_mode_enabled">已啟用除錯模式</string>
-    <string name="settings_debug_mode_disabled">已停用除錯模式</string>
     <string name="settings_edit_operator_identity">編輯操作員身分</string>
     <string name="settings_callsign">呼號</string>
     <string name="settings_callsign_hint">例如 W1AW</string>
@@ -456,6 +482,7 @@
     <string name="settings_username_hint">您的 QRZ.com 使用者名稱</string>
     <string name="settings_password">密碼</string>
     <string name="settings_enabled_bands_dialog_desc">隱藏的波段不會出現在頻率選擇器中。</string>
+    <string name="settings_enabled_bands_keep_one">至少需要保留一個已啟用的波段。</string>
     <string name="settings_select_serial_port">選擇序列埠</string>
     <string name="settings_tx_volume_advice">即時調整 — 您下次 TX 將使用此音量。注意您無線電的 ALC，並向下調整直到剛好碰到界線。</string>
     <string name="settings_input_volume">輸入音量</string>
@@ -517,6 +544,8 @@
     <string name="cq_offset_moved">CQ頻偏已移至空閒位置：%1$d Hz</string>
     <string name="settings_auto_clear_tx">自動選擇空閒TX頻偏</string>
     <string name="settings_auto_clear_tx_desc">呼叫CQ時根據近期頻段活動選擇空閒位置，被佔用時自動移開</string>
+    <string name="settings_auto_clear_tx_min">自動頻偏下限</string>
+    <string name="settings_auto_clear_tx_min_desc">自動選擇不會低於此頻偏。調高可讓音訊諧波落在通帶之外</string>
     <string name="tune_content_description">Tune：啟動電台調諧器或發射連續載波用於天線調諧</string>
     <string name="tune_stopped_timeout">Tune已在%1$d秒後停止</string>
     <string name="tune_blocked_tx">使用Tune前請先停止CQ/QSO</string>
@@ -548,4 +577,15 @@
     <string name="settings_bin_agg_max">最大值</string>
     <string name="settings_bin_agg_avg">平均值</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League：已接受 %1$d 筆</string>
+    <string name="settings_wrl_desc">自動上傳 QSO 到您的 World Radio League 日誌（需要 Developer API 金鑰）</string>
+    <string name="settings_wrl_dialog_desc">在 World Radio League 的 Integrations → Developer API 中產生金鑰。一組金鑰適用於整個帳戶。</string>
+    <string name="settings_wrl_logbook">日誌</string>
+    <string name="settings_wrl_logbook_default">預設日誌</string>
+    <string name="settings_wrl_loading_logbooks">正在載入日誌…</string>
+    <string name="settings_wrl_no_logbooks">您的 World Radio League 帳戶還沒有日誌。</string>
+    <string name="settings_wrl_create_logbook">建立「%1$s」日誌</string>
+    <string name="settings_wrl_creating_logbook">正在建立日誌…</string>
 </resources>

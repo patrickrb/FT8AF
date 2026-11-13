@@ -30,9 +30,14 @@ const val PER_BAND_OUTPUT_LEVELS_KEY = "perBandOutputLevels"
 /**
  * Parse a serialized "band=level" CSV ("20m=60,40m=85") into an ordered map.
  * Malformed entries (missing '=', non-numeric level, blank band) are skipped;
- * levels are clamped to 0..100. Null/blank input yields an empty map.
+ * levels are clamped to 0..[maxLevel] (100 for output levels; the per-band RX
+ * input map in PerBandInputLevel.kt passes 200). Null/blank input yields an
+ * empty map.
  */
-internal fun parsePerBandOutputLevels(serialized: String?): LinkedHashMap<String, Int> {
+internal fun parsePerBandOutputLevels(
+    serialized: String?,
+    maxLevel: Int = 100,
+): LinkedHashMap<String, Int> {
     val levels = LinkedHashMap<String, Int>()
     if (serialized.isNullOrBlank()) return levels
     for (entry in serialized.split(',')) {
@@ -41,7 +46,7 @@ internal fun parsePerBandOutputLevels(serialized: String?): LinkedHashMap<String
         val band = entry.substring(0, idx).trim()
         if (band.isEmpty()) continue
         val level = entry.substring(idx + 1).trim().toIntOrNull() ?: continue
-        levels[band] = level.coerceIn(0, 100)
+        levels[band] = level.coerceIn(0, maxLevel)
     }
     return levels
 }
@@ -62,9 +67,10 @@ internal fun resolvePerBandOutputLevel(
     band: String?,
     serialized: String?,
     currentLevel: Int,
+    maxLevel: Int = 100,
 ): Int? {
     if (!enabled || band.isNullOrBlank()) return null
-    val saved = parsePerBandOutputLevels(serialized)[band] ?: return null
+    val saved = parsePerBandOutputLevels(serialized, maxLevel)[band] ?: return null
     return if (saved == currentLevel) null else saved
 }
 
@@ -81,10 +87,11 @@ internal fun recordPerBandOutputLevel(
     band: String?,
     level: Int,
     serialized: String?,
+    maxLevel: Int = 100,
 ): String? {
     if (!enabled || band.isNullOrBlank()) return null
-    val clamped = level.coerceIn(0, 100)
-    val levels = parsePerBandOutputLevels(serialized)
+    val clamped = level.coerceIn(0, maxLevel)
+    val levels = parsePerBandOutputLevels(serialized, maxLevel)
     if (levels[band] == clamped) return null
     levels[band] = clamped
     return serializePerBandOutputLevels(levels)

@@ -60,4 +60,42 @@ class ClassifyUploadFailureTest {
         assertThat(classifyUploadFailure(IllegalStateException("no database")))
             .isEqualTo(UploadFailureKind.OTHER)
     }
+
+    @Test
+    fun `summarizeUpload succeeds only when every park uploaded`() {
+        assertThat(summarizeUpload(ok = 2, total = 2, serverError = null, preflightError = null).isSuccess)
+            .isTrue()
+        assertThat(summarizeUpload(ok = 2, total = 2, serverError = null, preflightError = null).getOrNull())
+            .isEqualTo(2)
+    }
+
+    @Test
+    fun `summarizeUpload prefers a server error over a pre-flight resolution error`() {
+        // Two-park activation: park A couldn't resolve its location (pre-flight),
+        // park B got a retryable 502 (server). The 502 must win so the UI shows
+        // BUSY ("try again") rather than the generic OTHER an IllegalStateException
+        // classifies to.
+        val server = PotaUploadException(502, "Internal server error")
+        val preflight = IllegalStateException("could not resolve POTA location for US-4556")
+        val err = summarizeUpload(ok = 0, total = 2, serverError = server, preflightError = preflight)
+            .exceptionOrNull()
+        assertThat(err).isSameInstanceAs(server)
+        assertThat(classifyUploadFailure(err)).isEqualTo(UploadFailureKind.BUSY)
+    }
+
+    @Test
+    fun `summarizeUpload surfaces the pre-flight error when there is no server error`() {
+        val preflight = IllegalStateException("no station callsign for US-1234 — set your callsign")
+        val err = summarizeUpload(ok = 0, total = 1, serverError = null, preflightError = preflight)
+            .exceptionOrNull()
+        assertThat(err).isSameInstanceAs(preflight)
+    }
+
+    @Test
+    fun `summarizeUpload falls back to a count message when no error was recorded`() {
+        val err = summarizeUpload(ok = 1, total = 2, serverError = null, preflightError = null)
+            .exceptionOrNull()
+        assertThat(err).isInstanceOf(IllegalStateException::class.java)
+        assertThat(err).hasMessageThat().isEqualTo("uploaded 1 of 2")
+    }
 }

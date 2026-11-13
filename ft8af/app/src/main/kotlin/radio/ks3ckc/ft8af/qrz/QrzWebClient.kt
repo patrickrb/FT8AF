@@ -3,8 +3,6 @@ package radio.ks3ckc.ft8af.qrz
 import android.util.Log
 import com.k1af.ft8af.GeneralVariables
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileWriter
@@ -34,8 +32,7 @@ object QrzWebClient {
     private const val USER_AGENT = "Mozilla/5.0 (Linux; Android) ft8af/1.0"
     private const val CACHE_MAX = 200
 
-    private val cacheMutex = Mutex()
-    private val cache = LinkedHashMap<String, String?>(16, 0.75f, true)
+    private val cache = LruCache<String, String>(CACHE_MAX)
 
     private val ogImageRegex = Regex(
         """<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']""",
@@ -59,7 +56,7 @@ object QrzWebClient {
         val key = callsign.trim().uppercase()
         if (key.isEmpty()) return@withContext null
 
-        cacheMutex.withLock { cache[key] }?.let { return@withContext it }
+        cache.get(key)?.let { return@withContext it }
 
         val url = "https://www.qrz.com/db/${URLEncoder.encode(key, StandardCharsets.UTF_8.name())}"
         val html = fetch(url) ?: return@withContext null
@@ -84,13 +81,7 @@ object QrzWebClient {
         }
 
         log("$key -> $image")
-        cacheMutex.withLock {
-            cache[key] = image
-            while (cache.size > CACHE_MAX) {
-                val oldest = cache.entries.iterator().next()
-                cache.remove(oldest.key)
-            }
-        }
+        cache.put(key, image)
         image
     }
 

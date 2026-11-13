@@ -99,6 +99,7 @@
     <string name="qsopanel_qsoing_with">%1$s と QSO 中</string>
     <string name="qsopanel_waiting_for">%1$s を待機中</string>
     <string name="qsopanel_tap_to_view">タップして表示 ↗</string>
+    <string name="qsopanel_sent_report">送信 %1$s</string>
     <string name="qsopanel_tx_message">TX: %1$s</string>
     <string name="qsopanel_waiting_messages">メッセージを待機中...</string>
 
@@ -194,9 +195,11 @@
     <string name="log_sync_title_no_services">有効なサービスなし</string>
     <string name="log_sync_title_syncing">同期中…</string>
     <string name="log_sync_title_complete">同期完了</string>
-    <string name="log_sync_enable_services">設定で Cloudlog/Wavelog/Nextlog または QRZ を有効にして、もう一度お試しください。</string>
+    <string name="log_sync_enable_services">設定で Cloudlog/Wavelog/Nextlog、QRZ、または World Radio League を有効にして、もう一度お試しください。</string>
     <string name="log_sync_progress_count">%2$d 件中 %1$d 件の QSO</string>
     <string name="log_sync_cloudlog_accepted">Cloudlog / Wavelog / Nextlog: %1$d 件受理</string>
+    <string name="log_sync_cloudlog_already_present">Cloudlog / Wavelog / Nextlog: %1$d 件は登録済み</string>
+    <string name="log_sync_cloudlog_downloaded">Cloudlog / Wavelog / Nextlog: %1$d 件をダウンロード</string>
     <string name="log_sync_qrz_accepted">QRZ: %1$d 件受理</string>
     <string name="log_sync_nothing_to_upload">アップロードする QSO がログブックにまだありません。</string>
     <string name="log_sync_working">処理中…</string>
@@ -205,6 +208,21 @@
     <string name="pota_tab_activate">アクティベート</string>
     <string name="pota_tab_hunt">ハント</string>
     <string name="pota_tab_history">履歴</string>
+    <!-- POTA contact row: time since the QSO. %d is the count in that unit. -->
+    <string name="pota_qso_age_just_now">たった今</string>
+    <plurals name="pota_qso_age_seconds">
+        <item quantity="other">%d秒前</item>
+    </plurals>
+    <plurals name="pota_qso_age_minutes">
+        <item quantity="other">%d分前</item>
+    </plurals>
+    <plurals name="pota_qso_age_hours">
+        <item quantity="other">%d時間前</item>
+    </plurals>
+    <plurals name="pota_qso_age_days">
+        <item quantity="other">%d日前</item>
+    </plurals>
+    <string name="pota_qso_time_show_utc">UTC時刻を表示</string>
     <string name="pota_start_activation">アクティベーション開始</string>
     <string name="pota_park_reference_label">公園リファレンス (例: K-1234)</string>
     <string name="pota_notes_optional_label">メモ (任意)</string>
@@ -216,6 +234,7 @@
     <string name="pota_self_spot_failed">セルフスポット失敗 — ログを確認してください</string>
     <string name="pota_active_park">アクティブ — %1$s</string>
     <string name="pota_qsos">QSO</string>
+    <string name="pota_dupe">重複</string>
     <string name="pota_contacts_map">交信マップ</string>
     <string name="pota_back">戻る</string>
     <string name="pota_valid_activation">有効なアクティベーション</string>
@@ -329,6 +348,9 @@
     <string name="settings_tx_watchdog_desc">タイムアウト後に送信を自動停止します</string>
     <string name="settings_stop_after">停止条件</string>
     <string name="settings_stop_after_desc">N 回応答がなければ呼出を停止します</string>
+    <string name="settings_max_73">73送信の上限</string>
+    <string name="settings_max_73_desc">次へ進む前のQSOごとのRR73/73送信回数の上限</string>
+    <string name="settings_max_73_auto">自動</string>
 
     <!-- ===== Settings: auto-sequence ===== -->
     <string name="settings_hunt">ハント (CQ 自動応答)</string>
@@ -396,6 +418,9 @@
     <string name="settings_qrz_profile_lookup_desc">QRZ XML API 用のユーザー名 + パスワード (アバター)</string>
     <string name="settings_cloudlog">Cloudlog / Wavelog / Nextlog</string>
     <string name="settings_cloudlog_desc">QSO を Cloudlog、Wavelog、または Nextlog のインスタンスに自動アップロードします</string>
+    <string name="settings_cloudlog_download">同期時に Wavelog から QSO をダウンロード</string>
+    <string name="settings_cloudlog_download_desc">同期時に、Wavelog のログブックにあってこのログにない QSO も追加します。それらは QRZ や World Radio League には送信されません。</string>
+    <string name="settings_cloudlog_download_unsupported">Wavelog が必要です: このサーバーは QSO の一覧を取得できません。</string>
 
     <!-- ===== Settings: advanced ===== -->
     <string name="settings_ptt_delay">PTT ディレイ</string>
@@ -412,8 +437,11 @@
     <string name="bug_report_send_email">メールを送信</string>
     <string name="bug_report_no_email_app">レポートを送信できるメールアプリが見つかりません</string>
     <string name="bug_report_open_github">GitHub Issue を開く</string>
-    <string name="settings_debug">デバッグ</string>
     <string name="settings_debug_desc">debug.log を表示 / 共有</string>
+    <string name="settings_share_logs">ログを共有</string>
+    <string name="settings_share_logs_desc">debug.log をメール、Discord、Drive などに送信</string>
+    <string name="settings_view_logs">ログを表示</string>
+    <string name="settings_share_logs_empty">まだログがありません</string>
     <string name="settings_about_body">バージョン %1$s (ビルド %2$s)\nビルド日 %3$s\n\nFT8 を、もっと手軽に。\n\nAndroid 向けのスタンドアロン FT8 トランシーバーアプリ。USB、Bluetooth、ネットワークでの無線機制御に対応し、自動シーケンスとログ記録を備えています。</string>
     <string name="settings_website">ウェブサイト</string>
     <string name="settings_community">コミュニティ</string>
@@ -432,8 +460,6 @@
     <string name="settings_conn_bluetooth">Bluetooth</string>
     <string name="settings_conn_network">ネットワーク</string>
     <string name="settings_no_usb_serial">USB シリアルデバイスが検出されませんでした。無線機に USB ケーブルを接続して、もう一度お試しください。</string>
-    <string name="settings_debug_mode_enabled">デバッグモードを有効にしました</string>
-    <string name="settings_debug_mode_disabled">デバッグモードを無効にしました</string>
     <string name="settings_edit_operator_identity">オペレーター情報を編集</string>
     <string name="settings_callsign">コールサイン</string>
     <string name="settings_callsign_hint">例: W1AW</string>
@@ -456,6 +482,7 @@
     <string name="settings_username_hint">あなたの QRZ.com ユーザー名</string>
     <string name="settings_password">パスワード</string>
     <string name="settings_enabled_bands_dialog_desc">非表示のバンドは周波数ピッカーに表示されません。</string>
+    <string name="settings_enabled_bands_keep_one">少なくとも1つのバンドを有効にしておく必要があります。</string>
     <string name="settings_select_serial_port">シリアルポートを選択</string>
     <string name="settings_tx_volume_advice">ライブで調整してください — 次の TX でこのレベルが使われます。無線機の ALC を見ながら、ラインに軽く触れる程度まで下げてください。</string>
     <string name="settings_input_volume">入力音量</string>
@@ -517,6 +544,8 @@
     <string name="cq_offset_moved">CQオフセットを空いている周波数へ移動：%1$d Hz</string>
     <string name="settings_auto_clear_tx">空きTXオフセット自動選択</string>
     <string name="settings_auto_clear_tx_desc">CQ呼び出し時に直近のバンド活動から空き周波数を選び、占有されたら移動します</string>
+    <string name="settings_auto_clear_tx_min">自動オフセットの下限</string>
+    <string name="settings_auto_clear_tx_min_desc">自動選択はこれより低いオフセットを選びません。上げると音声の高調波が通過帯域の外に出ます</string>
     <string name="tune_content_description">Tune：無線機のチューナーを開始、またはアンテナ調整用の連続キャリアを送信します</string>
     <string name="tune_stopped_timeout">Tuneは%1$d秒後に停止しました</string>
     <string name="tune_blocked_tx">Tuneの前にCQ/QSOを停止してください</string>
@@ -548,4 +577,15 @@
     <string name="settings_bin_agg_max">最大値</string>
     <string name="settings_bin_agg_avg">平均</string>
     <string name="settings_bin_agg_rms">RMS</string>
+
+    <!-- World Radio League (issue #800) -->
+    <string name="log_sync_wrl_accepted">World Radio League: %1$d 件受理</string>
+    <string name="settings_wrl_desc">QSO を World Radio League のログブックに自動アップロードします（Developer API キーが必要）</string>
+    <string name="settings_wrl_dialog_desc">World Radio League の Integrations → Developer API でキーを生成してください。1 つのキーでアカウント全体に使えます。</string>
+    <string name="settings_wrl_logbook">ログブック</string>
+    <string name="settings_wrl_logbook_default">既定のログブック</string>
+    <string name="settings_wrl_loading_logbooks">ログブックを読み込み中…</string>
+    <string name="settings_wrl_no_logbooks">World Radio League アカウントにはまだログブックがありません。</string>
+    <string name="settings_wrl_create_logbook">「%1$s」ログブックを作成</string>
+    <string name="settings_wrl_creating_logbook">ログブックを作成中…</string>
 </resources>

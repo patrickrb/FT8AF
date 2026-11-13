@@ -2,6 +2,8 @@ package com.k1af.ft8af.database;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.k1af.ft8af.rigs.InstructionSet;
+
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
@@ -32,12 +34,33 @@ public class RigNameListTest {
     }
 
     @Test
+    public void rigNameStringConstructor_parsesG106Profile() {
+        RigNameList.RigName r = new RigNameList.RigName("XIEGU G106(USB),70,19200,28");
+        assertThat(r.modelName).isEqualTo("XIEGU G106(USB)");
+        assertThat(r.address).isEqualTo(0x70);
+        assertThat(r.bauRate).isEqualTo(19200);
+        assertThat(r.instructionSet).isEqualTo(InstructionSet.XIEGU_G106);
+    }
+
+    @Test
     public void rigNameStringConstructor_trimsWhitespaceAroundFields() {
         RigNameList.RigName r = new RigNameList.RigName(" Yaesu FT-991 , 1F , 38400 , 2 ");
         assertThat(r.modelName).isEqualTo("Yaesu FT-991");
         assertThat(r.address).isEqualTo(0x1F);   // 31
         assertThat(r.bauRate).isEqualTo(38400);
         assertThat(r.instructionSet).isEqualTo(2);
+    }
+
+    @Test
+    public void rigNameStringConstructor_hamlibEntry_carriesModelIdInHexAddress() {
+        // Hamlib rigs (instructionSet 26) stash the hamlib model number in the
+        // address column, which is parsed base-16. FT-891 = 1036 = 0x40C; the
+        // HamlibRig is later constructed with GeneralVariables.civAddress = 1036.
+        RigNameList.RigName r = new RigNameList.RigName("Yaesu FT-891 (Hamlib),40C,38400,26");
+        assertThat(r.modelName).isEqualTo("Yaesu FT-891 (Hamlib)");
+        assertThat(r.address).isEqualTo(1036);   // 0x40C → hamlib RIG_MODEL_FT891
+        assertThat(r.bauRate).isEqualTo(38400);
+        assertThat(r.instructionSet).isEqualTo(26); // InstructionSet.HAMLIB
     }
 
     @Test

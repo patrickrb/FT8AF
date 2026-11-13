@@ -32,6 +32,17 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/image" />
 
+    <Button
+        android:id="@+id/addCustomFreqButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="@string/addCustomFreq"
+        android:textSize="13sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/freqDialogTextView" />
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/freqDialogRecyclerView"
         android:layout_width="0dp"
@@ -43,7 +54,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/freqDialogTextView" />
+        app:layout_constraintTop_toBottomOf="@+id/addCustomFreqButton" />
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>

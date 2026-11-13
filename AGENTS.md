@@ -1,0 +1,485 @@
+# FT8AF Agent & Contributor Instructions
+
+> **One source of rules.** This file is for every contributor, human or coding
+> agent (Claude Code, Codex, Cursor, Copilot, Optio, …). `CLAUDE.md` only
+> imports it. Put project rules here, not in a tool-specific file.
+
+> **Placeholders.** This file is written for any contributor's machine.
+> Substitute your own values wherever you see `<…>`. The recurring ones:
+> `<windows-checkout>` / `<mac-checkout>` — your local clone of this repo;
+> `<jdk17-home>` — the home directory of a JDK 17 install;
+> `<phone-serial>` — your phone's serial from `adb devices`;
+> `<android-sdk>` — your Android SDK root.
+> Machine-specific notes (your paths, device serials, rig quirks) belong in an
+> untracked `AGENTS.local.md`, not here. (`CLAUDE.local.md` is also git-ignored
+> and still works for Claude Code users, since Claude Code loads it automatically.)
+
+## Development environments
+
+Contributors work from three kinds of checkout; the commands differ, so figure
+out which one you're on first (`uname` / the primary working directory) and
+follow the matching path throughout:
+
+- **Windows** (`<windows-checkout>`, possibly driven from WSL) — uses the
+  `cmd.exe /c "gradlew.bat …"` wrapper, which picks up the Android Studio JBR.
+- **macOS** (`<mac-checkout>`) — builds and runs unit tests natively
+  (`./gradlew …`, needs JDK 17).
+- **Linux / Amp orb** — run `.agents/setup` from the repository root, then
+  start a new login shell (`bash -lc 'java -version'`). See the orb quickstart below.
+
+Local machines can build, test, install, and drive a real device when
+an Android phone is attached over USB debugging (an emulator is often attached
+alongside it). The gradle invocation is the main difference (`gradlew.bat`
+wrapper vs. `./gradlew` with JDK 17); where a section below gives a command for
+one, the other's equivalent is called out inline.
+
+On some devices `screencap` can come back all-black during the splash
+animation or when a hardware overlay is active; wait for the app to settle and
+retry, and use the accessibility tree only as a fallback (`uiautomator dump`
+often can't reach idle because the UI animates continuously).
+
+### Fresh Amp orb quickstart (Linux x86-64)
+
+Amp runs the executable `.agents/setup` when preparing a fresh orb (an exact
+cached snapshot may skip it). It installs JDK 17, Android SDK platform 36,
+build-tools 35.0.0, NDK 27.0.12077973, CMake 3.22.1, Clang/C++, Rust stable,
+and the Tauri WebKit/GTK/ALSA/udev development packages. It restores npm and
+Cargo dependencies from lockfiles and downloads the pinned Gradle wrapper.
+Node 20+ and npm come from the orb image. No signing keys, API credentials,
+radio, database service, or Android Studio are needed for these checks.
+
+Setup is non-interactive and rerunnable. It persists toolchain exports in
+`~/.config/ft8af/orb-env.sh`, loaded by `~/.bash_profile` for subsequent Amp
+login shells, including shells in new worktrees. Do not copy `local.properties`
+from another machine. To bootstrap manually:
+
+```bash
+.agents/setup
+bash -lc 'java -version; cargo --version; command -v sdkmanager'
+```
+
+**Repository map:** `ft8af/` is the Android Gradle project; `desktop/` is
+React/TypeScript + Tauri/Rust. Both reference
+the tracked C DSP core in `ft8af/app/src/main/cpp/`; don't duplicate it or edit
+the vendored `ft8_lib` without checking its pin and native regression tests.
+The ham-radio apps do not target iOS/iPadOS: the USB control they need is
+unavailable there. The retired iOS source and CI have been removed.
+
+**Fast headless checks** (run from the repository root after setup, in a new
+login shell; these require no device, display, or external service):
+
+```bash
+bash .github/scripts/check-agents-md.sh --self-test
+bash .github/scripts/check-agents-md.sh
+shellcheck .agents/setup
+bash ft8af/app/src/main/cpp/ft8af_glue/run_host_tests.sh
+npm --prefix desktop test
+npm --prefix desktop run build
+```
+
+The native suite includes committed WAV decode floors, encode/hash goldens,
+FFT, resampling, and decoder regression tests. Never lower the corpus floors
+or regenerate goldens just to make a test pass. Frontend tests use Vitest's
+non-watch mode. For a **complete Linux build/test check**, also run:
+
+```bash
+cargo test --locked --manifest-path desktop/src-tauri/Cargo.toml -j 2
+cargo build --locked --manifest-path desktop/src-tauri/Cargo.toml -j 2
+./ft8af/gradlew -p ft8af --no-daemon --max-workers=1 \
+  -Pkotlin.compiler.execution.strategy=in-process \
+  '-Dorg.gradle.jvmargs=-Xmx1536m -Dfile.encoding=UTF-8' :ham-radio-core:test testDebugUnitTest assembleDebug
+```
+
+The `ham-radio-core` Java-library module has its own test task, included above
+and in `.github/workflows/orb-setup.yml`. Android's `testDebugUnitTest` does not
+run Java-library tests. See `docs/shared-radio-core.md` for the shared-core
+contract and checksum-pinned consumer update procedure.
+
+Build the frontend **before** Cargo: Tauri embeds `desktop/dist`, and plain
+`cargo test`/`cargo build` do not run `beforeBuildCommand`. The Gradle unit
+suite runs JUnit/Truth/Robolectric on the host without an emulator. Reports:
+`ft8af/app/build/reports/tests/testDebugUnitTest/index.html`; APK:
+`ft8af/app/build/outputs/apk/debug/app-debug.apk`. First builds download more
+Maven/Cargo artifacts and compile native dependencies; setup does not build
+the apps. The orb workload memory limit can be lower than the host memory
+shown by `free`; the command above bounds the Gradle heap and avoids a second
+Kotlin compiler daemon. Default daemon settings exhausted the 6 GiB workload
+limit during Robolectric startup in validation. Avoid concurrent Rust and
+Android builds. Rerun `.agents/setup` after changing dependency manifests.
+
+**Limits:** Orbs have no KVM: do not install an Android emulator here.
+Android UI/instrumentation needs
+a connected Android runner/device or the existing CI emulator job. RF/PTT,
+USB audio/serial, and radio timing require real hardware; a passing host suite
+is not hardware validation. Never run transmit/tune tests against a live rig
+without explicit authorization. No `.agents/resume` is needed: these toolchains
+and caches persist, and no background service or login must be renewed.
+
+## Workflow
+
+**Every work item requires a pull request — no direct commits to `dev` or
+`main`.** Even a one-line docs or config change goes through a feature branch and
+a PR.
+
+**All PRs target the `dev` branch.** After finishing the code for any work item,
+open a pull request against `dev` (do the work on a feature branch, then
+`gh pr create --base dev`). Don't merge straight to `main`: the only PR into
+`main` is the dev → main release PR (there is no `staging` branch any more;
+see `docs/release-pipeline.md`).
+
+**The software factory.** Specs go in as GitHub issues labelled
+`factory:ready`; the loop in `.claude/skills/ft8af-factory/SKILL.md` builds
+each one in its own worktree, proves it with tests and emulator evidence,
+merges it into `dev`, and releases dev → main to the Play internal track.
+Patrick tests that build on his phone and promotes it to production himself.
+Each user-facing feature that reaches production is then announced on the
+ft8af.app blog and FT8AF's social accounts (`.claude/skills/feature-announce/`).
+
+**Use a git worktree for every separate line of work.** Don't switch branches in
+your primary checkout — branch-switching there collides with anything else in
+flight (a running build, an `adb install`, a different task). Instead spin up an
+isolated worktree per task:
+
+```
+git worktree add ../<checkout-dir-name>-<short-task-name> -b feat/<task>
+```
+
+Notes for a fresh worktree:
+
+- The `ft8af/app/src/main/cpp/` native sources (`ft8_lib`, `ft8af_glue`) are
+  **tracked** in git, so a fresh worktree builds with no manual copying.
+- Build/install from inside the worktree's `ft8af` dir: Windows uses the wrapper
+  (`cmd.exe /c "gradlew.bat installDebug"`); macOS uses `./gradlew` (see Build &
+  Deploy for the JDK 17 requirement). Both can install to an attached device.
+
+Remove the worktree when the branch is merged: `git worktree remove <path>`.
+
+When nothing else is in flight in your checkout, a feature branch in place is
+fine, but a worktree per task is still the recommended default.
+
+### Branch names
+
+`<type>/<short-slug>`, where `<type>` is `feat`, `fix`, `chore`, or `docs`
+(e.g. `fix/civ-address-hex`). When the work comes from a tracked task, put its
+id first in the slug, e.g. `fix/bur-12-cq-button-stuck`.
+
+### Pull requests
+
+- **Who merges.** An interactive agent opens the PR against `dev` and stops;
+  the maintainer merges. The software-factory loop has Patrick's standing
+  authority (2026-11-13) to merge its own feature PRs into `dev` once
+  `pr-gate` is green, code review is answered and QA evidence is posted, and
+  to merge the dev → main release PR once every check on it passed. That merge
+  publishes to Play **internal** only. Nobody but Patrick promotes to
+  production, creates an `android-v*` / `desktop-v*` tag, or runs the
+  production ship.
+- **Fill in every section of the PR template**
+  (`.github/pull_request_template.md`): the debug APK link, a 3-6 step
+  manual test checklist with expected results, what changed, risks, and what was
+  tested automatically.
+- **The debug APK comes from CI.** For any PR that touches `ft8af/**` or `ham-radio-core/**`,
+  `.github/workflows/pr-debug-apk.yml` builds `FT8AF-pr<N>-<sha>-debug.apk`
+  and posts (or updates) one "Debug APK" comment on the PR with the download
+  link. Before you hand off, wait for that comment and link it in the
+  description. If the job fails, the PR isn't ready. PRs that don't touch
+  either source directory get no debug APK; write "n/a" in that section. On fork PRs the
+  job builds the APK but can't comment (read-only token), so link the
+  artifact from the run's summary page instead.
+- **CI must be green.** That means `android-gate` (unit tests and the release
+  build) plus, on PRs that touch `ft8af/**` or `ham-radio-core/**`, `Debug APK for manual testing`.
+- **Get a code review before QA.** Once CI is green, request a Copilot review
+  first, **once per PR** (reviews are expensive: fix what's valid, answer and
+  resolve every thread, never re-request). If Copilot doesn't respond (it can run out of credits), run Claude's
+  `code-review` skill on the PR instead. Address or answer every finding before
+  handing off to QA, and fill in the "Code review" section of the template
+  with the reviewer you used.
+- **Label PRs that come from Discord feedback** with `from-discord`, and link
+  the Discord message or the tracking task in "What changed".
+- **QA attaches evidence.** After code review, QA (the factory loop does its
+  own) installs the debug APK on an emulator, runs the PR's manual test checklist, and posts screenshots or a
+  short screen recording to the PR. A PR without that evidence isn't ready
+  for the maintainer.
+
+### Device testing
+
+The maintainer doesn't install every PR's APK. Device testing happens once per
+release batch, on the Play internal build that the dev → main release
+produces, which holds every PR merged into `dev` since the last release. Per-PR device testing is only
+for changes an emulator can't check. Label those PRs `needs-device-test`:
+
+- transmit, PTT, or anything that keys the radio
+- CAT / rig control (CI-V, Hamlib, FlexRadio, etc.)
+- USB audio or USB serial
+- audio routing, input/output device selection, or sample-rate handling
+- runtime permissions, or what's declared in `AndroidManifest.xml`
+- signing, build types, `versionCode`, or other release config
+
+The author applies the label and says why in the template's "Device test"
+section. QA checks the label against the diff and adds it if it's missing.
+When in doubt, add it. Everything else (UI, decode/display logic, settings,
+CI, docs) merges on CI + code review + QA evidence. A `needs-device-test` PR
+may still merge into `dev` and ride the next internal release; the release PR
+lists every one of them under "Test on your phone" so the batch device test
+covers them before anything is promoted to production.
+
+`from-discord` fixes are confirmed by the reporter: once the fix reaches a Play
+testing track, `discord-play-track-watch` posts to Discord and the reporter
+checks it on their own setup.
+
+## Testing
+
+**Every new code path requires a new test.** Any branch, helper, or behavior
+you add or change must be covered by a unit test in the same PR — this is not
+optional, even for small UI helpers.
+
+Compose `@Composable` and `DrawScope` code can't be unit-tested directly, so
+extract the decision/geometry logic into a plain top-level `internal` function
+or class (e.g. `buildQsoLog`, `QsoPathProjection`) and test that. Keep the
+Composable a thin wrapper that just calls the extracted logic.
+
+The same rule applies to the desktop app: `App.tsx` stays a thin wrapper over
+plain, testable functions.
+
+### Android
+
+Tests live in `ft8af/app/src/test/` (Kotlin under `.../kotlin`, Java under
+`.../java`), use JUnit4 + Truth (`assertThat`), and add
+`@RunWith(RobolectricTestRunner::class)` when the code under test touches
+Android/Play-Services types (e.g. anything reaching `MaidenheadGrid`,
+`GeneralVariables`, `LatLng`). Pure math/logic needs no runner.
+
+Run from the `ft8af` dir.
+
+**Windows:**
+
+```
+cmd.exe /c "gradlew.bat testDebugUnitTest"
+# or a single class:
+cmd.exe /c "gradlew.bat testDebugUnitTest --tests <fully.qualified.ClassName>"
+```
+
+**macOS / Linux** (needs JDK 17 — see Build & Deploy; orbs get it from setup):
+
+```
+export JAVA_HOME=<jdk17-home>
+./gradlew testDebugUnitTest
+# or a single class:
+./gradlew testDebugUnitTest --tests <fully.qualified.ClassName>
+```
+
+### Android emulator flows
+
+`ft8af/app/src/androidTest/kotlin/com/k1af/ft8af/flows/` holds scripted UI
+flows that run the real app on the CI emulator (the `Instrumented tests
+(emulator)` job): launch, band change, decoding a recorded FT8 WAV from
+`src/main/cpp/ft8af_glue/testdata/ft8`, and a setting surviving an activity
+restart. Each flow saves a screenshot of the screen it ended on; the job uploads
+them as the `emulator-flows` artifact (plus `logcat.txt` when it fails), so a
+PR's UI can be checked without a phone. When you change a screen one of these
+flows walks through, update the flow in the same PR.
+
+Run them locally against an **emulator only** from the `ft8af` dir with
+`./gradlew connectedDebugAndroidTest` (Windows:
+`cmd.exe /c "gradlew.bat connectedDebugAndroidTest"`). Don't run it with your
+own phone attached: the task uninstalls the app at the end (wiping its logbook
+and settings), and the flows drive live state (band, operator identity, and a
+recorded slot through the real decode pipeline, which can spot to PSKReporter
+or start the auto-sequencer). On a physical device the flows skip themselves,
+but the uninstall still happens. The screenshots land on the device in
+`/data/local/tmp/ft8af-flows/`.
+
+### Desktop (`desktop/`, Tauri)
+
+Frontend logic lives in plain modules like `desktop/src/rig.ts` with vitest
+tests next to them (`*.test.ts`). Rust unit tests are `#[cfg(test)]` modules in
+`desktop/src-tauri/src/`, and integration tests are in `desktop/src-tauri/tests/`.
+
+From the repository root:
+
+```
+npm --prefix desktop ci
+npm --prefix desktop test
+npm --prefix desktop run build  # build.rs needs the frontend dist
+cargo test --locked --manifest-path desktop/src-tauri/Cargo.toml -j 2
+```
+
+On Linux, `cargo test` needs the system packages listed in
+`.github/workflows/desktop.yml` (installed by `.agents/setup` in orbs).
+The desktop build job runs Vitest; Rust coverage is non-gating, so run
+`cargo test --locked` locally before handing off backend changes.
+
+## Build & Deploy
+
+After making code changes, always build and install on the connected device
+when one is attached.
+
+**Windows:** A WSL shell typically has no Linux JDK, so `./gradlew` fails with
+`JAVA_HOME is not set`. Use the Windows wrapper instead — it picks up the Android
+Studio JBR automatically:
+
+```
+cd ft8af && cmd.exe /c "gradlew.bat installDebug"
+```
+
+**macOS / Linux:** AGP 8.9.1 / Gradle 8.11.1 need **JDK 17**; if your system JDK is older,
+builds fail without pointing `JAVA_HOME` at a 17. A user-local install (e.g. a
+Temurin 17 archive unpacked under your home directory — no sudo needed, unlike
+the Homebrew cask) works fine; wherever it lives is your `<jdk17-home>`. The
+`installDebug` task installs to *every* attached device (including the
+emulator); to target only the phone, build the APK and push it with an explicit
+serial:
+
+```
+cd ft8af && JAVA_HOME=<jdk17-home> ./gradlew assembleDebug
+adb -s <phone-serial> install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+To drive the UI: `adb -s <phone-serial> exec-out screencap -p > shot.png` and
+tap with `adb -s <phone-serial> shell input tap <x> <y>` (coordinates in the
+device's real pixel space — check it with `adb -s <phone-serial> shell wm size`).
+
+When an emulator is attached alongside the phone, Gradle's install step prints
+`TimeoutException`/`Unknown API Level` warnings for the emulator and still
+installs on the phone; `Installed on 1 device.` means the phone got the APK, so
+ignore the emulator noise.
+
+When multiple devices are attached, target the phone explicitly with `-s` and
+its serial (from `adb devices`). If `adb` isn't on your PATH, it lives at
+`<android-sdk>/platform-tools/adb` (on Windows
+`<android-sdk>\platform-tools\adb.exe`; Homebrew installs on macOS put it at
+`/opt/homebrew/bin/adb`).
+
+## Debug logs
+
+The app writes a structured event log to
+`/sdcard/Android/data/radio.ks3ckc.ft8af/files/debug.log` via `fileLog()` in
+`ComposeMainActivity.kt` — CAT serial sends/recvs, USB attach events,
+autoConnect attempts, band/frequency changes, etc. This is usually the most
+useful source. Pull it with:
+
+```
+adb -s <phone-serial> pull /sdcard/Android/data/radio.ks3ckc.ft8af/files/debug.log /tmp/
+```
+
+For runtime detail not in `debug.log` (audio recording loop, system USB events,
+crashes), use `adb logcat`. Useful tags: `FT8SignalListener`, `MicRecorder`,
+`UsbAudioDevice`, `CableConnector`, `CableSerialPort`, `UsbHostManager`,
+`UsbAlsaManager`. The app's `applicationId` is `radio.ks3ckc.ft8af` (the same
+for every contributor — it's set in `ft8af/app/build.gradle`) — pid-filter with
+`adb -s <phone-serial> logcat --pid=$(adb -s <phone-serial> shell pidof radio.ks3ckc.ft8af)`
+when you only want app-internal lines.
+
+## FT8 TX audio pipeline
+
+How a `playFT8Signal` call becomes RF, with the gotchas that produce
+audible-but-undecodable signals. Both of these were diagnosed the hard
+way and re-introducing either makes TX silently broken — the rig keys,
+audio is audible, ALC looks right, and zero spots appear on PSKReporter.
+
+**1. The native library generates the entire waveform.** `GenerateFT8.generateFt8(msg,
+freq, 12000)` returns a mono 12.64-second `float[]` at 12 kHz containing the full
+FT8 message. The Costas sync arrays at symbols 0-6, 36-42, 72-78 are
+embedded by `synth_gfsk` in the native lib — today that's the from-source
+`libft8af.so` (`System.loadLibrary("ft8af")`, built from the vendored
+`ft8_lib`; historically this was the retired closed prebuilt `libft8cn.so`).
+The buffer is correct as generated — everything
+downstream just has to *not break it*.
+
+**2. `lateStartSkipMs` clips leading audio, but only if we'd overrun the cycle.**
+FT8 audio is 12.64 s; cycle is 15 s; slack is 2.36 s. `msLate` (in
+`FT8TransmitSignal.java`) must be computed as
+`max(0, time_into_cycle_ms - 2360)` — **not** `time_into_cycle_ms %
+15000`. The latter treats every ms past the cycle boundary as lateness,
+so a normal on-time TX firing ~500-800 ms into the cycle chops that many
+ms off the **start** of the buffer — exactly where the leading Costas
+array lives. Receivers see audio but can't sync. Tell from log:
+`playLength < samples` when the TX started <2.4 s into the cycle. Fixed
+in PR #93.
+
+**3. `libusb_set_iso_packet_lengths` must use the audio rate, not
+`wMaxPacketSize`.** A USB Audio Class device plays back exactly the bytes
+per frame the host hands it. For USB FS, that's
+`(sampleRate * channels * bytesPerSample) / 1000` — e.g. 192 bytes/frame
+at 48 kHz stereo 16-bit. The endpoint's `wMaxPacketSize` (~200 for
+C-Media CM108-style chips) is the device's *max*, not the data rate.
+Sending that much per frame makes the device clock samples ~4 % faster
+than negotiated, shifting every FT8 tone up by the same ratio and
+pushing the message off WSJT-X's 6.25 Hz grid. Tell from log:
+`UsbAudioNative.nativeWrite` returns measurably faster than the audio
+duration (12.14 s real time for 12.64 s of audio). Fixed in PR #94 in
+`cpp/usb_audio_capture.cpp`. The Android-standard `AudioTrack` path is
+unaffected because the kernel UAC driver does this math automatically;
+the bug only bites the direct-libusb path used for car-dash kernels and
+similar.
+
+**4. The USB-direct path must force-claim the UAC AudioControl interface,
+not just the streaming ones.** Claiming only the AudioStreaming interfaces
+is a silent no-op for the kernel's `snd-usb-audio` driver (it binds the card
+at the AudioControl interface and treats the streaming interfaces as
+owned-but-unused), so the ALSA card survives and Android keeps the rig's
+sound card registered as a `usb_headset` sink+source. Every sound Android
+then routes there — the app's own QSO-complete alert ding, a Bluetooth
+car-kit connecting, a nav prompt — makes the kernel driver flip the playback
+interface's alt-setting under our in-flight iso URBs, which the kernel
+completes with `-ESHUTDOWN`. Tell from log: `libusb native write FAILED
+(rc=5 TRANSFER_NO_DEVICE) after ~280ms` with **no** `usbDetach` and the RX
+capture still running, typically 1.9 s after an `ALERT fire` line. The
+device is still on the bus; only the endpoint was torn down. Fixed by
+`UsbAudioDevice.detachKernelAudioDriver()`, which claims the AudioControl
+interface (that runs the real `usb_audio_disconnect`). A genuine bus drop
+looks different: `usbDetach` for the hub, serial and audio devices together
+and `serial.send: port not open!` — that one is electrical (RF resetting the
+hub), not software.
+
+**5. On at least one phone's USB-audio HAL, RX capture and TX playback
+cannot share one USB rig at the same time.** Opening TX's `AudioTrack` while
+`MicRecorder`'s RX `AudioRecord` is still open on the same USB device fails
+at the ALSA proxy level, and every subsequent write is then silently
+dropped — the generated waveform can be full-scale all the way to
+`AudioTrack.write()` and still never reach the rig, with no exception and no
+error surfaced to the app. Tell from log (vendor tags, MediaTek-specific
+spelling, but the pattern generalizes): `AudioALSAPlaybackHandlerUsb: open(),
+proxy_open fail, ret -12` right after `alsa_device_proxy: proxy_open()
+pcm_is_ready() failed: cannot set hw params: I/O error`, then
+`AudioALSAPlaybackHandlerUsb: write(), mPcm is NULL!` repeated once per
+buffer for the rest of the transmission (thousands of lines on a 13 s over).
+Correlates exactly with whether `AudioALSACaptureHandlerUsb` is open at that
+moment — a reference app (QFT8) that drives the same radio to full output
+runs strictly half-duplex: it closes its USB capture, plays, then reopens
+capture, and its opens never fail. Fixed by doing the same thing around
+every "over"/TUNE key-down: `MainViewModel`'s shared `beginKeying()`/
+`endKeying()` (already the single choke point for PTT and SCO around TX, see
+items above) now calls `HamRecorder.pauseForTx()`/`resumeAfterTx()`, gated by
+`MainViewModel.shouldPauseRxCaptureForTx()`: only for the QRP Labs QMX, and
+only when RX is actually an Android capture session (not a LAN rig, not
+already USB-direct) on the *same* USB VID:PID as TX's output. USB-direct TX
+output pauses too: with the HAL's capture still open on the same rig, every
+libusb iso submit failed with `LIBUSB_ERROR_IO`. Keep the QMX gate: a
+matching VID:PID alone is true for every single-cable USB rig (IC-7300,
+IC-705, IC-9700, FT-991A, Digirig, SignaLink...), and pausing RX there blanks
+the waterfall during TX and breaks full-duplex satellite monitoring for a HAL
+conflict that was only ever confirmed with a QMX. Widen it only on a
+confirmed report from another rig. Pauses nest (a tune carrier and an over
+can overlap), so `HamRecorder` counts them, and `MicRecorder.stopRecord()`
+joins the old reader thread so a quick resume can't leave two readers on one
+`AudioRecord`.
+
+**6. Some phones can't drive the QMX hard enough over audio at all; use CAT
+tones.** On a motorola edge 2022 the QMX's input meter read 1–2 bars (it
+needs 3 to transmit) with FT8AF's waveform at full scale. `dumpsys
+media.audio_flinger` showed why: the TX track at -6 dB with an OEM Dolby
+"Music Listener" effect on its session, at media volume 15/15, neither
+user-switchable (the Dolby settings app was disabled on that phone). A
+LoudnessEnhancer boost and even disabling the Dolby effect on our own
+session (it can be done via AudioEffect's hidden constructor) did not reach
+3 bars. What works is the QMX's own `TA` CAT command (firmware 1.04 CAT
+manual): in Digi mode `TAnnnn.nn;` transmits a carrier at dial + that audio
+frequency, the first TA after `TX;` keys down with a shaped envelope, and
+`TA0;` keys up. Sending one TA per symbol on the symbol clock gives exact
+FSK with no audio path. That is how another Android FT8 app drives the same
+radio at full power (its logcat: "QMX CAT TA in DIGI ... (no audio to the
+radio)"). FT8AF does this when Settings > Radio & Audio > "QMX: Send Tones
+over CAT" is on (`QmxCatTones`, `FT8TransmitSignal.playViaQmxCatTones`).
+Symbol timing measured 0.3 ms worst-case on that phone. USB-direct TX output
+is no substitute: it detaches the kernel audio driver, so Android's RX
+capture is gone until a replug.

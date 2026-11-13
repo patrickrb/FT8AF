@@ -64,6 +64,45 @@ public class XieGu6100CommandTest {
         assertThat(c.getFrequency(false)).isEqualTo(14_074_000L);
     }
 
+    /** Build a read-frequency reply carrying the 5 little-endian BCD frequency bytes. */
+    private static byte[] freqFrame(int b0, int b1, int b2, int b3, int b4) {
+        return new byte[]{
+                (byte) 0xFE, (byte) 0xFE, (byte) CTRL, (byte) RIG,
+                (byte) 0x03,
+                (byte) b0, (byte) b1, (byte) b2, (byte) b3, (byte) b4,
+                (byte) 0xFD};
+    }
+
+    /**
+     * The most-significant BCD digit is the 1 GHz place and must be weighted 10^9,
+     * matching {@link IcomCommand#getFrequency}. Weighting it 10^8 (a copy/paste of
+     * the 100 MHz multiplier) drops that digit by an order of magnitude — e.g.
+     * 1.296 GHz would decode as 0.396 GHz.
+     */
+    @Test
+    public void getFrequency_weightsGigahertzDigitCorrectly() {
+        // 1,296,074,000 Hz -> BCD 00 40 07 96 12 (GHz digit = 1)
+        XieGu6100Command c = XieGu6100Command.getCommand(CTRL, RIG,
+                freqFrame(0x00, 0x40, 0x07, 0x96, 0x12));
+        assertThat(c).isNotNull();
+        assertThat(c.getFrequency(false)).isEqualTo(1_296_074_000L);
+    }
+
+    /**
+     * A frequency above {@link Integer#MAX_VALUE} must survive the BCD assembly: the
+     * decoder returns {@code long}, so the arithmetic has to stay in {@code long}
+     * rather than overflowing an {@code int} partway through (again mirroring
+     * {@link IcomCommand#getFrequency}, whose top term is a {@code long} literal).
+     */
+    @Test
+    public void getFrequency_doesNotOverflowIntAboveTwoGigahertz() {
+        // 2,400,000,000 Hz -> BCD 00 00 00 00 24 (> Integer.MAX_VALUE)
+        XieGu6100Command c = XieGu6100Command.getCommand(CTRL, RIG,
+                freqFrame(0x00, 0x00, 0x00, 0x00, 0x24));
+        assertThat(c).isNotNull();
+        assertThat(c.getFrequency(false)).isEqualTo(2_400_000_000L);
+    }
+
     @Test
     public void readShortData_bigEndianAssembly() {
         assertThat(XieGu6100Command.readShortData(new byte[]{(byte) 0x12, (byte) 0x34}, 0))

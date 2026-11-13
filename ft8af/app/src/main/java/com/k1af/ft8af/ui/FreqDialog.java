@@ -5,16 +5,24 @@ package com.k1af.ft8af.ui;
  * @date 2023-03-20
  */
 
+import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.os.Bundle;
+import android.text.InputType;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -52,6 +60,12 @@ public class FreqDialog extends Dialog {
         freqRecyclerView.setAdapter(freqAdapter);
 
         freqRecyclerView.scrollToPosition(OperationBand.getIndexByFreq(GeneralVariables.band));
+
+        // Add custom dial frequency (issue #470): opens the add/edit dialog.
+        Button addCustom = findViewById(R.id.addCustomFreqButton);
+        if (addCustom != null) {
+            addCustom.setOnClickListener(v -> showCustomFreqDialog(null));
+        }
 //
 //        View.OnClickListener onClickListener=new View.OnClickListener() {
 //            @Override
@@ -60,6 +74,67 @@ public class FreqDialog extends Dialog {
 //            }
 //        };
 
+    }
+
+    /**
+     * Add (existing == null) or edit an operator-defined dial frequency
+     * (issue #470). Validation and persistence live in {@link OperationBand};
+     * bad input surfaces as a Toast and the list is refreshed on success.
+     */
+    private void showCustomFreqDialog(@Nullable final OperationBand.Band existing) {
+        final OperationBand operationBand = OperationBand.getInstance(getContext());
+
+        LinearLayout container = new LinearLayout(getContext());
+        container.setOrientation(LinearLayout.VERTICAL);
+        int pad = (int) (16 * getContext().getResources().getDisplayMetrics().density);
+        container.setPadding(pad, pad, pad, 0);
+
+        final EditText labelEdit = new EditText(getContext());
+        labelEdit.setHint(R.string.customFreqLabelHint);
+        labelEdit.setInputType(InputType.TYPE_CLASS_TEXT);
+        container.addView(labelEdit);
+
+        final EditText freqEdit = new EditText(getContext());
+        freqEdit.setHint(R.string.customFreqHzHint);
+        freqEdit.setInputType(InputType.TYPE_CLASS_NUMBER);
+        container.addView(freqEdit);
+
+        // The dial a new entry belongs to follows the current operating mode; an
+        // edited entry keeps its own mode.
+        final int mode = (existing != null) ? existing.mode : GeneralVariables.operatingMode;
+        if (existing != null) {
+            labelEdit.setText(existing.waveLength);
+            freqEdit.setText(String.valueOf(existing.band));
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(getContext())
+                .setTitle(R.string.customFreqTitle)
+                .setView(container)
+                .setNegativeButton(R.string.cancel, null)
+                .setPositiveButton(R.string.save, (DialogInterface d, int w) -> {
+                    String freqStr = freqEdit.getText().toString();
+                    String label = labelEdit.getText().toString();
+                    // For an edit, add the new dial first and only drop the old entry if
+                    // that succeeds (editCustomBand) — so an out-of-range change can't
+                    // delete the entry and leave nothing behind.
+                    String err = (existing != null)
+                            ? operationBand.editCustomBand(existing.band, existing.mode, freqStr, label, mode)
+                            : operationBand.addCustomBand(freqStr, label, mode);
+                    if (err != null) {
+                        Toast.makeText(getContext(), err, Toast.LENGTH_LONG).show();
+                    } else if (freqAdapter != null) {
+                        freqAdapter.notifyDataSetChanged();
+                    }
+                });
+        if (existing != null) {
+            builder.setNeutralButton(R.string.delete, (DialogInterface d, int w) -> {
+                operationBand.removeCustomBand(existing.band, existing.mode);
+                if (freqAdapter != null) {
+                    freqAdapter.notifyDataSetChanged();
+                }
+            });
+        }
+        builder.show();
     }
 
 
@@ -109,6 +184,9 @@ public class FreqDialog extends Dialog {
                public void onClick(View view) {
                    GeneralVariables.bandListIndex = OperationBand.getIndexByFreq(holder.band);
                    GeneralVariables.band = holder.band;
+                   // An explicit operator choice — this path used to leave commandedBandHz
+                   // stale, so setOperationBand re-commanded the OLD dial. See RigDialTarget.
+                   GeneralVariables.operatorChoseDial(holder.band);
 
                    mainViewModel.databaseOpr.getAllQSLCallsigns();// Load successfully contacted callsigns
                    mainViewModel.databaseOpr.writeConfig("bandFreq"
@@ -122,6 +200,17 @@ public class FreqDialog extends Dialog {
                    }
                    dismiss();
                }
+           });
+
+           // Long-press a custom (operator-defined) dial to edit or delete it.
+           final OperationBand.Band bandObj =
+                   position < OperationBand.bandList.size() ? OperationBand.bandList.get(position) : null;
+           holder.operationDialogBandConstraintLayout.setOnLongClickListener(view -> {
+               if (bandObj != null && bandObj.custom) {
+                   showCustomFreqDialog(bandObj);
+                   return true;
+               }
+               return false;
            });
 
 

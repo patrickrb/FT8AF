@@ -82,14 +82,34 @@ public class GuoHeQ900Rig extends BaseRig {
     }
 
 
-    private int checkHead(byte[] data) {
+    /**
+     * Locate the frame length byte, i.e. the first byte after the mandatory
+     * FOUR CONSECUTIVE 0xA5 sync bytes that begin every GuoHe frame (see
+     * {@link GuoHeRigConstant}). Returns the index of that length byte, or -1
+     * when this buffer does not contain one — either because no run of four
+     * 0xA5 bytes is present at all, or because the run is present but the byte
+     * that follows it has not arrived yet (a read that ends inside the sync
+     * run). Both cases mean "no complete frame header here"; the caller simply
+     * waits for more data.
+     *
+     * <p>The 0xA5 bytes must be consecutive: the payload of a status frame
+     * carries two big-endian VFO frequencies that are frequently 0xA5, and when
+     * a read splices a prior frame's tail onto the next frame's sync, counting
+     * 0xA5 bytes anywhere would return an index <em>into</em> the sync run. The
+     * caller would then read a 0xA5 as the length byte ((byte)0xA5 + 1 = -90),
+     * allocating {@code new byte[-90]} and throwing NegativeArraySizeException,
+     * which aborts framing and silently drops the frequency update.
+     */
+    static int checkHead(byte[] data) {
         int count = 0;
         for (int i = 0; i < data.length; i++) {
             if (data[i] == (byte) 0xa5) {
                 count++;
-                if (count == 4) {
-                    return i+1;
-                }
+            } else if (count >= 4) {
+                // First non-sync byte after a run of >=4 0xA5 is the length byte.
+                return i;
+            } else {
+                count = 0;
             }
         }
         return -1;

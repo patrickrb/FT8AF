@@ -2,7 +2,7 @@ name: Discord — merge notify
 
 on:
   push:
-    branches: [dev, staging, main]
+    branches: [dev, main]
 
 jobs:
   notify:
@@ -27,10 +27,7 @@ jobs:
             exit 1
           fi
           if [[ "$BRANCH" == "main" ]]; then
-            color=3066993   # green — production release
-            emoji="🚀"
-          elif [[ "$BRANCH" == "staging" ]]; then
-            color=3447003   # blue — dev (prerelease) build cut
+            color=3447003   # blue — internal prerelease, never production
             emoji="📦"
           else
             color=15105570  # orange — landed on dev
@@ -39,6 +36,9 @@ jobs:
           sha_short="${SHA:0:7}"
           first_line=$(printf '%s' "$COMMIT_MSG" | head -n1)
           body=$(printf '%s' "$COMMIT_MSG" | tail -n +2 | sed -E '/^[[:space:]]*$/d' || true)
+          # Discord embed limits: title <= 256 chars, description <= 4096 chars.
+          # A large squash-merge commit body overruns description -> HTTP 400, so
+          # clamp both fields (with an ellipsis) before building the payload.
           payload=$(jq -nc \
             --arg branch  "$BRANCH" \
             --arg sha     "$sha_short" \
@@ -50,11 +50,12 @@ jobs:
             --arg repo    "$REPO" \
             --arg emoji   "$emoji" \
             --argjson color "$color" \
-            '{embeds:[{
-               title: ($emoji + " " + $repo + " — merged into " + $branch + ": " + $first),
+            'def clamp(max): if (.|length) > max then (.[0:max-1] + "…") else . end;
+             {embeds:[{
+               title: (($emoji + " " + $repo + " — merged into " + $branch + ": " + $first) | clamp(256)),
                url: $url,
                color: $color,
-               description: (if $body == "" then null else $body end),
+               description: (if $body == "" then null else ($body | clamp(4096)) end),
                fields: [
                  {name:"Commit",  value:("[`"+$sha+"`]("+$url+")"), inline:true},
                  {name:"Author",  value:$author, inline:true},

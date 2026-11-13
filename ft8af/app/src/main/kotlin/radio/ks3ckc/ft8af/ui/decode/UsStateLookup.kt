@@ -2,6 +2,7 @@ package radio.ks3ckc.ft8af.ui.decode
 
 import android.content.Context
 import org.json.JSONObject
+import java.util.Locale
 
 internal object UsStateLookup {
     @Volatile private var map: Map<String, String>? = null
@@ -11,7 +12,7 @@ internal object UsStateLookup {
         val m = map ?: synchronized(this) {
             map ?: load(context).also { map = it }
         }
-        return m[grid.take(4).uppercase()]
+        return m[grid.take(4).uppercase(Locale.ROOT)]
     }
 
     private fun load(context: Context): Map<String, String> {

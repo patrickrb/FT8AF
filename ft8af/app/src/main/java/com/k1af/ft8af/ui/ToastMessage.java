@@ -12,6 +12,8 @@ import android.os.Looper;
 import com.k1af.ft8af.GeneralVariables;
 
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
 public class ToastMessage {
     private static final String TAG="ToastMessage";
@@ -40,6 +42,13 @@ public class ToastMessage {
     }
     @SuppressLint("DefaultLocale")
     private static synchronized void addDebugInfo(String s){
+        if (s == null) {
+            // A null message (commonly ToastMessage.show(e.getMessage()) where
+            // Throwable.getMessage() returns null) must never enter debugList:
+            // the delayed cleanup runnable below matches entries via equals(),
+            // which would NPE on a null element. A null toast is a no-op.
+            return;
+        }
         if (debugList.size()>5){
         //if (debugList.size()>20){
             debugList.remove(0);
@@ -51,18 +60,32 @@ public class ToastMessage {
         new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
             @Override
             public void run() {
-                for (int i = 0; i <debugList.size() ; i++) {
-                    if (debugList.get(i).equals(info)){
-                        debugList.remove(i);
-                        GeneralVariables.mutableDebugMessage.postValue(getDebugMessage());
-                        break;
-                    }
+                if (removeFirstMatch(debugList, info)) {
+                    GeneralVariables.mutableDebugMessage.postValue(getDebugMessage());
                 }
             }
         //},10000);
         },5000);
 
 
+    }
+
+    /**
+     * Removes the first entry equal to {@code info} from {@code list} and returns
+     * whether a removal happened. Null-safe on both the list element and
+     * {@code info} (uses {@link Objects#equals}). Extracted from the delayed
+     * cleanup runnable so the match/remove logic can be unit-tested without the
+     * Android main-looper handler, and hardened against a null element that would
+     * otherwise NPE {@code element.equals(info)}.
+     */
+    static synchronized boolean removeFirstMatch(List<String> list, String info){
+        for (int i = 0; i < list.size(); i++) {
+            if (Objects.equals(list.get(i), info)) {
+                list.remove(i);
+                return true;
+            }
+        }
+        return false;
     }
     private static synchronized String getDebugMessage(){
         StringBuilder builder=new StringBuilder();

@@ -41,6 +41,7 @@ import com.k1af.ft8af.GeneralVariables
 import com.k1af.ft8af.MainViewModel
 import com.k1af.ft8af.R
 import com.k1af.ft8af.log.ThirdPartyService
+import com.k1af.ft8af.log.WrlApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -52,7 +53,7 @@ import radio.ks3ckc.ft8af.ui.components.autofill
 
 /**
  * Logging & awards settings: SWL logging, PSKReporter, QRZ.com logging + profile
- * lookup credentials, and Cloudlog integration.
+ * lookup credentials, Cloudlog integration, and World Radio League logging.
  */
 @Composable
 fun LoggingSettings(
@@ -62,16 +63,62 @@ fun LoggingSettings(
     var saveSWLMessage by remember { mutableStateOf(GeneralVariables.saveSWLMessage) }
     var saveSWL_QSO by remember { mutableStateOf(GeneralVariables.saveSWL_QSO) }
     var enablePskReporter by remember { mutableStateOf(GeneralVariables.enablePskReporter) }
+    var enableAdifExport by remember { mutableStateOf(GeneralVariables.enableAdifExport) }
     var enableQRZ by remember { mutableStateOf(GeneralVariables.enableQRZ) }
     var enableCloudlog by remember { mutableStateOf(GeneralVariables.enableCloudlog) }
+    var enableWRL by remember { mutableStateOf(GeneralVariables.enableWRL) }
+    var wrlApiKey by remember { mutableStateOf(GeneralVariables.wrlApiKey.orEmpty()) }
     var qrzXmlUser by remember { mutableStateOf(GeneralVariables.qrzXmlUsername.orEmpty()) }
     var qrzXmlPass by remember { mutableStateOf(GeneralVariables.qrzXmlPassword.orEmpty()) }
     var qrzApiKey by remember { mutableStateOf(GeneralVariables.qrzApiKey.orEmpty()) }
     var cloudlogAddress by remember { mutableStateOf(GeneralVariables.cloudlogServerAddress.orEmpty()) }
+    var cloudlogDownloadQsos by remember { mutableStateOf(GeneralVariables.cloudlogDownloadQsos) }
+    // Whether the server can list its QSOs, which the download needs (issue #965): null
+    // until known. Re-checked when Cloudlog is switched on or its settings are saved.
+    var cloudlogCanList by remember { mutableStateOf<Boolean?>(null) }
+    var cloudlogSettingsVersion by remember { mutableStateOf(0) }
+    LaunchedEffect(enableCloudlog, cloudlogSettingsVersion) {
+        cloudlogCanList = null
+        if (enableCloudlog) {
+            cloudlogCanList = withContext(Dispatchers.IO) {
+                try {
+                    ThirdPartyService.cloudlogCanListQsos()
+                } catch (_: Exception) {
+                    null
+                }
+            }
+        }
+    }
+    // WSJT-X UDP interface (GridTracker / JTAlert / N1MM / Log4OM interop).
+    var udpEnabled by remember { mutableStateOf(GeneralVariables.udpEnabled) }
+    var udpAccept by remember { mutableStateOf(GeneralVariables.udpAcceptRequests) }
+    var udpHost by remember { mutableStateOf(GeneralVariables.udpHost) }
+    var udpPort by remember { mutableStateOf(GeneralVariables.udpPort) }
 
     var showQrzLogbook by remember { mutableStateOf(false) }
     var showQrzCreds by remember { mutableStateOf(false) }
     var showCloudlog by remember { mutableStateOf(false) }
+    var showWrl by remember { mutableStateOf(false) }
+    var showUdp by remember { mutableStateOf(false) }
+
+    // -- WSJT-X UDP server address dialog --
+    if (showUdp) {
+        WsjtxUdpDialog(
+            initialHost = udpHost,
+            initialPort = udpPort,
+            onDismiss = { showUdp = false },
+            onSave = { host, port ->
+                udpHost = host
+                udpPort = port
+                GeneralVariables.udpHost = host
+                GeneralVariables.udpPort = port
+                mainViewModel.databaseOpr.writeConfig("udp_host", host, null)
+                mainViewModel.databaseOpr.writeConfig("udp_port", port.toString(), null)
+                radio.ks3ckc.ft8af.wsjtx.WsjtxUdpService.reload()
+                showUdp = false
+            },
+        )
+    }
 
     // -- QRZ Logbook API Key Dialog (upload credential) --
     if (showQrzLogbook) {
@@ -121,10 +168,28 @@ fun LoggingSettings(
                 GeneralVariables.cloudlogApiKey = apiKey
                 GeneralVariables.cloudlogStationID = stationId
                 cloudlogAddress = address
+                cloudlogSettingsVersion++
                 mainViewModel.databaseOpr.writeConfig("cloudlogServerAddress", address, null)
                 mainViewModel.databaseOpr.writeConfig("cloudlogApiKey", apiKey, null)
                 mainViewModel.databaseOpr.writeConfig("cloudlogStationID", stationId, null)
                 showCloudlog = false
+            },
+        )
+    }
+
+    // -- World Radio League Dialog --
+    if (showWrl) {
+        WrlSettingsDialog(
+            initialApiKey = GeneralVariables.wrlApiKey.orEmpty(),
+            initialLogbookId = GeneralVariables.wrlLogbookId.orEmpty(),
+            onDismiss = { showWrl = false },
+            onSave = { apiKey, logbookId ->
+                GeneralVariables.wrlApiKey = apiKey
+                GeneralVariables.wrlLogbookId = logbookId
+                wrlApiKey = apiKey
+                mainViewModel.databaseOpr.writeConfig("wrlApiKey", apiKey, null)
+                mainViewModel.databaseOpr.writeConfig("wrlLogbookId", logbookId, null)
+                showWrl = false
             },
         )
     }
@@ -176,6 +241,19 @@ fun LoggingSettings(
                     )
                     SectionDivider()
                     SettingsRow(
+                        label = stringResource(R.string.settings_adif_export),
+                        description = stringResource(R.string.settings_adif_export_desc),
+                        toggle = enableAdifExport,
+                        onToggleChange = { checked ->
+                            enableAdifExport = checked
+                            GeneralVariables.enableAdifExport = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "enableAdifExport", if (checked) "1" else "0", null,
+                            )
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
                         label = stringResource(R.string.settings_qrz_com),
                         description = stringResource(R.string.settings_qrz_com_desc),
                         value = if (qrzApiKey.isNotEmpty()) {
@@ -222,6 +300,146 @@ fun LoggingSettings(
                         showChevron = true,
                         onClick = { showCloudlog = true },
                     )
+                    if (enableCloudlog) {
+                        SectionDivider()
+                        SettingsRow(
+                            label = stringResource(R.string.settings_cloudlog_download),
+                            description = if (cloudlogDownloadUnsupported(cloudlogCanList)) {
+                                stringResource(R.string.settings_cloudlog_download_unsupported)
+                            } else {
+                                stringResource(R.string.settings_cloudlog_download_desc)
+                            },
+                            toggle = cloudlogDownloadQsos,
+                            onToggleChange = { checked ->
+                                cloudlogDownloadQsos = checked
+                                GeneralVariables.cloudlogDownloadQsos = checked
+                                mainViewModel.databaseOpr.writeConfig(
+                                    "cloudlogDownloadQsos", if (checked) "1" else "0", null,
+                                )
+                            },
+                            enabled = cloudlogDownloadToggleEnabled(cloudlogCanList, cloudlogDownloadQsos),
+                        )
+                    }
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_wrl),
+                        description = stringResource(R.string.settings_wrl_desc),
+                        value = if (wrlApiKey.isNotEmpty()) {
+                            stringResource(R.string.common_configured)
+                        } else {
+                            stringResource(R.string.common_not_configured)
+                        },
+                        toggle = enableWRL,
+                        onToggleChange = { checked ->
+                            enableWRL = checked
+                            GeneralVariables.enableWRL = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "enableWRL", if (checked) "1" else "0", null,
+                            )
+                        },
+                        showChevron = true,
+                        onClick = { showWrl = true },
+                    )
+                }
+            }
+        }
+
+        SettingsSection(title = "WSJT-X UDP") {
+            GlassCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    SettingsRow(
+                        label = "Enable UDP broadcast",
+                        description = "Broadcast decodes, status and logged QSOs to companion apps " +
+                            "(GridTracker, JTAlert, N1MM, Log4OM).",
+                        toggle = udpEnabled,
+                        onToggleChange = { checked ->
+                            udpEnabled = checked
+                            GeneralVariables.udpEnabled = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "udp_enabled", if (checked) "1" else "0", null,
+                            )
+                            radio.ks3ckc.ft8af.wsjtx.WsjtxUdpService.reload()
+                        },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = "Server address",
+                        description = "Destination host and port for outgoing datagrams.",
+                        value = "$udpHost:$udpPort",
+                        showChevron = true,
+                        onClick = { showUdp = true },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = "Accept UDP requests",
+                        description = "Let companion apps reply to a call, halt TX, or send free text.",
+                        toggle = udpAccept,
+                        onToggleChange = { checked ->
+                            udpAccept = checked
+                            GeneralVariables.udpAcceptRequests = checked
+                            mainViewModel.databaseOpr.writeConfig(
+                                "udp_accept_requests", if (checked) "1" else "0", null,
+                            )
+                            radio.ks3ckc.ft8af.wsjtx.WsjtxUdpService.reload()
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Dialog for the WSJT-X UDP server address (host + port). Mirrors the other
+ * connection dialogs in this screen; validation keeps the port in 1..65535.
+ */
+@Composable
+private fun WsjtxUdpDialog(
+    initialHost: String,
+    initialPort: Int,
+    onDismiss: () -> Unit,
+    onSave: (host: String, port: Int) -> Unit,
+) {
+    var host by remember { mutableStateOf(initialHost) }
+    var portText by remember { mutableStateOf(initialPort.toString()) }
+    val port = portText.toIntOrNull()
+    val valid = host.isNotBlank() && port != null && port in 1..65535
+
+    Dialog(onDismissRequest = onDismiss) {
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "WSJT-X UDP server",
+                    style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = host,
+                    onValueChange = { host = it.trim() },
+                    label = { Text("Host") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = portText,
+                    onValueChange = { portText = it.filter { c -> c.isDigit() }.take(5) },
+                    label = { Text("Port") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    TextButton(
+                        onClick = { if (valid) onSave(host.trim(), port!!) },
+                        enabled = valid,
+                    ) { Text("Save") }
                 }
             }
         }
@@ -243,9 +461,12 @@ private fun CloudlogSettingsDialog(
     var addressInput by remember { mutableStateOf(TextFieldValue(initialAddress)) }
     var apiKeyInput by remember { mutableStateOf(TextFieldValue(initialApiKey)) }
     var stationIdInput by remember { mutableStateOf(TextFieldValue(initialStationId)) }
+    // A value saved before #926 may be a callsign or name; flag it and block Save until fixed.
+    val stationIdValid = isValidStationLocationId(stationIdInput.text)
 
     // Test connection state: null = idle, true = pass, false = fail
     var testResult by remember { mutableStateOf<Boolean?>(null) }
+    var testDetail by remember { mutableStateOf<String?>(null) }
     var isTesting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -376,6 +597,14 @@ private fun CloudlogSettingsDialog(
                             .clickable { showStationPicker = true }
                             .padding(12.dp),
                     )
+                    if (!stationIdValid) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.settings_station_id_invalid),
+                            color = StatusBad,
+                            fontSize = 12.sp,
+                        )
+                    }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = stringResource(R.string.settings_enter_manually),
@@ -388,10 +617,17 @@ private fun CloudlogSettingsDialog(
                 // Manual entry mode
                 OutlinedTextField(
                     value = stationIdInput,
-                    onValueChange = { stationIdInput = it },
+                    onValueChange = { stationIdInput = filterStationLocationIdInput(stationIdInput, it) },
                     label = { Text(stringResource(R.string.settings_station_id)) },
                     placeholder = { Text(stringResource(R.string.settings_station_id_hint), color = TextFaint) },
+                    isError = !stationIdValid,
+                    supportingText = if (stationIdValid) {
+                        null
+                    } else {
+                        { Text(stringResource(R.string.settings_station_id_invalid)) }
+                    },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     colors = fieldColors,
                     textStyle = TextStyle(fontSize = 14.sp),
                     modifier = Modifier.fillMaxWidth(),
@@ -414,17 +650,23 @@ private fun CloudlogSettingsDialog(
             ) {
                 TextButton(
                     onClick = {
-                        // Write current input values to GeneralVariables so the test uses them
-                        GeneralVariables.cloudlogServerAddress = addressInput.text
-                        GeneralVariables.cloudlogApiKey = apiKeyInput.text
-                        GeneralVariables.cloudlogStationID = stationIdInput.text
+                        // Write current input values to GeneralVariables so the test uses them.
+                        // Trimmed: a pasted trailing newline used to reach the URL builder
+                        // here while the station fetch below trimmed — two different fates
+                        // for the same field (#756).
+                        GeneralVariables.cloudlogServerAddress = addressInput.text.trim()
+                        GeneralVariables.cloudlogApiKey = apiKeyInput.text.trim()
+                        GeneralVariables.cloudlogStationID = stationIdInput.text.trim()
                         isTesting = true
                         testResult = null
+                        testDetail = null
                         scope.launch {
-                            val result = withContext(Dispatchers.IO) {
-                                ThirdPartyService.CheckCloudlogConnection()
+                            val check = withContext(Dispatchers.IO) {
+                                ThirdPartyService.checkCloudlogConnection()
                             }
+                            val result = check.ok
                             testResult = result
+                            testDetail = check.detail
                             isTesting = false
                             // On success, also fetch station profiles
                             if (result) {
@@ -467,6 +709,33 @@ private fun CloudlogSettingsDialog(
                     )
                 }
             }
+            // Why it failed — HTTP status, host unreachable, key rejected… (#756). Technical
+            // by design: it is the same line that lands in debug.log, so a bug report and
+            // the screen say the same thing.
+            val detail = testDetail
+            if (testResult == false && !detail.isNullOrBlank()) {
+                Text(
+                    text = detail,
+                    color = StatusBad,
+                    fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            // A passing test says nothing about the Station ID, and Wavelog rejects every
+            // QSO whose station isn't the key owner's. Once the server has answered, warn
+            // when the entered ID is blank (certain failure) or not in the list it returned
+            // for this key (advisory: the list can be scoped to the active logbook).
+            val serverAnswered = testResult == true || stationList.isNotEmpty()
+            val stationWarning = stationIdWarning(checkStationId(stationIdInput.text, stationList))
+            if (serverAnswered && stationWarning != null) {
+                Text(
+                    text = stringResource(stationWarning.messageRes, stationIdInput.text.trim()),
+                    color = if (stationWarning.advisory) StatusWarn else StatusBad,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -484,8 +753,13 @@ private fun CloudlogSettingsDialog(
                             stationIdInput.text.trim(),
                         )
                     },
+                    enabled = stationIdValid,
                 ) {
-                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.action_save),
+                        color = if (stationIdValid) Accent else TextFaint,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }
@@ -503,6 +777,444 @@ private fun CloudlogSettingsDialog(
             onSelect = { index ->
                 stationIdInput = TextFieldValue(stationList[index].stationId)
                 showStationPicker = false
+            },
+        )
+    }
+}
+
+/**
+ * Cloudlog/Wavelog Station Location ID (`station_profile_id`): a whole number >= 0, or blank
+ * while not set yet. A callsign or station name here makes every upload fail ("0 accepted", #926).
+ */
+internal fun isValidStationLocationId(id: String): Boolean = id.trim().all { it in '0'..'9' }
+
+/** Strips everything but ASCII digits; `Char.isDigit` would also let through non-ASCII digits. */
+internal fun filterStationLocationId(input: String): String = input.filter { it in '0'..'9' }
+
+/**
+ * True when an edit to an invalid saved value (e.g. a callsign stored before #926) should drop the
+ * old text. Stripping "K1AF" to "1" would quietly point uploads at another station location.
+ */
+internal fun shouldClearStationLocationId(previous: String, edited: String): Boolean =
+    edited != previous && !isValidStationLocationId(previous) && !isValidStationLocationId(edited)
+
+/**
+ * The text an edit put in, found by trimming what [previous] and [edited] share at both ends:
+ * "3" for "K1AF" -> "K1AF3", the whole paste for a select-all paste, "" for a backspace.
+ */
+internal fun insertedText(previous: String, edited: String): String {
+    var start = 0
+    while (start < previous.length && start < edited.length && previous[start] == edited[start]) start++
+    var end = 0
+    while (end < previous.length - start && end < edited.length - start &&
+        previous[previous.length - 1 - end] == edited[edited.length - 1 - end]
+    ) {
+        end++
+    }
+    return edited.substring(start, edited.length - end)
+}
+
+/**
+ * [filterStationLocationId] for one edit. An invalid saved value is dropped instead of salvaged,
+ * but digits the user just typed or pasted are kept, the same as in an empty field. Unchanged text
+ * (e.g. a restored view firing its watcher) is left alone, never stripped.
+ */
+internal fun cleanStationLocationIdEdit(previous: String, edited: String): String = when {
+    edited == previous -> edited
+    shouldClearStationLocationId(previous, edited) -> filterStationLocationId(insertedText(previous, edited))
+    else -> filterStationLocationId(edited)
+}
+
+/**
+ * [cleanStationLocationIdEdit] for the manual-entry field, keeping the cursor after the same
+ * digit it followed, so a paste like "ID 12" lands as "12" with the cursor at the end.
+ */
+internal fun filterStationLocationIdInput(previous: TextFieldValue, value: TextFieldValue): TextFieldValue {
+    if (value.text == previous.text) return value
+    val cleaned = cleanStationLocationIdEdit(previous.text, value.text)
+    if (cleaned == value.text) return value
+    val cursor = if (shouldClearStationLocationId(previous.text, value.text)) {
+        cleaned.length
+    } else {
+        filterStationLocationId(value.text.take(value.selection.end)).length
+    }
+    return TextFieldValue(cleaned, TextRange(cursor))
+}
+
+/**
+ * Whether to grey out "Download QSOs from Wavelog when syncing": only once the server is known
+ * to have no QSO listing (plain Cloudlog). While unknown (offline, still checking) it stays
+ * usable, since a sync against such a server just skips the download.
+ */
+internal fun cloudlogDownloadUnsupported(canList: Boolean?): Boolean = canList == false
+
+/**
+ * Whether the toggle can be changed. Greyed out on a server with no QSO listing, except while
+ * it is still on (switched on before the check finished, or before the server changed), so it
+ * can always be turned off.
+ */
+internal fun cloudlogDownloadToggleEnabled(canList: Boolean?, on: Boolean): Boolean =
+    on || !cloudlogDownloadUnsupported(canList)
+
+/** Label for the chosen WRL logbook. A blank id is the account default; an id no longer listed shows raw. */
+internal fun wrlLogbookSelectionLabel(
+    logbooks: List<ThirdPartyService.StationProfile>,
+    selectedId: String,
+    defaultLabel: String,
+): String {
+    if (selectedId.isBlank()) return defaultLabel
+    return logbooks.firstOrNull { it.stationId == selectedId }?.let { WrlApi.logbookLabel(it) }
+        ?: selectedId
+}
+
+/** WRL logbook picker rows: the account default first (sends no logbookId), then each logbook. */
+internal fun wrlLogbookPickerItems(
+    logbooks: List<ThirdPartyService.StationProfile>,
+    defaultLabel: String,
+): List<String> = listOf(defaultLabel) + logbooks.map { WrlApi.logbookLabel(it) }
+
+/** Picker row for [selectedId]: 0 (the default row) when blank or no longer listed. */
+internal fun wrlLogbookPickerIndex(
+    logbooks: List<ThirdPartyService.StationProfile>,
+    selectedId: String,
+): Int {
+    if (selectedId.isBlank()) return 0
+    val i = logbooks.indexOfFirst { it.stationId == selectedId }
+    return if (i < 0) 0 else i + 1
+}
+
+/** Logbook id for a picker row; row 0 (the default) is the empty id. */
+internal fun wrlLogbookIdAt(logbooks: List<ThirdPartyService.StationProfile>, index: Int): String =
+    if (index <= 0) "" else logbooks.getOrNull(index - 1)?.stationId.orEmpty()
+
+/**
+ * With no logbook chosen and exactly one on the account, choose it. WRL does not route a
+ * contact to a lone logbook by itself: live, a contact without logbookId fails with 500
+ * "Could not determine the destination logbook" unless a default was set on the website.
+ */
+internal fun wrlAutoSelectLogbook(
+    logbooks: List<ThirdPartyService.StationProfile>,
+    selectedId: String,
+): String = if (selectedId.isBlank() && logbooks.size == 1) logbooks[0].stationId else selectedId
+
+/**
+ * Whether to offer "Create logbook": a key is entered and its account is *known* to have no
+ * logbooks. [logbooks] null means not loaded yet or the request failed (bad key, offline),
+ * where creating one would only fail too. A new WRL account starts with none.
+ */
+internal fun wrlShouldOfferCreateLogbook(
+    apiKey: String,
+    logbooks: List<ThirdPartyService.StationProfile>?,
+): Boolean = apiKey.isNotBlank() && logbooks != null && logbooks.isEmpty()
+
+/**
+ * The failure line under Test Connection. For an account known to have no logbooks, WRL's
+ * own detail ("choose a logbook") points at a picker with nothing in it, so say what is
+ * actually missing; any other failure keeps WRL's reason.
+ */
+internal fun wrlTestFailureDetail(
+    detail: String?,
+    logbooks: List<ThirdPartyService.StationProfile>?,
+    noLogbooksMessage: String,
+): String? = if (logbooks != null && logbooks.isEmpty()) noLogbooksMessage else detail
+
+/**
+ * Dialog for the World Radio League Developer API key and destination logbook (issue #800).
+ * WRL is a fixed cloud service, so unlike Cloudlog there is no server address. Test
+ * Connection calls [WrlApi.checkConnection] with the typed values — nothing global changes
+ * until Save — and then loads the account's logbooks for the picker.
+ */
+@Composable
+private fun WrlSettingsDialog(
+    initialApiKey: String,
+    initialLogbookId: String,
+    onDismiss: () -> Unit,
+    onSave: (apiKey: String, logbookId: String) -> Unit,
+) {
+    var apiKeyInput by remember { mutableStateOf(TextFieldValue(initialApiKey)) }
+    var logbookId by remember { mutableStateOf(initialLogbookId) }
+    // null = not loaded yet or the request failed; empty = the account really has none.
+    var logbooks by remember { mutableStateOf<List<ThirdPartyService.StationProfile>?>(null) }
+    var isFetchingLogbooks by remember { mutableStateOf(false) }
+    var isCreatingLogbook by remember { mutableStateOf(false) }
+    var createError by remember { mutableStateOf<String?>(null) }
+    var showLogbookPicker by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<Boolean?>(null) }
+    var testDetail by remember { mutableStateOf<String?>(null) }
+    var isTesting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val defaultLabel = stringResource(R.string.settings_wrl_logbook_default)
+    val noLogbooksMessage = stringResource(R.string.settings_wrl_no_logbooks)
+
+    LaunchedEffect(Unit) {
+        val key = initialApiKey.trim()
+        if (key.isNotBlank()) {
+            isFetchingLogbooks = true
+            logbooks = withContext(Dispatchers.IO) { WrlApi.fetchLogbooksOrNull(key) }
+            logbookId = wrlAutoSelectLogbook(logbooks.orEmpty(), logbookId)
+            isFetchingLogbooks = false
+        }
+    }
+
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = TextPrimary,
+        unfocusedTextColor = TextPrimary,
+        cursorColor = Accent,
+        focusedBorderColor = Accent,
+        unfocusedBorderColor = BorderStrong,
+        focusedLabelColor = Accent,
+        unfocusedLabelColor = TextMuted,
+    )
+
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(BgSurface2)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.settings_wrl),
+                color = TextPrimary,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 18.sp,
+            )
+            Text(
+                text = stringResource(R.string.settings_wrl_dialog_desc),
+                color = TextMuted,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+
+            OutlinedTextField(
+                value = apiKeyInput,
+                onValueChange = {
+                    apiKeyInput = it
+                    testResult = null
+                    testDetail = null
+                    logbooks = null
+                    createError = null
+                },
+                label = { Text(stringResource(R.string.settings_api_key)) },
+                placeholder = { Text(stringResource(R.string.settings_wrl_api_key_hint), color = TextFaint) },
+                singleLine = true,
+                colors = fieldColors,
+                textStyle = TextStyle(fontSize = 14.sp),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (isFetchingLogbooks) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(vertical = 4.dp),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.width(16.dp).height(16.dp),
+                        strokeWidth = 2.dp,
+                        color = Accent,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_wrl_loading_logbooks),
+                        color = TextMuted,
+                        fontSize = 13.sp,
+                    )
+                }
+            } else {
+                Column {
+                    Text(
+                        text = stringResource(R.string.settings_wrl_logbook),
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = wrlLogbookSelectionLabel(logbooks.orEmpty(), logbookId, defaultLabel),
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(BgSurface3)
+                            .clickable(enabled = !logbooks.isNullOrEmpty()) { showLogbookPicker = true }
+                            .padding(12.dp),
+                    )
+                }
+
+                // A new WRL account has no logbook, and WRL will not accept a contact until
+                // it has one — so offer to create it here rather than send the user off to
+                // the website and back.
+                if (wrlShouldOfferCreateLogbook(apiKeyInput.text, logbooks)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = noLogbooksMessage,
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    val key = apiKeyInput.text.trim()
+                                    isCreatingLogbook = true
+                                    createError = null
+                                    scope.launch {
+                                        val why = StringBuilder()
+                                        val created = withContext(Dispatchers.IO) {
+                                            WrlApi.createLogbook(
+                                                key,
+                                                WrlApi.DEFAULT_LOGBOOK_NAME,
+                                                GeneralVariables.myCallsign,
+                                                why,
+                                            )
+                                        }
+                                        isCreatingLogbook = false
+                                        if (created != null) {
+                                            logbooks = listOf(created)
+                                            logbookId = created.stationId
+                                            val check = withContext(Dispatchers.IO) {
+                                                WrlApi.checkConnection(key, created.stationId)
+                                            }
+                                            testResult = check.ok
+                                            testDetail = check.detail
+                                        } else {
+                                            createError = why.toString().ifBlank { null }
+                                        }
+                                    }
+                                },
+                                enabled = !isCreatingLogbook && !isTesting,
+                            ) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.settings_wrl_create_logbook,
+                                        WrlApi.DEFAULT_LOGBOOK_NAME,
+                                    ),
+                                    color = if (isCreatingLogbook) TextFaint else Accent,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            if (isCreatingLogbook) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.width(16.dp).height(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Accent,
+                                )
+                                Text(
+                                    text = stringResource(R.string.settings_wrl_creating_logbook),
+                                    color = TextMuted,
+                                    fontSize = 13.sp,
+                                )
+                            }
+                        }
+                        createError?.let {
+                            Text(text = it, color = StatusBad, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                TextButton(
+                    onClick = {
+                        val key = apiKeyInput.text.trim()
+                        isTesting = true
+                        testResult = null
+                        testDetail = null
+                        scope.launch {
+                            // Logbooks first: a lone logbook is chosen automatically (WRL
+                            // won't route to it on its own), so the check below tests the
+                            // destination uploads will really use. They load even when the
+                            // check then fails with "choose a logbook" — the picker is how
+                            // the user fixes exactly that.
+                            if (key.isNotBlank()) {
+                                isFetchingLogbooks = true
+                                logbooks = withContext(Dispatchers.IO) { WrlApi.fetchLogbooksOrNull(key) }
+                                logbookId = wrlAutoSelectLogbook(logbooks.orEmpty(), logbookId)
+                                isFetchingLogbooks = false
+                            }
+                            val selected = logbookId
+                            val check = withContext(Dispatchers.IO) {
+                                WrlApi.checkConnection(key, selected)
+                            }
+                            testResult = check.ok
+                            testDetail = check.detail
+                            isTesting = false
+                        }
+                    },
+                    enabled = !isTesting,
+                ) {
+                    Text(
+                        text = stringResource(R.string.common_test_connection),
+                        color = if (isTesting) TextFaint else Accent,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                if (isTesting) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .width(16.dp)
+                            .height(16.dp),
+                        strokeWidth = 2.dp,
+                        color = Accent,
+                    )
+                }
+                if (testResult != null) {
+                    Text(
+                        text = if (testResult == true) stringResource(R.string.common_pass)
+                        else stringResource(R.string.common_fail),
+                        color = if (testResult == true) StatusConfirmed else StatusBad,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                    )
+                }
+            }
+            val detail = wrlTestFailureDetail(testDetail, logbooks, noLogbooksMessage)
+            if (testResult == false && !detail.isNullOrBlank()) {
+                Text(
+                    text = detail,
+                    color = StatusBad,
+                    fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.action_cancel), color = TextMuted)
+                }
+                TextButton(
+                    onClick = { onSave(apiKeyInput.text.trim(), logbookId) },
+                ) {
+                    Text(stringResource(R.string.action_save), color = Accent, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+
+    val pickable = logbooks.orEmpty()
+    if (showLogbookPicker && pickable.isNotEmpty()) {
+        ListPickerDialog(
+            title = stringResource(R.string.settings_wrl_logbook),
+            items = wrlLogbookPickerItems(pickable, defaultLabel),
+            selectedIndex = wrlLogbookPickerIndex(pickable, logbookId),
+            onDismiss = { showLogbookPicker = false },
+            onSelect = { index ->
+                logbookId = wrlLogbookIdAt(pickable, index)
+                testResult = null
+                testDetail = null
+                showLogbookPicker = false
             },
         )
     }

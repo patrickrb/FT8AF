@@ -138,7 +138,7 @@ private fun gatherInfo(): BugReportInfo = BugReportInfo(
 /**
  * Fire an email intent prefilled with the report body, addressed to the maintainer,
  * attaching debug.log when it exists. Mirrors the FileProvider/flags handling in
- * [DebugLogScreen.shareDebugLog].
+ * [buildDebugLogShareIntent].
  *
  * Uses an ACTION_SEND intent (so the debug.log attachment rides along via
  * EXTRA_STREAM) narrowed with a `mailto:` selector. The selector restricts the
@@ -149,32 +149,67 @@ private fun gatherInfo(): BugReportInfo = BugReportInfo(
 private fun sendBugReportEmail(context: Context, description: String) {
     val info = gatherInfo()
     val logFile = context.getExternalFilesDir(null)?.let { File(it, "debug.log") }
-    val intent = Intent(Intent.ACTION_SEND).apply {
+    val intent = buildReportEmailIntent(
+        context,
+        subject = buildBugReportTitle(info),
+        body = buildBugReportBody(description, info),
+    )
+    if (logFile != null && logFile.exists()) {
+        val uri = FileProvider.getUriForFile(
+            context, "radio.ks3ckc.ft8af.fileprovider", logFile,
+        )
+        intent.putExtra(Intent.EXTRA_STREAM, uri)
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    startReportEmail(context, intent)
+}
+
+/**
+ * Send the rating prompt's low-star feedback to the maintainer through the same
+ * email path as a bug report. The body carries the callsign and app/device block
+ * (as the feedback form discloses) but not debug.log. Returns whether an email
+ * app opened.
+ */
+internal fun sendAppFeedbackEmail(context: Context, feedback: String): Boolean {
+    val info = gatherInfo()
+    return startReportEmail(
+        context,
+        buildReportEmailIntent(
+            context,
+            subject = buildFeedbackTitle(info),
+            body = buildFeedbackBody(feedback, info),
+        ),
+    )
+}
+
+/** The maintainer-addressed, email-apps-only ACTION_SEND shared by both reports. */
+internal fun buildReportEmailIntent(context: Context, subject: String, body: String): Intent =
+    Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         // Narrow the chooser to email apps only; a bare ACTION_SEND would let any
         // share target (messaging, social, etc.) receive the callsign/device block.
         selector = Intent(Intent.ACTION_SENDTO).apply { data = Uri.parse("mailto:") }
         putExtra(Intent.EXTRA_EMAIL, arrayOf(context.getString(R.string.bug_report_email)))
-        putExtra(Intent.EXTRA_SUBJECT, buildBugReportTitle(info))
-        putExtra(Intent.EXTRA_TEXT, buildBugReportBody(description, info))
-        if (logFile != null && logFile.exists()) {
-            val uri = FileProvider.getUriForFile(
-                context, "radio.ks3ckc.ft8af.fileprovider", logFile,
-            )
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, body)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
-    // A device with no mail handler (or all disabled) throws here; surface a
-    // message instead of crashing out of Settings -> About.
+
+/**
+ * Launch [intent]; returns whether an email app actually opened. A device with no
+ * mail handler (or all disabled) throws here — surface a message instead of
+ * crashing out of the caller's screen, and report false so the caller can keep
+ * the operator's typed text rather than treating it as sent.
+ */
+internal fun startReportEmail(context: Context, intent: Intent): Boolean =
     try {
         context.startActivity(intent)
+        true
     } catch (e: ActivityNotFoundException) {
         Toast.makeText(
             context,
             context.getString(R.string.bug_report_no_email_app),
             Toast.LENGTH_LONG,
         ).show()
+        false
     }
-}

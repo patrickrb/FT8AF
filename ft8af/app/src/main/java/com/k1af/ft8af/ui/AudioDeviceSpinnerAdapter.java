@@ -132,20 +132,62 @@ public class AudioDeviceSpinnerAdapter extends BaseAdapter {
     }
 
     /**
+     * The {@code AudioManager}-recognized device's own product name at this
+     * position, when it's a USB-type entry (confirmed on real hardware: the
+     * QMX shows up this way as "USB-Audio - QMX Transceiver",
+     * TYPE_USB_DEVICE). Used by the picker to find and persist that device's
+     * VID:PID via {@link UsbAudioDevice#matchByProductName}, since {@code
+     * AudioDeviceInfo} itself exposes no VID:PID -- without this, every pick
+     * of a framework-routed USB device persisted VID 0 (the {@link
+     * #getUsbAudioDeviceInfo} path only covers USB-direct entries), so the
+     * VID:PID fallback in {@link #getPositionByDeviceId} (and in {@code
+     * MicRecorder}/{@code FT8TransmitSignal}) had nothing to fall back to.
+     *
+     * @return the product name, or null for the "Default" row, a non-USB
+     *     device, or a USB-direct entry (which already carries its own
+     *     VID:PID via {@link #getUsbAudioDeviceInfo})
+     */
+    public String getUsbFrameworkDeviceProductName(int position) {
+        if (position <= 0) return null;
+        int adPos = position - 1;
+        if (adPos >= audioDeviceList.size()) return null; // USB-direct entry
+        AudioDeviceInfo device = audioDeviceList.get(adPos);
+        if (!isUsbType(device.getType())) return null;
+        CharSequence name = device.getProductName();
+        return name == null ? null : name.toString();
+    }
+
+    private static boolean isUsbType(int type) {
+        return type == AudioDeviceInfo.TYPE_USB_DEVICE
+                || type == AudioDeviceInfo.TYPE_USB_HEADSET
+                || type == AudioDeviceInfo.TYPE_USB_ACCESSORY;
+    }
+
+    /**
      * Get the list position for a given device ID.
      * deviceId == 0 → 0 (Default)
-     * deviceId > 0 → search AudioManager devices
+     * deviceId > 0 → search AudioManager devices by id; if not found (stale
+     *     across a USB replug/power-cycle re-enumeration -- confirmed on real
+     *     hardware: a QMX power-cycle alone changed its id and reverted this
+     *     picker to "Default"), fall back to matching by the persisted
+     *     VID:PID's current product name, which doesn't change across
+     *     reconnects. See {@link UsbAudioDevice#resolveDeviceIndex}.
      * deviceId == -1 → search USB audio devices by VID:PID
      */
     public int getPositionByDeviceId(int deviceId) {
         if (deviceId == 0) return 0;
 
         if (deviceId > 0) {
+            int[] ids = new int[audioDeviceList.size()];
+            String[] names = new String[audioDeviceList.size()];
             for (int i = 0; i < audioDeviceList.size(); i++) {
-                if (audioDeviceList.get(i).getId() == deviceId) {
-                    return i + 1;
-                }
+                ids[i] = audioDeviceList.get(i).getId();
+                CharSequence name = audioDeviceList.get(i).getProductName();
+                names[i] = name == null ? null : name.toString();
             }
+            int idx = UsbAudioDevice.resolveDeviceIndex(ids, names, deviceId,
+                    persistedVidPidProductName());
+            if (idx >= 0) return idx + 1;
         }
 
         // For USB audio (deviceId == -1), match by VID:PID
@@ -172,6 +214,27 @@ public class AudioDeviceSpinnerAdapter extends BaseAdapter {
         return 0; // fallback to Default
     }
 
+    /**
+     * Product name of the already-enumerated {@link #usbAudioDeviceList}
+     * entry matching this direction's persisted VID:PID, or null if there's
+     * nothing persisted (VID 0) or no current match.
+     */
+    private String persistedVidPidProductName() {
+        int vid = isInput
+                ? com.k1af.ft8af.GeneralVariables.usbAudioInputVendorId
+                : com.k1af.ft8af.GeneralVariables.usbAudioOutputVendorId;
+        if (vid == 0) return null;
+        int pid = isInput
+                ? com.k1af.ft8af.GeneralVariables.usbAudioInputProductId
+                : com.k1af.ft8af.GeneralVariables.usbAudioOutputProductId;
+        for (UsbAudioDevice.UsbAudioDeviceInfo info : usbAudioDeviceList) {
+            if (info.device.getVendorId() == vid && info.device.getProductId() == pid) {
+                return info.device.getProductName();
+            }
+        }
+        return null;
+    }
+
     @SuppressLint({"ViewHolder", "InflateParams"})
     @Override
     public View getView(int position, View view, ViewGroup viewGroup) {
@@ -182,6 +245,23 @@ public class AudioDeviceSpinnerAdapter extends BaseAdapter {
             textView.setText(getDeviceDisplayName(position));
         }
         return view;
+    }
+
+    /**
+     * {@link AudioDeviceInfo} type at a spinner position, or -1 for the "Default" row and the
+     * USB-direct entries appended after {@code audioDeviceList} (those are driven over libusb
+     * and have no routed {@code AudioDeviceInfo}). Android-routed USB devices such as
+     * {@link AudioDeviceInfo#TYPE_USB_DEVICE} are ordinary {@code audioDeviceList} rows and
+     * return their real type. Used to detect when the user picked a Bluetooth-SCO headset so
+     * SCO can be brought up (issue #723).
+     */
+    public int getDeviceType(int position) {
+        if (position <= 0) return -1;
+        int adPos = position - 1;
+        if (adPos < audioDeviceList.size()) {
+            return audioDeviceList.get(adPos).getType();
+        }
+        return -1;
     }
 
     public String getDeviceDisplayName(int position) {

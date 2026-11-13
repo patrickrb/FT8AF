@@ -8,6 +8,11 @@ import org.junit.Test;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Pure-logic coverage for OperationBand. The band list is a public static
@@ -45,6 +50,16 @@ public class OperationBandTest {
     }
 
     @Test
+    public void bandStringConstructor_trimsTrailingCrOnWavelength() {
+        // waveLength is the LAST field on a plain (no mode tag) line, so a CRLF-checked-out
+        // bands.txt (every Windows build with no .gitattributes override, before this fix)
+        // leaves a trailing "\r" here -- "40m\r" never matches "40m" anywhere waveLength is
+        // compared, so the Band & Mode sheet's curated list came up empty on every such build.
+        OperationBand.Band b = new OperationBand.Band(" :7074000:40m\r");
+        assertThat(b.waveLength).isEqualTo("40m");
+    }
+
+    @Test
     public void bandInfo_formatsMHzWithWavelength() {
         OperationBand.Band b = new OperationBand.Band(14_074_000L, "20m");
         assertThat(b.getBandInfo()).isEqualTo("  14.074 MHz (20m)");
@@ -58,13 +73,81 @@ public class OperationBandTest {
     }
 
     @Test
-    public void getIndexByFreq_appendsUnknownBand() {
+    public void getIndexByFreq_appendsUnknownBandAsAdHocSlot() {
         OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
         int idx = OperationBand.getIndexByFreq(21_074_000L);
         assertThat(idx).isEqualTo(1);
         assertThat(OperationBand.bandList).hasSize(2);
+        assertThat(OperationBand.bandList.get(1).adHoc).isTrue();
         // The wavelength is derived via BaseRigOperation.getMeterFromFreq.
         assertThat(OperationBand.bandList.get(1).waveLength).isEqualTo("15m");
+    }
+
+    // --- one reusable ad-hoc slot (issue #978) -------------------------------
+
+    @Test
+    public void getIndexByFreq_manyUnknownFrequencies_addOnlyOneEntry() {
+        // Tuning the VFO across 20m in SSB reports a new Hz value every step; each
+        // one used to append an entry, filling the picker with 14.xxx chips.
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        OperationBand.bandList.add(new OperationBand.Band(7_074_000L, "40m"));
+        int before = OperationBand.bandList.size();
+        for (int i = 0; i < 500; i++) {
+            OperationBand.getIndexByFreq(14_150_000L + i * 10L);
+        }
+        assertThat(OperationBand.bandList).hasSize(before + 1);
+    }
+
+    @Test
+    public void getIndexByFreq_adHocSlotIndexIsStableAndFollowsLatestFreq() {
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        int first = OperationBand.getIndexByFreq(14_200_000L);
+        int second = OperationBand.getIndexByFreq(14_230_500L);
+        assertThat(second).isEqualTo(first);
+        assertThat(OperationBand.bandList.get(first).band).isEqualTo(14_230_500L);
+        assertThat(OperationBand.bandList.get(first).waveLength).isEqualTo("20m");
+
+        // An off-plan band hop reuses the same slot and relabels it.
+        int third = OperationBand.getIndexByFreq(7_100_000L);
+        assertThat(third).isEqualTo(first);
+        OperationBand.Band slot = OperationBand.bandList.get(first);
+        assertThat(slot.band).isEqualTo(7_100_000L);
+        assertThat(slot.waveLength).isEqualTo("40m");
+        assertThat(slot.adHoc).isTrue();
+    }
+
+    @Test
+    public void getIndexByFreq_configuredEntriesAreNeverOverwritten() {
+        OperationBand.Band ft8 = new OperationBand.Band(14_074_000L, "20m");
+        ft8.marked = true;
+        OperationBand.Band custom = new OperationBand.Band(14_090_000L, "3B9 DX");
+        custom.custom = true;
+        OperationBand.bandList.add(ft8);
+        OperationBand.bandList.add(custom);
+
+        int slot = OperationBand.getIndexByFreq(14_200_000L);
+        OperationBand.getIndexByFreq(7_100_000L);
+        // Landing on a configured dial returns that entry, not the slot.
+        assertThat(OperationBand.getIndexByFreq(14_090_000L)).isEqualTo(1);
+        assertThat(OperationBand.getIndexByFreq(14_074_000L)).isEqualTo(0);
+        // ...and leaving it again goes back to the same slot.
+        assertThat(OperationBand.getIndexByFreq(14_250_000L)).isEqualTo(slot);
+
+        assertThat(OperationBand.bandList).hasSize(3);
+        assertThat(ft8.band).isEqualTo(14_074_000L);
+        assertThat(ft8.waveLength).isEqualTo("20m");
+        assertThat(ft8.adHoc).isFalse();
+        assertThat(custom.band).isEqualTo(14_090_000L);
+        assertThat(custom.waveLength).isEqualTo("3B9 DX");
+        assertThat(custom.adHoc).isFalse();
+    }
+
+    @Test
+    public void getIndexByFreq_sameUnknownFreqTwice_returnsSlot() {
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        int idx = OperationBand.getIndexByFreq(14_200_000L);
+        assertThat(OperationBand.getIndexByFreq(14_200_000L)).isEqualTo(idx);
+        assertThat(OperationBand.bandList).hasSize(2);
     }
 
     @Test
@@ -80,11 +163,12 @@ public class OperationBandTest {
     }
 
     @Test
-    public void getAllWaveLengths_returnsDistinctInFileOrder() {
+    public void getAllWaveLengths_returnsDistinctLowestFrequencyFirst() {
         OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
         OperationBand.bandList.add(new OperationBand.Band(14_080_000L, "20m")); // dup wavelength
         OperationBand.bandList.add(new OperationBand.Band(7_074_000L, "40m"));
-        assertThat(OperationBand.getAllWaveLengths()).containsExactly("20m", "40m").inOrder();
+        // Ordered by frequency, not file order (issue #929).
+        assertThat(OperationBand.getAllWaveLengths()).containsExactly("40m", "20m").inOrder();
     }
 
     @Test
@@ -371,5 +455,201 @@ public class OperationBandTest {
     @Test
     public void parseBandLines_nullInput_returnsEmpty() {
         assertThat(OperationBand.parseBandLines(null)).isEmpty();
+    }
+
+    // ---- custom (user-defined) dial frequencies (issue #470) ----------------
+    // Operators can add off-plan dials (e.g. DXpedition frequencies); the
+    // parse/validate/serialize/merge logic is pure and covered here. Persistence
+    // (SharedPreferences) is covered by OperationBandCustomBandsTest.
+
+    @Test
+    public void parseCustomFreq_acceptsWholeHz() {
+        assertThat(OperationBand.parseCustomFreq("14090000")).isEqualTo(14_090_000L);
+        assertThat(OperationBand.parseCustomFreq("  7090000 ")).isEqualTo(7_090_000L);
+    }
+
+    @Test
+    public void parseCustomFreq_rejectsBlankAndNonNumeric() {
+        assertThat(OperationBand.parseCustomFreq(null)).isEqualTo(-1L);
+        assertThat(OperationBand.parseCustomFreq("")).isEqualTo(-1L);
+        assertThat(OperationBand.parseCustomFreq("   ")).isEqualTo(-1L);
+        assertThat(OperationBand.parseCustomFreq("14.090")).isEqualTo(-1L); // not whole Hz
+        assertThat(OperationBand.parseCustomFreq("abc")).isEqualTo(-1L);
+    }
+
+    @Test
+    public void isValidCustomFreq_enforcesRange() {
+        assertThat(OperationBand.isValidCustomFreq(OperationBand.MIN_CUSTOM_FREQ)).isTrue();
+        assertThat(OperationBand.isValidCustomFreq(OperationBand.MAX_CUSTOM_FREQ)).isTrue();
+        assertThat(OperationBand.isValidCustomFreq(14_090_000L)).isTrue();
+        assertThat(OperationBand.isValidCustomFreq(OperationBand.MIN_CUSTOM_FREQ - 1)).isFalse();
+        assertThat(OperationBand.isValidCustomFreq(OperationBand.MAX_CUSTOM_FREQ + 1)).isFalse();
+    }
+
+    @Test
+    public void toCustomLine_ft8OmitsModeTag_nonFt8IncludesIt() {
+        OperationBand.Band ft8 = new OperationBand.Band(14_090_000L, "3B9 DX");
+        assertThat(OperationBand.toCustomLine(ft8)).isEqualTo(" :14090000:3B9 DX");
+
+        OperationBand.Band ft4 = new OperationBand.Band(14_090_000L, "3B9 DX");
+        ft4.mode = com.k1af.ft8af.FT8Common.FT4_MODE;
+        assertThat(OperationBand.toCustomLine(ft4)).isEqualTo(" :14090000:3B9 DX:FT4");
+    }
+
+    @Test
+    public void customBands_serializeParseRoundTrip() {
+        OperationBand.Band a = new OperationBand.Band(14_090_000L, "3B9 DX");
+        OperationBand.Band b = new OperationBand.Band(7_090_000L, "40m DX");
+        b.mode = com.k1af.ft8af.FT8Common.FT4_MODE;
+        String blob = OperationBand.serializeCustomBands(java.util.Arrays.asList(a, b));
+
+        ArrayList<OperationBand.Band> parsed = OperationBand.parseCustomBands(blob);
+        assertThat(parsed).hasSize(2);
+        assertThat(parsed.get(0).band).isEqualTo(14_090_000L);
+        assertThat(parsed.get(0).waveLength).isEqualTo("3B9 DX");
+        assertThat(parsed.get(0).mode).isEqualTo(com.k1af.ft8af.FT8Common.FT8_MODE);
+        assertThat(parsed.get(0).custom).isTrue();
+        assertThat(parsed.get(1).band).isEqualTo(7_090_000L);
+        assertThat(parsed.get(1).mode).isEqualTo(com.k1af.ft8af.FT8Common.FT4_MODE);
+        assertThat(parsed.get(1).custom).isTrue();
+    }
+
+    @Test
+    public void parseCustomBands_emptyOrNull_returnsEmpty() {
+        assertThat(OperationBand.parseCustomBands("")).isEmpty();
+        assertThat(OperationBand.parseCustomBands(null)).isEmpty();
+    }
+
+    @Test
+    public void appendCustomBands_appendsNonDuplicatesFlaggedCustom() {
+        ArrayList<OperationBand.Band> target = new ArrayList<>();
+        target.add(new OperationBand.Band(14_074_000L, "20m")); // built-in
+
+        ArrayList<OperationBand.Band> customs = new ArrayList<>();
+        OperationBand.Band dx = new OperationBand.Band(14_090_000L, "3B9 DX");
+        dx.custom = true;
+        customs.add(dx);
+
+        OperationBand.appendCustomBands(target, customs);
+        assertThat(target).hasSize(2);
+        assertThat(target.get(1).band).isEqualTo(14_090_000L);
+        assertThat(target.get(1).custom).isTrue();
+    }
+
+    @Test
+    public void appendCustomBands_skipsDuplicateFreqAndModeOfBuiltin() {
+        ArrayList<OperationBand.Band> target = new ArrayList<>();
+        target.add(new OperationBand.Band(14_074_000L, "20m")); // built-in FT8 20m
+
+        ArrayList<OperationBand.Band> customs = new ArrayList<>();
+        OperationBand.Band dup = new OperationBand.Band(14_074_000L, "dup"); // same freq+mode
+        dup.custom = true;
+        customs.add(dup);
+
+        OperationBand.appendCustomBands(target, customs);
+        assertThat(target).hasSize(1); // duplicate skipped
+    }
+
+    @Test
+    public void appendCustomBands_sameFreqDifferentModeIsNotDuplicate() {
+        ArrayList<OperationBand.Band> target = new ArrayList<>();
+        target.add(new OperationBand.Band(14_074_000L, "20m")); // FT8
+
+        ArrayList<OperationBand.Band> customs = new ArrayList<>();
+        OperationBand.Band ft4 = new OperationBand.Band(14_074_000L, "20m FT4");
+        ft4.mode = com.k1af.ft8af.FT8Common.FT4_MODE;
+        ft4.custom = true;
+        customs.add(ft4);
+
+        OperationBand.appendCustomBands(target, customs);
+        assertThat(target).hasSize(2); // different mode -> kept
+    }
+
+    @Test
+    public void getBandInfo_customBand_appendsStarMarker() {
+        OperationBand.Band b = new OperationBand.Band(14_090_000L, "3B9 DX");
+        b.custom = true;
+        assertThat(b.getBandInfo()).isEqualTo("  14.090 MHz (3B9 DX) ★");
+    }
+
+    // --- Enabled Bands count / toggles (issue #929) -------------------------
+
+    @Test
+    public void getIndexByFreq_marksAppendedEntryAdHoc() {
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        int i = OperationBand.getIndexByFreq(14_076_500L);
+        assertThat(OperationBand.bandList.get(i).adHoc).isTrue();
+        assertThat(OperationBand.bandList.get(0).adHoc).isFalse();
+    }
+
+    @Test
+    public void getAllWaveLengths_skipsAdHocEntries() {
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        OperationBand.getIndexByFreq(23_000_000L); // off-plan rig frequency -> "13m"
+        assertThat(OperationBand.getAllWaveLengths()).containsExactly("20m");
+    }
+
+    @Test
+    public void getAllWaveLengths_keepsCustomDials() {
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        OperationBand.Band c = new OperationBand.Band(14_090_000L, "3B9 DX");
+        c.custom = true;
+        OperationBand.bandList.add(c);
+        assertThat(OperationBand.getAllWaveLengths()).containsExactly("20m", "3B9 DX").inOrder();
+    }
+
+    @Test
+    public void getAllWaveLengths_orderedByFrequencyAndDistinct() {
+        // FT2 extras appended at the end of bands.txt (e.g. 1.25m) must sort into place.
+        OperationBand.bandList.add(new OperationBand.Band(14_074_000L, "20m"));
+        OperationBand.bandList.add(new OperationBand.Band(1_840_000L, "160m"));
+        OperationBand.bandList.add(new OperationBand.Band(144_174_000L, "2m"));
+        OperationBand.bandList.add(new OperationBand.Band(14_080_000L, "20m"));
+        OperationBand.bandList.add(new OperationBand.Band(222_177_000L, "1.25m"));
+        OperationBand.bandList.add(new OperationBand.Band(7_074_000L, "40m"));
+        assertThat(OperationBand.getAllWaveLengths())
+                .containsExactly("160m", "40m", "20m", "2m", "1.25m").inOrder();
+    }
+
+    @Test
+    public void countEnabledBands_ignoresStaleExcludedNames() {
+        List<String> waves = Arrays.asList("80m", "40m", "20m", "15m");
+        // Two listed bands hidden plus three names no longer in the list.
+        Set<String> excluded = new HashSet<>(Arrays.asList("80m", "15m", "16m", "9m", "100m"));
+        assertThat(OperationBand.countEnabledBands(waves, excluded)).isEqualTo(2);
+    }
+
+    @Test
+    public void toggleExcludedBand_disablePrunesStaleNames() {
+        List<String> waves = Arrays.asList("80m", "40m", "20m");
+        Set<String> excluded = new HashSet<>(Arrays.asList("80m", "16m", "9m"));
+        Set<String> updated = OperationBand.toggleExcludedBand(waves, excluded, "40m", false);
+        assertThat(updated).containsExactly("80m", "40m");
+        // The input set is left untouched.
+        assertThat(excluded).containsExactly("80m", "16m", "9m");
+    }
+
+    @Test
+    public void toggleExcludedBand_enableRemovesName() {
+        List<String> waves = Arrays.asList("80m", "40m");
+        Set<String> excluded = new HashSet<>(Arrays.asList("80m"));
+        assertThat(OperationBand.toggleExcludedBand(waves, excluded, "80m", true)).isEmpty();
+    }
+
+    @Test
+    public void toggleExcludedBand_staleNamesDoNotBlockDisabling() {
+        // Old guard compared excluded.size() to the list size: 2 stale + 1 real
+        // exclusion out of 4 listed blocked turning a 2nd band off with 3 still on.
+        List<String> waves = Arrays.asList("80m", "40m", "20m", "15m");
+        Set<String> excluded = new HashSet<>(Arrays.asList("80m", "16m", "9m"));
+        assertThat(OperationBand.toggleExcludedBand(waves, excluded, "40m", false))
+                .containsExactly("80m", "40m");
+    }
+
+    @Test
+    public void toggleExcludedBand_refusesToHideLastBand() {
+        List<String> waves = Arrays.asList("80m", "40m");
+        Set<String> excluded = new HashSet<>(Arrays.asList("80m"));
+        assertThat(OperationBand.toggleExcludedBand(waves, excluded, "40m", false)).isNull();
     }
 }
