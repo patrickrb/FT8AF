@@ -56,14 +56,19 @@ class RerunWrapperTest(unittest.TestCase):
                                     env=env, capture_output=True, text=True)
             return result.returncode, log.read_text() if log.exists() else ""
 
-    def test_reruns_a_pr_run(self):
-        rc, log = self.rerun("fix/x\tpull_request")
-        self.assertEqual(rc, 0)
-        self.assertIn("run rerun 123 --failed", log)
+    def test_reruns_pr_and_dev_push_runs(self):
+        for out in ("fix/x\tpull_request", "dev\tpush"):
+            with self.subTest(out=out):
+                rc, log = self.rerun(out)
+                self.assertEqual(rc, 0)
+                self.assertIn("run rerun 123 --failed", log)
 
     def test_refuses_production_tags_dispatches_and_unknown_runs(self):
         for out, rc in (("android-v1.2.0\tpush", 0), ("desktop-v2.0.0\tpush", 0),
                         ("android-v1.2.0\tworkflow_dispatch", 0), ("main\tworkflow_dispatch", 0),
+                        # A legacy (pre-retirement) main push run would replay an
+                        # old workflow revision; release runs are never re-run.
+                        ("main\tpush", 0),
                         ("\t", 0), ("", 1)):
             with self.subTest(out=out, rc=rc):
                 code, log = self.rerun(out, rc)

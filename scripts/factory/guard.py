@@ -26,6 +26,15 @@ RULES = [
     ("git clean", re.compile(r"\bgit\b.*\sclean\b")),
     ("git checkout/restore discarding work", re.compile(
         r"\bgit\b.*\s(?:checkout|restore)\b.*(?:\s--\s+\.|\s\.\s*$|\s--force\b|\s-f\b)")),
+    # Any named-path restore of the working tree discards uncommitted edits:
+    # `git restore <path>`, `git restore --worktree …`, `git checkout [<ref>] -- <path>`.
+    # Index-only `git restore --staged <path>` stays allowed.
+    ("git restore of working-tree files", re.compile(
+        r"\bgit\b.*\srestore\b(?!.*\s--staged\b)|\bgit\b.*\srestore\b.*\s(?:--worktree|-W)\b")),
+    ("git checkout of paths (discards edits)", re.compile(r"\bgit\b.*\scheckout\b.*\s--(?:\s|$)")),
+    # Bulk pushes can publish a local android-v* / desktop-v* tag without naming it.
+    ("a bulk or wildcard tag push", re.compile(
+        r"\bgit\b.*\bpush\b.*(?:\s--tags\b|\s--follow-tags\b|\s--mirror\b|refs/tags/\*|\s['\"]?\*:)")),
     ("deleting a branch with -D", re.compile(r"\bgit\b.*\sbranch\b.*\s-D\b")),
     ("gh secret / variable / auth", re.compile(r"\bgh\s+(?:secret|variable|auth)\b")),
     ("deleting a repo or release", re.compile(r"\bgh\s+(?:repo|release)\s+delete\b")),
@@ -37,7 +46,7 @@ RULES = [
     ("a production workflow dispatch", re.compile(
         r"\bgh\s+api\b.*/dispatches\b.*\b(?:android|desktop)-v\d|\bgh\s+api\b.*\b(?:android|desktop)-v\d.*/dispatches\b")),
     ("a raw workflow re-run (use scripts/factory/rerun.sh, which refuses production runs)",
-     re.compile(r"\bgh\s+(?:run\s+rerun|api\b.*/actions/runs/\d+/rerun)")),
+     re.compile(r"\bgh\s+(?:run\s+rerun|api\b.*/actions/(?:runs|jobs)/\d+/rerun)")),
     ("merging past branch protection (--admin)", re.compile(r"\bgh\s+pr\s+merge\b.*\s--admin\b")),
 ]
 
@@ -71,6 +80,12 @@ BLOCK = [
     "gh api repos/a/b/actions/workflows/android.yml/dispatches -f ref=android-v1.2.0",
     "gh run rerun 123", "gh run rerun 123 --failed",
     "gh api -X POST repos/a/b/actions/runs/123/rerun",
+    "gh api -X POST repos/patrickrb/FT8AF/actions/jobs/123/rerun",
+    "git push origin --tags", "git push --follow-tags", "git push --mirror origin",
+    "git push origin 'refs/tags/*'", "git push origin refs/tags/*:refs/tags/*",
+    "git restore ft8af/app/src/main/SomeFile.kt", "git restore --worktree x.kt",
+    "git restore --staged --worktree x.kt", "git checkout -- scripts/factory/guard.py",
+    "git checkout HEAD -- x.kt", "git -C w checkout origin/dev -- a b",
 ]
 ALLOW = [
     "git push -u origin feat/x", "git push", "git fetch origin",
@@ -84,6 +99,8 @@ ALLOW = [
     "gh pr merge 12 --merge", "gh release view android-dev.1538", "git tag --list 'android-dev.*'",
     "git fetch --tags", "gh run list --workflow=android.yml --branch main",
     "bash scripts/factory/rerun.sh 123", "gh run view 123 --json headBranch",
+    "git checkout dev", "git switch -c feat/x", "git push -u origin HEAD",
+    "git push origin feat/x:feat/x", "git restore --staged a.kt b.kt",
 ]
 
 

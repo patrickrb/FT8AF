@@ -14,7 +14,7 @@ name (`/ft8af-factory`), so neither launcher mistakes the other for itself.
 | `run-loop.cmd` | the session: sets `FT8AF_FACTORY=1` and runs `claude --permission-mode acceptEdits "/loop /ft8af-factory"` |
 | `guard.py` | PreToolUse hook (Bash + PowerShell), on only when `FT8AF_FACTORY=1`: blocks force-push, `reset --hard`, `git clean`, discarding checkouts, `branch -D`, `gh secret`/`variable`/`auth`, repo/release delete, API DELETE, **production tags** (`android-v*` / `desktop-v*` via git, `gh release create`, `gh workflow run`, the refs API) and `gh pr merge --admin`. `--self-test` checks its cases |
 | `gradle.sh` | the AGENTS.md Windows build as one allowlisted command (Android Studio JBR, isolated Gradle home `~/.gradle-ft8af`), copying the gitignored hamlib prebuilts into a fresh worktree from the main checkout |
-| `rerun.sh` | the only way the loop re-runs a workflow (`gh run rerun` is blocked): re-runs failed jobs, refusing runs on an `android-v*` / `desktop-v*` tag and `workflow_dispatch` runs |
+| `rerun.sh` | the only way the loop re-runs a workflow (`gh run rerun` is blocked): re-runs failed jobs, refusing runs on an `android-v*` / `desktop-v*` tag, `workflow_dispatch` runs and `main` push (release) runs, which replay their original workflow revision |
 
 ## Run it
 
