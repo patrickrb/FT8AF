@@ -2,6 +2,7 @@ package radio.ks3ckc.ft8af
 
 import android.app.Application
 import radio.ks3ckc.ft8af.crash.CrashReporting
+import radio.ks3ckc.ft8af.flags.FeatureFlags
 
 /**
  * Process-wide entry point. Exists so opt-in Sentry crash reporting can be
@@ -15,5 +16,9 @@ class FT8AFApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashReporting.init(this)
+        // Synchronous wiring only (SharedPreferences reads); the remote
+        // feature-config refresh it kicks off runs on a background coroutine
+        // and can never block or fail startup.
+        FeatureFlags.init(this)
     }
 }

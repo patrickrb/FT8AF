@@ -140,6 +140,13 @@ fun BandModeSheet(
     onSelectMode: (Int) -> Unit,
     onSelectBand: (Int) -> Unit,
     onOpenAllBands: () -> Unit,
+    /**
+     * Optional Band Advisor card slot rendered above the mode toggle. A slot
+     * (not a direct dependency) keeps this sheet ignorant of the advisor
+     * feature: when the BAND_ADVISOR flag is off the caller passes null and
+     * nothing about this sheet changes.
+     */
+    advisorCard: (@Composable () -> Unit)? = null,
 ) {
     FT8AFBottomSheet(visible = visible, onDismiss = onDismiss) {
         Column(
@@ -173,6 +180,12 @@ fun BandModeSheet(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
+
+            // ---- Band Advisor card (feature-flagged; null slot = absent) ----
+            if (advisorCard != null) {
+                advisorCard()
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // ---- Mode toggle (FT8 / FT4 / FT2) ----
             Row(
