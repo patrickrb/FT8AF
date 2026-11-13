@@ -499,8 +499,15 @@ jobs:
           # ios/, desktop/, docs and CI don't — a release touching neither
           # Android source directory builds but cuts no release.
           ANDROID_FILES=$(printf '%s\n' "$ALL" | grep -E '^(ft8af|ham-radio-core)/' || true)
-          if [[ -z "$ANDROID_FILES" ]]; then
-            echo "::notice::No Android app or core changes since ${PREV_TAG:-the baseline} — building only, not cutting a release."
+          # Whether a NEW build is needed is judged against the last internal
+          # release main already shipped (production is promoted in Console,
+          # so the production tag stops advancing); the semver range and notes
+          # above still start at the production tag.
+          BUILD_BASE=$(bash .github/scripts/android-build-base.sh "${PREV_TAG:-${BASE:-HEAD}}" "$GITHUB_RUN_NUMBER")
+          NEW_ANDROID_FILES=$(git diff --name-only "$BUILD_BASE..HEAD" | grep -E '^(ft8af|ham-radio-core)/' || true)
+          echo "Android build base: $BUILD_BASE"
+          if [[ -z "$NEW_ANDROID_FILES" ]]; then
+            echo "::notice::No Android app or core changes since $BUILD_BASE — building only, not cutting a release."
             android_changed=false
           else
             android_changed=true

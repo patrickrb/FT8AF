@@ -72,12 +72,16 @@ for them (`gh run list --commit <head sha>`, and the `pr-gate` status), then:
 
 ```bash
 SHA=$(gh pr view <N> --json headRefOid --jq .headRefOid)
+REPO=patrickrb/FT8AF SHA=$SHA DRY_RUN=1 bash .github/scripts/pr_gate.sh     # must print "success — …"
 gh api repos/patrickrb/FT8AF/commits/$SHA/status --jq '.statuses[] | select(.context=="pr-gate") | .state'
 gh pr view <N> --json mergeStateStatus --jq .mergeStateStatus
 gh pr merge <N> --merge            # merge commit, never squash: dev and main must share history
 ```
 
-Only on `pr-gate` = success and `mergeStateStatus` = `CLEAN`. If it is
+Only when the fresh `pr_gate.sh` evaluation (run immediately before the merge:
+GitHub sends no event when a retry is queued, so the stored status can be
+stale) and the stored `pr-gate` status both say success, and
+`mergeStateStatus` = `CLEAN`. If it is
 `BLOCKED` with every workflow green, branch protection still wants a check
 that no longer exists (the old `enforce-source-is-staging` / `ios-gate`
 contexts): stop, tell Patrick which setting to change

@@ -91,16 +91,20 @@ Play track snapshot `discord-play-track-watch` keeps:
 
 ```bash
 gh api "repos/patrickrb/FT8AF/contents/tracks.json?ref=state/play-tracks" --jq .content \
-  | base64 -d | python -c "import json,sys; d=json.load(sys.stdin); print([r['name'] for r in d['production'] if r['status']=='completed'])"
+  | base64 -d | python -c "import json,sys; d=json.load(sys.stdin); print([(r['name'], r['versionCodes']) for r in d['production'] if r['status']=='completed'])"
 ```
+
+Compare **versionCodes**, not names: every lane sets versionCode = run# + 1000,
+while the release name is `android-dev.<run#>` for a build Patrick promoted in
+Console but `android-v<x.y.z>` for one he shipped by tag.
 
 Run the `feature-announce` skill before anything else when either:
 - an `announce` issue is still **open** (a run was interrupted: resume its
   unticked items), or
-- the completed production release (an `android-dev.<run#>` tag) has a
-  higher run number than the newest `announce` issue's release, open or
-  closed (before the first one, the baseline is `android-dev.1312`,
-  production on 2026-11-13).
+- the completed production versionCode is higher than the versionCode in
+  the newest `announce` issue's title, open or closed (before the first one,
+  the baseline is versionCode 2312 = `android-dev.1312`, production on
+  2026-11-13).
 
 ### 0b. Stop the line
 Fix these first, in this order, as their own PRs:
