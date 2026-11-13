@@ -1,0 +1,98 @@
+# One check for every PR: `pr-gate` is green only when every other workflow
+# run on the PR's head commit has finished and none of them failed
+# (.github/scripts/pr_gate.sh reads workflow runs, which exist from the moment
+# they are queued, so a test that hasn't started yet still holds the gate).
+# Ported from Sorrel.
+#
+# Why: the test workflows are path-filtered (a desktop-only PR never starts
+# the Android build), and a required check that never starts blocks a merge
+# forever. This one status looks at whatever actually ran. The software
+# factory (.claude/skills/ft8af-factory/SKILL.md) merges a PR only when it
+# is green.
+#
+# Trust: `workflow_run` always runs the default branch's copy of this file;
+# `pull_request_target` runs the base branch's. Either way the script comes
+# from a branch the PR can't edit (the base branch for PR events, the default
+# branch for workflow_run), so a PR can't edit its own gate. Nothing here
+# checks out or runs PR code.
+#
+# Event-driven, no polling job holding a runner:
+#   - pull_request_target: wait a minute for the other workflows to queue,
+#     then evaluate (a docs-only PR with no other workflows goes green);
+#   - workflow_run: each time any of the workflows below finishes on a
+#     commit, evaluate that commit again.
+name: PR gate
+
+on:
+  pull_request_target:
+    branches: [dev, main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_run:
+    workflows:
+      - Android CI & Release
+      - Desktop CI & Release
+      - Native FT8 tests
+      - PR debug APK
+      - Agent instructions check
+      - Orb readiness
+      - Play store listings
+      - Main branch source gate
+      - Factory & release script tests
+    # GitHub doesn't send `requested` for a re-run, so `in_progress` is what
+    # flips an earlier green back to pending once a retry starts. A retry
+    # still queued can't be seen here, which is why the factory re-evaluates
+    # the gate itself (DRY_RUN) right before every merge.
+    types: [requested, in_progress, completed]
+
+permissions:
+  contents: read
+  statuses: write
+  actions: read
+  pull-requests: read   # pr_gate.sh: is this commit an open PR head?
+
+concurrency:
+  group: pr-gate-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    name: evaluate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The base branch's script for PR events, the default branch's for
+          # workflow_run — never the PR's.
+          ref: ${{ github.event.pull_request.base.ref || github.event.repository.default_branch }}
+          sparse-checkout: .github/scripts/pr_gate.sh
+          sparse-checkout-cone-mode: false
+
+      # A new head (or a reopen) starts a new validation cycle: never leave an
+      # earlier green standing while its workflows queue.
+      - name: Pending until evaluated
+        if: github.event_name == 'pull_request_target'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=pending \
+            -f context=pr-gate -f description="Waiting for workflows to queue" >/dev/null
+
+      - name: Let the other workflows queue
+        if: github.event_name == 'pull_request_target'
+        run: sleep 60
+
+      - name: Evaluate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+        run: |
+          if [ ! -f .github/scripts/pr_gate.sh ]; then
+            # Bootstrap: the first PRs after this file lands run before the
+            # script reaches the branch they read it from.
+            echo "::warning::pr_gate.sh is not on this branch yet; skipping."
+            exit 0
+          fi
+          bash .github/scripts/pr_gate.sh

@@ -9,7 +9,7 @@ name: Play store listings
 #                                         check-permissions, or publish
 #
 # Publishing is DELIBERATE, never automatic: no branch push runs it. Listing
-# text lands in the repo on the normal feature -> dev -> staging -> main flow
+# text lands in the repo on the normal feature -> dev -> main flow
 # and sits there until someone decides the store should say it, then ships by a
 # manual run here (or by running .github/scripts/publish_listings.py locally --
 # see docs/store-listings.md). Merging to main touches Google Play in no way at
@@ -69,8 +69,10 @@ jobs:
         with:
           python-version: '3.11'
 
+      # Only this workflow's own tests: the rest of .github/scripts (which
+      # need `requests` and more) run in factory-tests.yml.
       - name: Run publish_listings unit tests
-        run: python -m unittest discover -s .github/scripts -p 'test_*.py' -v
+        run: python -m unittest discover -s .github/scripts -p 'test_publish_listings.py' -v
 
   publish:
     name: Run against Play

@@ -9,41 +9,38 @@ its CI workflow have been removed; iOS/iPadOS is not a release target.
 
 ## Branch lifecycle
 
-The source path stays **feature → dev → staging → main**. Both publishing
-branches, `staging` and `main`, create **internal prereleases only**.
+The source path is **feature → dev → main**. The `staging` branch is retired
+(2026-11-13): it added a second promotion that tested nothing the `main` push
+doesn't. `main` is the only publishing branch, and it creates **internal
+prereleases only**.
 
 - **feature → dev** — every work item. CI runs (tests, build check) but nothing
-  is published. Dev builds **never** reach the Releases page.
-- **dev → staging** — bundle up many dev PRs and promote them together. Merging
-  this PR (a push to `staging`) cuts a **dev / prerelease** build of every
-  platform: prerelease GitHub Releases + Play **internal** track for Android.
-- **staging → main** — creates another `android-dev.<run#>` /
-  `desktop-dev.<run#>` GitHub **prerelease**, with `prerelease: true`. Android
-  reuses the reachable staging candidate's semver and notes and publishes only
-  to Play **internal**. It does not create any `android-v*` or `desktop-v*` tag.
-- **Production is a separate deliberate action:** an `android-v*` tag push
-  selects Play production and a full Android GitHub release; a `desktop-v*`
-  tag push selects a full desktop GitHub release. A manual Android workflow
-  run on an existing `android-v*` tag can also ship to production; it requires
-  usable notes in that release's hidden markers and preserves its body. Manual
-  runs on branches are build-only. None of these production actions is
-  authorized until Patrick tests **FT8AF, RTTYAF, SSTVAF, ROTA and JTTYAF** and
-  subsequently explicitly approves production. Do not create production tags
-  during internal delivery.
+  is published. Dev builds **never** reach the Releases page. The software
+  factory (`.claude/skills/ft8af-factory/SKILL.md`) merges these itself once
+  `pr-gate` is green.
+- **dev → main** — the release. Merging it (a push to `main`) creates an
+  `android-dev.<run#>` / `desktop-dev.<run#>` GitHub **prerelease** and
+  publishes the Android build to Play **internal**. It does not create any
+  `android-v*` or `desktop-v*` tag. The factory opens this PR at most once a
+  day and merges it only when every check on it passed
+  (`.claude/skills/ft8af-release/SKILL.md`).
+- **Production is a separate deliberate action, Patrick's alone:** he tests
+  the internal build on his phone and promotes it in Play Console. The CI paths
+  also still exist: an `android-v*` tag push selects Play production and a full
+  Android GitHub release; a `desktop-v*` tag push selects a full desktop GitHub
+  release; a manual Android workflow run on an existing `android-v*` tag ships
+  to production (it requires usable notes in that release's hidden markers and
+  preserves its body). Manual runs on branches are build-only. Agents never
+  create production tags, run those paths, or promote in Play Console.
 
-### Safeguard landing order
+Gates:
 
-Land the reviewed safeguard on `dev`, then use the normal `dev → staging`
-and `staging → main` PRs, preserving the required source/review gates. Inspect
-each resulting tree before promotion: it must already contain the guarded
-Android and desktop workflows, including the first push to `main`. Push runs
-use that merged tree; do not promote the older unsafe main-release workflow
-first or bypass a source gate with a direct feature-to-main PR.
-
-Source gates (enforced as required status checks):
-
-- PRs to `staging` must come from `dev` (`Staging branch source gate`).
-- PRs to `main` must come from `staging` (`Main branch source gate`).
+- PRs to `main` must come from `dev` (`Main branch source gate`, reported as
+  both `enforce-source-is-dev` and the legacy `enforce-source-is-staging` name
+  until main's branch protection is switched over).
+- `pr-gate` (`.github/workflows/pr-gate.yml`) is green on a PR head only when
+  every workflow that ran on that commit finished without failing. It is what
+  the factory waits for before merging.
 
 ## Tag / release namespaces
 
@@ -51,8 +48,8 @@ Per-platform prefixes keep the Releases page unambiguous:
 
 | Platform | Production tag        | Dev (prerelease) tag      | Trigger of dev build |
 |----------|-----------------------|---------------------------|----------------------|
-| Android  | `android-v<x.y.z>`    | `android-dev.<run#>`      | push to `staging` / `main` |
-| Desktop  | `desktop-v<x.y.z>`    | `desktop-dev.<run#>`      | push to `staging` / `main` |
+| Android  | `android-v<x.y.z>`    | `android-dev.<run#>`      | push to `main` |
+| Desktop  | `desktop-v<x.y.z>`    | `desktop-dev.<run#>`      | push to `main` |
 
 - Production tags are deliberate; branch pushes never auto-bump or create them.
 - Android versions are chosen by Claude (see below). Older Android tags are the
@@ -62,13 +59,13 @@ Per-platform prefixes keep the Releases page unambiguous:
 
 ## Android versioning + release notes (AI-assisted)
 
-Ported from Sorrel's `play-beta.yml`. On a push to `staging` the Android
+Ported from Sorrel's `play-beta.yml`. On a push to `main` the Android
 `build` job:
 
 1. Takes the latest `android-v*` tag as the baseline and collects everything
    from there to `HEAD`: merged PRs (number, branch, title), the commit log,
    and size signals (commit count, `ft8af/` diff stat, changed files by area).
-2. If nothing under `ft8af/` changed (a desktop-only promotion) it
+2. If nothing under `ft8af/` changed (a desktop-only release) it
    builds but **cuts no release** — no empty versions.
 3. On the first workflow attempt only, asks Claude (`claude-opus-5`, structured output) for the semver
    bump — `major` / `minor` / `patch`, judged from both content and size, with
@@ -80,15 +77,16 @@ Ported from Sorrel's `play-beta.yml`. On a push to `staging` the Android
    carries hidden markers (`<!-- ft8af-version: x.y.z -->` and
    `<!-- ft8af-notes-start/end -->`).
 
-On the later push to `main` the job looks for the newest `android-dev.*` tag
-that is an ancestor of `HEAD` and not already shipped, reads the version and
-notes back out of those markers, and creates a new `android-dev.<run#>`
-prerelease on Play internal, with the same base semver and notes. If no such
-candidate exists (or it pre-dates the markers),
-`main` uses a deterministic patch bump and PR-title notes, with no paid API call.
-Retries also use that fallback rather than repeat paid generation. The tag lane
-restores the existing release notes without Claude. No branch lane allocates
-an `android-v*` tag.
+A **re-run** of the same workflow run reuses the version and notes of the
+`android-dev.<run#>` release its first attempt created (read back from those
+markers), so a retry never repeats the paid call or re-rolls the version. A
+re-run with no such release uses a deterministic patch bump and PR-title notes.
+The tag lane restores the existing release notes without Claude. No branch
+lane allocates an `android-v*` tag.
+
+Note the baseline: because production is promoted in Play Console rather than
+by tag, the latest `android-v*` tag (currently `android-v0.149`) stays the
+semver baseline until a production tag is cut.
 
 `versionCode` is unchanged: still `GITHUB_RUN_NUMBER + 1000`.
 
@@ -97,12 +95,13 @@ and has a self-test (`--self-test`).
 
 Run the offline selector truth tables with
 `python3 -m unittest discover -s .github/scripts -p 'test_release_policy.py' -v`.
-They execute the actual workflow shell across PR/dev/staging/main/tag refs and
-unsupported events, verify prerelease/Play inputs, candidate reuse, empty app
+They execute the actual workflow shell across PR/dev/main/tag refs (plus the
+retired `staging` ref, which must not release) and
+unsupported events, verify prerelease/Play inputs, re-run reuse, empty app
 changes, and desktop versions with and without production tag history. Both
 platform detect jobs run them before any builds or publishing. The separate
 `test_release_notes.py` suite stubs the paid API and proves first internal
-attempt only, with deterministic promotion/retry fallbacks and saved-note reuse.
+attempt only, with deterministic retry fallbacks and saved-note reuse.
 
 **Secret:** `ANTHROPIC_API_KEY` (repository secret). Without it, or if the API
 call fails, the run annotates a warning, takes a **patch** bump, and uses the
@@ -126,22 +125,17 @@ Listing copy and app builds ship on different cadences, and neither is tied to a
 
 ## One-time setup on GitHub (manual)
 
-These cannot be done from a workflow file — do them in the repo settings:
+These cannot be done from a workflow file (and the factory's token can't read
+or change branch protection) — do them in the repo settings:
 
-1. **Create the `staging` branch** from `dev`:
-   `git checkout dev && git pull && git checkout -b staging && git push -u origin staging`.
-2. **Branch protection for `staging`** → Require status checks →
-   add `Staging branch source gate / enforce-source-is-dev` (plus the platform
-   gates `android-gate`, `desktop-gate` as desired). After the iOS-removal PR
-   merges, retire the required `ios-gate` context (shown as `iOS CI / ios-gate`)
-   from effective protection/rulesets targeting `dev`, `staging` and `main`,
-   where configured. Keep every other required check and source gate. If the
-   deleted check blocks merging the removal PR itself, coordinate its retirement
-   with the maintainer; do not add a fake successful replacement.
-3. **Branch protection for `main`** → Require status checks →
-   add `Main branch source gate / enforce-source-is-staging`. If the old
-   `enforce-source-is-dev` check was required on `main`, remove it — that gate
-   now lives on `staging`.
+1. **Branch protection for `main`** → Require status checks → require
+   `enforce-source-is-dev` and drop `enforce-source-is-staging`; drop the
+   retired `ios-gate` if it is still listed. Then delete the alias from the
+   matrix in `main-gate.yml`.
+2. **Branch protection for `dev`** → optionally require `pr-gate` (the factory
+   doesn't depend on it being required; it reads the status before merging).
+3. **The `staging` branch** can be deleted once no open PR targets it, and its
+   branch protection rule with it.
 4. **Play Console** → confirm the `PLAY_SERVICE_ACCOUNT_JSON` service account has
    release permission on the **production** track (it previously only needed
    internal). Two deliberate paths publish an AAB there: a manual workflow run

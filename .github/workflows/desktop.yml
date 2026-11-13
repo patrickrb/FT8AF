@@ -2,29 +2,28 @@ name: Desktop CI & Release
 
 # Desktop pipeline for the desktop/ Tauri port (Rust + Vite/React). On PRs and
 # non-release pushes it does a compile check (`tauri build --no-bundle`) across
-# Windows + macOS + Linux. Main/staging pushes publish prerelease bundles;
+# Windows + macOS + Linux. Main pushes publish prerelease bundles;
 # only deliberate desktop-v* tag pushes select a production desktop release.
 #
 # Release scheme is namespaced so it sits separately from the Android
 # android-v* / android-dev.N releases on the Releases page:
 #   desktop-v* tag  -> production desktop release
 #   push to main    -> desktop-dev.<run_number> PRERELEASE
-#   push to staging -> desktop-dev.<run_number> PRERELEASE
 #   push to dev     -> compile-check only, NO release
 # Production stays held until Patrick tests all five apps and then approves it.
 #
 # PATH-FILTERED: PRs and dev pushes only build when desktop/** or the shared
 # native C core (ft8af/app/src/main/cpp/**) changes, or this workflow file.
-# staging/main pushes and desktop-v* tags always build. The always-run
+# main pushes and desktop-v* tags always build. The always-run
 # `desktop-gate` job is the required status check.
 
 on:
   push:
-    branches: [main, staging, dev]
+    branches: [main, dev]
     tags:
       - 'desktop-v*'
   pull_request:
-    branches: [main, staging, dev]
+    branches: [main, dev]
 
 permissions:
   contents: write
@@ -34,7 +33,6 @@ concurrency:
     ${{
       (github.event_name == 'push'
         && (github.ref == 'refs/heads/main'
-          || github.ref == 'refs/heads/staging'
           || startsWith(github.ref, 'refs/tags/desktop-v')))
       && 'desktop-release'
       || format('desktop-{0}', github.run_id)
@@ -70,10 +68,10 @@ jobs:
           CHANGED: ${{ steps.filter.outputs.desktop }}
         run: |
           set -euo pipefail
-          # staging/main pushes and desktop-v* tags always build the full
+          # main pushes and desktop-v* tags always build the full
           # release; otherwise (dev push, PRs) build only when desktop-relevant
           # files changed.
-          if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == "refs/heads/staging" || "$GITHUB_REF" == refs/tags/desktop-v* ) ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/main" || "$GITHUB_REF" == refs/tags/desktop-v* ) ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [[ "$CHANGED" == "true" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -113,8 +111,8 @@ jobs:
             echo "app_version=${GITHUB_REF_NAME#desktop-v}" >> "$GITHUB_OUTPUT"
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-          elif [[ "$GITHUB_EVENT_NAME" == "push" && ( "$GITHUB_REF" == "refs/heads/staging" || "$GITHUB_REF" == "refs/heads/main" ) ]]; then
-            # Both publishing branches cut internal prereleases, never desktop-v*.
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+            # Main cuts internal prereleases, never desktop-v*.
             new_tag="desktop-dev.${GITHUB_RUN_NUMBER}"
             latest=$(git tag --list 'desktop-v*' --sort=-v:refname | head -n1)
             base_ver="${latest:+${latest#desktop-v}}"

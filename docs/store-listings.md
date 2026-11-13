@@ -89,10 +89,10 @@ The workflow is `.github/workflows/play-listings.yml`:
   `dry-run` (the default; prints the diff, sends nothing), `check-permissions`
   (the grant probe below), or `publish` (the real thing).
 
-**No branch push publishes.** Not `dev`, not `staging`, and deliberately not
-`main` — a merge to `main` cuts the GitHub Release and sends nothing whatsoever
-to Google Play, listings included. Listing text is version-controlled the same
-way code is: it lands in the repo through the usual feature → dev → staging →
+**No branch push publishes listings.** Not `dev`, and deliberately not
+`main` — a merge to `main` publishes the app build to the Play internal track
+(android.yml) but never touches the store listing. Listing text is version-controlled the same
+way code is: it lands in the repo through the usual feature → dev →
 main flow, is validated on the way in, and then waits until someone decides the
 store should say it. That decision is the manual run above, or the same script
 run locally (see [Running it locally](#running-it-locally)) — the store's copy

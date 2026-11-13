@@ -2,7 +2,7 @@
 """Release-notes helpers for android.yml: `restore` and `ensure-notes`.
 
 `ensure-notes` runs in "Write release notes" for the lanes that produce notes
-(staging and main). The producers can yield a blank file — Claude's structured
+(the internal lane: pushes to main). The producers can yield a blank file — Claude's structured
 output permits an empty `notes` string, and `jq -r` writes that as a bare
 newline — and a release whose body carries blank markers would later be
 refused by the manual production ship (`restore`, below). So before the notes
@@ -14,7 +14,7 @@ unreachable, now applied in one place for every producer.
 `restore` restores the release notes of the GitHub Release an android-v* tag
 already has. Used by the `tag` lane. The manual production ship re-runs the
 workflow on an android-v<x.y.z> tag whose GitHub Release the main-merge run
-already created, carrying the promoted staging notes in its body between the
+already created, carrying the internal build's notes in its body between the
 hidden markers written by "Write release notes":
 
     <!-- ft8af-notes-start -->

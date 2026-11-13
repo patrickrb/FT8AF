@@ -50,7 +50,7 @@ class PaidGenerationTest(unittest.TestCase):
                 gh.write_text('#!/bin/sh\nprintf "%s" "$FIXTURE_BODY"\n')
                 gh.chmod(0o755)
                 env = dict(os.environ, PATH=tmp + os.pathsep + os.environ["PATH"],
-                           RELEASE_LANE="dev", GITHUB_RUN_NUMBER="321", PREV_TAG="",
+                           RELEASE_LANE="internal", GITHUB_RUN_NUMBER="321", PREV_TAG="",
                            FIXTURE_BODY=body, GITHUB_OUTPUT=str(root / "output"))
                 result = subprocess.run(["bash", "-c", script], cwd=tmp, env=env,
                                         capture_output=True, text=True)
@@ -69,8 +69,9 @@ class PaidGenerationTest(unittest.TestCase):
         script = textwrap.dedent(step.split("        run: |\n", 1)[1]
                                  .split("\n      - name:", 1)[0])
         for lane, attempt, expected_calls in (
-            ("dev", "1", 1), ("dev", "2", 0),
-            ("promotion", "1", 0), ("promotion", "2", 0),
+            ("internal", "1", 1), ("internal", "2", 0),
+            # Retired lane names (staging was removed) must never pay.
+            ("dev", "1", 0), ("promotion", "1", 0),
             ("tag", "1", 0), ("ci", "1", 0),
         ):
             with self.subTest(lane=lane, attempt=attempt), tempfile.TemporaryDirectory() as tmp:

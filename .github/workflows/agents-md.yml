@@ -7,7 +7,7 @@ name: Agent instructions check
 on:
   pull_request:
   push:
-    branches: [main, staging, dev]
+    branches: [main, dev]
 
 permissions:
   contents: read

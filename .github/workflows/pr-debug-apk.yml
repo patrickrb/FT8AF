@@ -13,7 +13,7 @@ name: PR debug APK
 
 on:
   pull_request:
-    branches: [main, staging, dev]
+    branches: [main, dev]
     paths:
       - 'ft8af/**'
       - 'ham-radio-core/**'
