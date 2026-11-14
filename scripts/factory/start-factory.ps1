@@ -13,10 +13,11 @@
        dev and clean, so the loop reads the newest skill;
     4. opens a terminal tab running run-loop.cmd, which sets FT8AF_FACTORY=1
        (the guard hook, guard.py) and runs
-         claude --permission-mode acceptEdits "/loop /ft8af-factory"
-       in the main checkout. Edits are accepted, the commands the factory uses
-       are allowlisted in .claude/settings.json, and anything else stops at a
-       prompt (Patrick: no --dangerously-skip-permissions).
+         claude --dangerously-skip-permissions "/loop /ft8af-factory"
+       in the main checkout. Permission prompts are skipped (Patrick, 2026-11-13:
+       an unattended loop that stops at a prompt after a reboot never gets
+       going). The deny list in .claude/settings.json and the guard hook still
+       block destructive git / gh commands.
 
   Everything it decides goes to %LOCALAPPDATA%\ft8af-factory\autostart.log.
 
@@ -67,7 +68,10 @@ Log "wsl nudge exit $LASTEXITCODE"
 
 # 3. Newest dev in the main checkout, only when that is safe.
 $branch = (& git -C $Repo rev-parse --abbrev-ref HEAD 2>$null)
-$dirty = (& git -C $Repo status --porcelain 2>$null)
+# Tracked changes only: untracked files (screenshots, scratch folders) don't
+# block a fast-forward, and merge --ff-only refuses on its own if one would
+# be overwritten.
+$dirty = (& git -C $Repo status --porcelain --untracked-files=no 2>$null)
 if ($branch -eq "dev" -and -not $dirty) {
     $null = & git -C $Repo fetch origin 2>$null
     $null = & git -C $Repo merge --ff-only origin/dev 2>$null

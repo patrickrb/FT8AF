@@ -34,17 +34,22 @@ post and publish the social posts without a per-post yes.
 gh api "repos/patrickrb/FT8AF/contents/tracks.json?ref=state/play-tracks" --jq .content | base64 -d
 ```
 
-The `production` entry with status `completed` names the release
-(`android-dev.<N>`). The last announced release is the highest `release` in
-ft8af-site's `src/blog/*/post.json` on `main` (baseline before the first post:
-`android-dev.1312`). Everything with a run number above the baseline, up to
-and including `<N>`, shipped now:
+The `production` entry with status `completed` gives the release name and
+its **versionCode** (always run# + 1000). The name is `android-dev.<N>` when
+Patrick promoted an internal build in Console, or `android-v<x.y.z>` when he
+shipped by tag; work from the versionCode either way. Resolve it to a git ref:
+`android-dev.<versionCode − 1000>` if that tag exists, otherwise the
+`android-v*` tag whose release run had that run number
+(`gh run list --workflow=android.yml --json number,headBranch,headSha`). The
+last announced versionCode is in the newest `announce` issue's title
+(baseline before the first one: 2312 = `android-dev.1312`). Everything between
+the two refs shipped now:
 
 ```bash
 gh release list --limit 50 --json tagName --jq '.[].tagName' | grep '^android-dev\.'
 gh release view android-dev.<k> --json body --jq .body        # notes for each shipped build
 git -C /c/Users/burns/Projects/NEXT-FT8CN fetch --tags origin
-git -C /c/Users/burns/Projects/NEXT-FT8CN log --merges --format='%s' android-dev.<base>..android-dev.<N> \
+git -C /c/Users/burns/Projects/NEXT-FT8CN log --merges --format='%s' <base ref>..<shipped ref> \
   | grep -E '^Merge pull request #[0-9]+ from ' | grep -vE ' from [^/]+/(dev|staging)$'
 ```
 
@@ -63,8 +68,8 @@ Track the batch in one issue so an interrupted run resumes instead of
 starting over or stopping half-done. Before writing anything, find or open it:
 
 ```bash
-gh issue list --label announce --state all --search "android-dev.<N> in:title" --json number,state,body
-gh issue create --label announce --title "Announce android-dev.<N> (<version>)" --body-file checklist.md
+gh issue list --label announce --state all --search "versionCode <code> in:title" --json number,state,body
+gh issue create --label announce --title "Announce versionCode <code> (<release name>, <version>)" --body-file checklist.md
 ```
 
 The body is a checklist: one line per feature (PR, blog slug), then one line

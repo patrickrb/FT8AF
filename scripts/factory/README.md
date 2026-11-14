@@ -14,11 +14,67 @@ name (`/ft8af-factory`), so neither launcher mistakes the other for itself.
 | `run-loop.cmd` | the session: sets `FT8AF_FACTORY=1` and runs `claude --permission-mode acceptEdits "/loop /ft8af-factory"` |
 | `guard.py` | PreToolUse hook (Bash + PowerShell), on only when `FT8AF_FACTORY=1`: blocks force-push, `reset --hard`, `git clean`, discarding checkouts, `branch -D`, `gh secret`/`variable`/`auth`, repo/release delete, API DELETE, **production tags** (`android-v*` / `desktop-v*` via git, `gh release create`, `gh workflow run`, the refs API) and `gh pr merge --admin`. `--self-test` checks its cases |
 | `gradle.sh` | the AGENTS.md Windows build as one allowlisted command (Android Studio JBR, isolated Gradle home `~/.gradle-ft8af`), copying the gitignored hamlib prebuilts into a fresh worktree from the main checkout |
+| `rerun.sh` | the only way the loop re-runs a workflow (`gh run rerun` is blocked): re-runs failed jobs, refusing runs on an `android-v*` / `desktop-v*` tag, `workflow_dispatch` runs and `main` push (release) runs, which replay their original workflow revision |
+
+## Run it
+
+All from PowerShell on jigglebilly. It is its own loop: Sorrel's factory
+(`/loop /software-factory` in `C:\Users\burns\Projects\sorrel`) keeps running
+beside it, untouched.
+
+**1. Get the main checkout onto the newest `dev`.** The loop reads its skill
+from `C:\Users\burns\Projects\NEXT-FT8CN`. The launcher fast-forwards it only
+when it is on `dev` with no tracked changes (untracked files are fine).
 
 ```powershell
-# once, after this is on dev and the main checkout is pulled
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\factory\install-autostart.ps1
+cd C:\Users\burns\Projects\NEXT-FT8CN
+git status --short --untracked-files=no   # must be empty
+git switch dev
+git pull --ff-only origin dev
 ```
+
+**2. Install the logon task** (once; re-running replaces it). It starts the
+loop two minutes after you sign in.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\factory\install-autostart.ps1
+Get-ScheduledTask -TaskName "FT8AF factory loop" | Select-Object TaskName, State
+```
+
+**3. Start it now** without waiting for a sign-in (opens a Windows Terminal
+tab titled "FT8AF factory"; does nothing if one is already running):
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\factory\start-factory.ps1
+# check what it would do without launching:
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\factory\start-factory.ps1 -DryRun
+# or run the session directly in the current terminal:
+scripts\factory\run-loop.cmd
+```
+
+**Watch / stop / remove**
+
+```powershell
+Get-Content "$env:LOCALAPPDATA\ft8af-factory\autostart.log" -Tail 20     # launcher log
+# is it running?
+Get-CimInstance Win32_Process -Filter "Name='claude.exe'" |
+  Where-Object { $_.CommandLine -match '/ft8af-factory' } | Select-Object ProcessId, CommandLine
+# stop it: close the "FT8AF factory" tab (or Ctrl+C in it)
+# stop it starting at sign-in:
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\factory\install-autostart.ps1 -Remove
+```
+
+**Self-checks** (no network, nothing published):
+
+```powershell
+python scripts\factory\guard.py --self-test
+python -I .claude\skills\feature-announce\scripts\post_socials.py --self-test
+wsl -d Ubuntu -- bash -lc "cd /mnt/c/Users/burns/Projects/NEXT-FT8CN && python3 -m unittest discover -s .github/scripts -p 'test_*.py'"
+```
+
+Give it work by filing an issue with the **Factory spec** form and labelling
+it `factory:ready`; with an empty queue each cycle only checks for a
+production promotion to announce and for unreleased work on `dev`.
 
 ## Permissions
 
