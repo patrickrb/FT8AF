@@ -45,6 +45,9 @@ import radio.ks3ckc.ft8af.ui.components.SettingsRow
 // Upper bound of the "Max 73 Sends" picker (1..MAX; 0 = Auto, cap disabled).
 private const val MAX_73_SENDS_MAX = 10
 
+// Upper bound of the "CQ Watchdog" picker (1..MAX; 0 = unlimited).
+private const val CQ_WATCHDOG_MAX = 60
+
 private const val ALC_LOW_MIN = 10
 private const val ALC_LOW_MAX = 200
 private const val ALC_HIGH_MAX = 250
@@ -130,6 +133,7 @@ fun TransmissionSettings(
     var clearOnBandModeChange by remember { mutableStateOf(GeneralVariables.clearOnBandModeChange) }
     var watchdogMs by remember { mutableIntStateOf(GeneralVariables.launchSupervision) }
     var noReplyLimit by remember { mutableIntStateOf(GeneralVariables.noReplyLimit) }
+    var cqNoReplyLimit by remember { mutableIntStateOf(GeneralVariables.cqNoReplyLimit) }
     var max73Sends by remember { mutableIntStateOf(GeneralVariables.max73Sends) }
 
     // TX Protection state
@@ -157,6 +161,7 @@ fun TransmissionSettings(
 
     var showWatchdog by remember { mutableStateOf(false) }
     var showStopAfter by remember { mutableStateOf(false) }
+    var showCqWatchdog by remember { mutableStateOf(false) }
     var showMax73 by remember { mutableStateOf(false) }
     var showTuneMethod by remember { mutableStateOf(false) }
 
@@ -239,6 +244,30 @@ fun TransmissionSettings(
                 noReplyLimit = index
                 mainViewModel.databaseOpr.writeConfig(
                     "noReplyLimit", index.toString(), null,
+                )
+            },
+        )
+    }
+
+    // -- CQ Watchdog Picker -- gives up a bare, unanswered Call CQ by cycle
+    // count. "Stop After" (noReplyLimit) only covers mid-QSO silence and
+    // "TX Watchdog" (launchSupervision) counts wall-clock minutes.
+    if (showCqWatchdog) {
+        val cqWatchdogOptions = mutableListOf(stringResource(R.string.settings_unlimited))
+        for (i in 1..CQ_WATCHDOG_MAX) {
+            cqWatchdogOptions.add(stringResource(R.string.settings_cycles_format, i))
+        }
+        ListPickerDialog(
+            title = stringResource(R.string.settings_cq_watchdog),
+            items = cqWatchdogOptions,
+            selectedIndex = cqNoReplyLimit.coerceIn(0, CQ_WATCHDOG_MAX),
+            onDismiss = { showCqWatchdog = false },
+            onSelect = { index ->
+                showCqWatchdog = false
+                GeneralVariables.cqNoReplyLimit = index
+                cqNoReplyLimit = index
+                mainViewModel.databaseOpr.writeConfig(
+                    "cqNoReplyLimit", index.toString(), null,
                 )
             },
         )
@@ -332,6 +361,15 @@ fun TransmissionSettings(
                         else stringResource(R.string.settings_tries_format, noReplyLimit),
                         showChevron = true,
                         onClick = { showStopAfter = true },
+                    )
+                    SectionDivider()
+                    SettingsRow(
+                        label = stringResource(R.string.settings_cq_watchdog),
+                        description = stringResource(R.string.settings_cq_watchdog_desc),
+                        value = if (cqNoReplyLimit == 0) stringResource(R.string.settings_unlimited)
+                        else stringResource(R.string.settings_cycles_format, cqNoReplyLimit),
+                        showChevron = true,
+                        onClick = { showCqWatchdog = true },
                     )
                     SectionDivider()
                     SettingsRow(

@@ -750,6 +750,10 @@
     <string name="settings_tx_watchdog_desc">Auto-stop transmit after timeout</string>
     <string name="settings_stop_after">Stop After</string>
     <string name="settings_stop_after_desc">Stop calling after N unanswered attempts</string>
+    <string name="settings_cq_watchdog">CQ Watchdog</string>
+    <string name="settings_cq_watchdog_desc">Stop calling CQ after N unanswered cycles with nobody replying -- separate from TX Watchdog\'s timeout and Stop After\'s mid-QSO limit. Unlimited for unattended operation.</string>
+    <string name="settings_cycles_format">%1$d cycles</string>
+    <string name="settings_unlimited">Unlimited</string>
     <string name="settings_max_73">Max 73 Sends</string>
     <string name="settings_max_73_desc">Maximum RR73/73 transmissions per contact before moving on</string>
     <string name="settings_max_73_auto">Auto</string>

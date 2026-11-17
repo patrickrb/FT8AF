@@ -614,6 +614,20 @@ public class GeneralVariables {
     // (re-sent R+report / RR73) and the no-reply counter never accumulates.
     public static int max73Sends = 0;
 
+    // CQ Watchdog: how many unanswered CQ cycles (no one calling us at all,
+    // function order 6 / idle CQ) before TX gives itself up entirely.
+    // 0 == unlimited, the default -- unattended/"robot" CQ operation depends
+    // on this never giving up on its own. Deliberately SEPARATE from
+    // noReplyLimit/noReplyCount above: those only ever apply once a target is
+    // picked (mid-QSO silence) -- a bare CQ with nobody answering ran forever.
+    // Also distinct from launchSupervision (Settings' own "TX Watchdog"): that
+    // is a time-based (minutes) supervision timeout that already covers an
+    // idle CQ too, but on wall-clock time rather than a count of CQ cycles --
+    // this adds the count-based control alongside it, not instead of it.
+    public static int cqNoReplyLimit = 0;
+
+    public static int cqNoReplyCount = 0;//Number of consecutive unanswered CQ cycles
+
     //The following 4 parameters are for ICOM network connection
     public static String icomIp = "255.255.255.255";
     public static int icomUdpPort = 50001;
