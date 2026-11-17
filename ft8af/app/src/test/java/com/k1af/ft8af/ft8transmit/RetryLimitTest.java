@@ -13,6 +13,10 @@ import org.junit.Test;
  *   <li>{@link FT8TransmitSignal#shouldGiveUpTarget} — respects "unlimited"
  *       (noReplyLimit == 0) by never triggering, relying on the TX supervision
  *       timeout as the safety net.</li>
+ *   <li>{@link FT8TransmitSignal#shouldGiveUpCq} — the CQ Watchdog: same
+ *       "0 == unlimited" shape as {@code shouldGiveUpTarget}, but for a bare,
+ *       unanswered CQ with no target picked yet (which {@code
+ *       shouldGiveUpTarget} never applies to).</li>
  * </ul>
  */
 public class RetryLimitTest {
@@ -83,5 +87,36 @@ public class RetryLimitTest {
     @Test
     public void limitOf1_givesUpAfterFirstNoReply() {
         assertThat(FT8TransmitSignal.shouldGiveUpTarget(1, 1)).isTrue();
+    }
+
+    // ===== shouldGiveUpCq (CQ Watchdog) =====
+
+    @Test
+    public void cqUnlimitedMode_neverGivesUp() {
+        // cqNoReplyLimit == 0 means "unlimited" -- required for unattended/
+        // "robot" CQ operation, which must never give itself up.
+        assertThat(FT8TransmitSignal.shouldGiveUpCq(0, 0)).isFalse();
+        assertThat(FT8TransmitSignal.shouldGiveUpCq(0, 4)).isFalse();
+        assertThat(FT8TransmitSignal.shouldGiveUpCq(0, 1000)).isFalse();
+    }
+
+    @Test
+    public void cqLimitSet_belowLimit_noGiveUp() {
+        assertThat(FT8TransmitSignal.shouldGiveUpCq(5, 4)).isFalse();
+    }
+
+    @Test
+    public void cqLimitSet_atLimit_givesUp() {
+        assertThat(FT8TransmitSignal.shouldGiveUpCq(5, 5)).isTrue();
+    }
+
+    @Test
+    public void cqLimitSet_exceedsLimit_givesUp() {
+        assertThat(FT8TransmitSignal.shouldGiveUpCq(5, 6)).isTrue();
+    }
+
+    @Test
+    public void cqLimitOf1_givesUpAfterFirstUnansweredCycle() {
+        assertThat(FT8TransmitSignal.shouldGiveUpCq(1, 1)).isTrue();
     }
 }
